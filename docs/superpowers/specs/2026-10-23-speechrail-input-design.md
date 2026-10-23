@@ -296,3 +296,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 新增 `tests/voice-input.client.spec.tsx`（jsdom + Testing Library，3 项），覆盖 composer 控件的确认路径：带 id 的确认、`operationId: null` 的确认（F2 修复的 UI 侧）、门禁正常时不出现确认控件。
 
 该测试暴露出一处此前未被任何测试覆盖的真实缺陷：确认按钮原本只在控件展开（`phase !== 'idle'`）时渲染，而重载后门禁已阻塞时控件处于收起态——用户点击麦克风只会看到“门禁被占用”的消息，却拿不到清除它的按钮（只有设置页能清）。修复：门禁为 `unknown` 时，收起态也渲染确认按钮。此项同时取代第二轮记录中“两个 UI 的确认按钮静默返回”的处置结论：静默返回已修好，且按钮现在在两种状态下都可达。
+
+### 清单修正：`dsh.client.inject` 只列客户端插件（2026-10-24）
+
+对照官方客户端插件清单（`dsh-client-ui-conversation`、`dsh-client-ui-plugin-manager`）核对后修正：`inject` 的语义是“本插件等待哪些**客户端插件**的服务”，而 `@deepseek-ai/dsh-client-ui-slots` 既无 `dsh.client` 也无 `./client` 导出，是纯类型/工具库，列出它属于错误声明；真正提供 `ctx.slots` 服务的是客户端插件 `@deepseek-ai/dsh-client-ui-renderer`，已改为列出后者。最终列表：`dsh-api-remotes`（`ctx.remote`）、`dsh-client-locale`（`ctx.locale`）、`dsh-client-ui-conversation`（槽位属主）、`dsh-client-ui-renderer`（`ctx.slots`）。客户端 bundle 的运行时 `require` 仍是 `react`、`react/jsx-runtime`、`zod`，与官方客户端 bundle 同形。
