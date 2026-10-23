@@ -86,7 +86,7 @@ against the published declarations.
 - No model-facing tool is registered; the Host service and Remote surface are the only entry
   points, so a tool can be added later without changing the wire contract.
 - The unproven-outcome path requires an explicit acknowledgement in the composer or settings
-  page; there is no automatic reconciliation with the service's own record. An unreadable
+  page, and the composer offers that control whenever the gate is blocked; there is no automatic reconciliation with the service's own record. An unreadable
   journal is acknowledged by asserting that nothing is outstanding, which cannot be verified
   locally — the alternative would be a permanently blocked feature.
 - The capability snapshot is used opportunistically: any body carrying

@@ -290,3 +290,9 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 **为什么定义是结构化的而不是 import `defineTool`**：一旦从 `@deepseek-ai/dsh-tools` 引入声明，其类型会牵入 `@deepseek-ai/dsh-llm`，该包的 `TypertLookupMap` 声明在 Typert 分析过程中被判为“必须是 TypertLookup<Host, Wire>”，导致生成整体失败（与本包无关的第三方声明触发分析器限制）。因此本包自行声明注册表所消费的最小结构（`name`/`description`/`parameters`/`output.schema`/`output.render`/`execute`），其编译后形状照 `defineTool` 的实际输出逐字核对（`parameters` 为隐式开放对象根 `{type:'object',properties}`，输出模式为 `{type:'object',additionalProperties:false,properties,required}`）。注册表仍在执行期按这些 JSON Schema 校验参数与结果，因此校验强度不变。
 
 **测试**：`tests/tools.host.spec.ts` 6 项——参数与输出模式形状、默认不联网、`probe: true` 才联网并反映探测结果、端点被拒/凭据缺失/门禁阻塞映射为数据、渲染单行摘要、不可达与未探测的文案区分。**未验证**：在真实 profile 中的注册与调用（本轮不激活任何 profile）。
+
+## 第四轮：客户端组件测试与一处可达性缺陷（2026-10-24）
+
+新增 `tests/voice-input.client.spec.tsx`（jsdom + Testing Library，3 项），覆盖 composer 控件的确认路径：带 id 的确认、`operationId: null` 的确认（F2 修复的 UI 侧）、门禁正常时不出现确认控件。
+
+该测试暴露出一处此前未被任何测试覆盖的真实缺陷：确认按钮原本只在控件展开（`phase !== 'idle'`）时渲染，而重载后门禁已阻塞时控件处于收起态——用户点击麦克风只会看到“门禁被占用”的消息，却拿不到清除它的按钮（只有设置页能清）。修复：门禁为 `unknown` 时，收起态也渲染确认按钮。此项同时取代第二轮记录中“两个 UI 的确认按钮静默返回”的处置结论：静默返回已修好，且按钮现在在两种状态下都可达。

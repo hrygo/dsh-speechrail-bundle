@@ -121,3 +121,7 @@ flowchart LR
 已完成：薄 agent 工具 `speechrail_input_status`（只读、可选基础设施、结构化定义，避免 `dsh-tools` 声明牵入 `dsh-llm` 使 Typert 生成失败），`tests/tools.host.spec.ts` 6 项，测试总数 104（host 99 + client 5）。
 
 仍未完成：客户端组件的 jsdom 测试、麦克风设备选择器、真实服务/真实麦克风验证、profile 激活。
+
+### 第四轮追加（2026-10-24）
+
+已完成：客户端组件 jsdom 测试（`voice-input.client.spec.tsx` 3 项），并修复测试暴露的确认按钮可达性缺陷（门禁阻塞且控件收起时也能确认）。测试总数 107（host 99 + client 8）。

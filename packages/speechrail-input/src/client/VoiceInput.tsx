@@ -257,25 +257,31 @@ export function VoiceInput({
     }
   }
 
+  const trigger = (
+    <button
+      type="button"
+      title={t('dictate')}
+      aria-label={t('start')}
+      disabled={locked}
+      onMouseDown={(event) => { event.preventDefault() }}
+      onClick={() => { void start() }}
+      style={{ ...triggerStyle, opacity: locked ? 0.5 : 1 }}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path
+          d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+  )
+
   if (!expanded) {
-    return (
-      <button
-        type="button"
-        title={t('dictate')}
-        aria-label={t('start')}
-        disabled={locked}
-        onMouseDown={(event) => { event.preventDefault() }}
-        onClick={() => { void start() }}
-        style={{ ...triggerStyle, opacity: locked ? 0.5 : 1 }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path
-            d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
-            fill="currentColor"
-          />
-        </svg>
-      </button>
-    )
+    // A blocked gate reports itself through the message row once the user tries to
+    // record, but the control that clears it must be reachable without that attempt.
+    return view?.gate === 'unknown'
+      ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{trigger}<button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button></div>
+      : trigger
   }
 
   return (
