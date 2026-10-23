@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "SpeechRail voice input",
+    "description": "Record through the local SpeechRail service and insert the transcript into the current draft."
+  }
+}

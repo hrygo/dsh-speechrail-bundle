@@ -1,0 +1,86 @@
+# @hrygo/dsh-speechrail-bundle
+
+Voice input for DeepSeek Harness, backed by a local [SpeechRail](https://127.0.0.1) service
+over its OpenAI-compatible `/v1/audio/transcriptions` endpoint.
+
+The bundle is independent: it reuses no `dsh-experimental-*` speech package at runtime and
+talks to one loopback service with one credential. It owns the Host service, the
+authenticated Remote surface and the browser face.
+
+## What it does
+
+- Records through the browser microphone, resamples to canonical 16 kHz mono WAV and uploads
+  it exactly once.
+- Inserts the transcript into the current composer draft without touching the draft's later
+  edits: a captured `TokenSpan` guards the insertion, and a refused insertion is kept for the
+  user to apply.
+- Probes connectivity and the advertised capability snapshot (`/v1/speechrail/capabilities`)
+  to bound upload size and duration, and to offer only the languages the service enumerates.
+- Persists language and request budget through the Harness settings page.
+
+## Security boundaries
+
+| Boundary | Behaviour |
+| --- | --- |
+| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. |
+| Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. |
+| Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
+| Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |
+| Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. |
+| Journal | A durable pending record is written before the upload; if local storage is unavailable the feature refuses to upload at all. |
+| Failures | Clients receive a closed code, HTTP status, retryable flag, request id and outcome. No body, message, path, credential or transcript text crosses the boundary. |
+
+## Configuration
+
+The entry `speechrail-input` (inserted by `cordis.patch.yml`) exposes:
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
+| `model` | empty | Empty omits the field and lets the service choose; non-empty values are validated by the service per profile. |
+| `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference; a service without an API key needs none configured. |
+| `language` | `auto` | `auto` omits the field entirely; `zh`/`en` are only accepted when the snapshot enumerates them. |
+| `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |
+
+## Build and verification
+
+```bash
+pnpm install
+pnpm verify            # baseline snapshot + generation + typecheck + bundles + tests
+pnpm run gen:typert    # regenerate lib/typert.* from the Host surface
+pnpm test              # host and client unit tests
+```
+
+`pnpm verify` runs, in order: the frozen upstream baseline check, Typert generation,
+`tsc -b` over both faces, the host and client bundles, and the unit tests.
+
+### Why `packages/typert-protocol` exists
+
+The Typert generator only recognises `@Remote` and `TypertRemoteService` when those symbols are
+declared inside a package registered under `<workspace>/packages` whose manifest name is exactly
+`@deepseek-ai/dsh-typert-protocol`. Out-of-monorepo bundles depend on the published npm package
+and therefore satisfy neither condition, so generation reports "publishes Remote artifacts but
+has no Remote methods".
+
+`packages/typert-protocol` is a private, never-published **declaration-only type shim** that
+restores the topology for the generator. `tsconfig.base.json` maps the bare specifier to it, so
+type resolution sees the shim while bundling and runtime keep resolving the published package
+(`lib/index.js` still imports `@deepseek-ai/dsh-typert-protocol`). Nothing depends on the shim,
+so pnpm never links it. `tests/typert-protocol-parity.host.*` proves the published package still
+exports the same symbols and that this bundle's decorator and constructor pattern also compiles
+against the published declarations.
+
+## Known limitations
+
+- The microphone device picker is not implemented; the system default input device is used.
+- No model-facing tool is registered; the Host service and Remote surface are the only entry
+  points, so a tool can be added later without changing the wire contract.
+- The unproven-outcome path requires an explicit acknowledgement in the composer or settings
+  page; there is no automatic reconciliation with the service's own record.
+- This repository builds and tests the bundle. It does not activate it in any Harness profile,
+  does not write credentials, and never performs a real recording or inference on its own.
+
+## Attribution
+
+The browser capture lifecycle in `src/client/recording.ts` adapts the MIT-licensed capture
+implementation of the frozen upstream baseline; see `NOTICE.md`.

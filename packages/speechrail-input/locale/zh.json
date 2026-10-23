@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "SpeechRail 语音输入",
+    "description": "通过本机 SpeechRail 服务录音，并把转写文本插入当前草稿。"
+  }
+}
