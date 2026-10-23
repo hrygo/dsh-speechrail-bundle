@@ -132,4 +132,4 @@ flowchart LR
 
 ### 第六轮追加（2026-10-24）
 
-已完成：闭合 H3 残余（未声明的限额继承当前生效值，`previousLimits` 贯穿探测）、H2 残余（`null` 确认前重新读日志，客户端拒绝后刷新状态）、`check()` 端点拒绝分支的返回一致性、`tools.ts` 注释与 README 限额表述、核验脚本增加 `defineTool` 编译产物结构比对。测试总数 112（host 104 + client 8）。
+已完成：闭合 H3 残余（未声明的限额继承当前生效值，`previousLimits` 贯穿探测）、H2 残余（`null` 确认前重新读日志，客户端拒绝后刷新状态）、`check()` 端点拒绝分支的返回一致性、`tools.ts` 注释与 README 限额表述、核验脚本增加 `defineTool` 编译产物结构比对，并补一项客户端「拒绝后刷新状态」测试。测试总数 113（host 104 + client 9）。
