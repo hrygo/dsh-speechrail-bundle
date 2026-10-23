@@ -194,6 +194,8 @@ export class SpeechRailInputCore {
   private pendingOperationId: string | null = null
   private capabilities: SpeechRailCapabilitiesView | null = null
   private checkedAt: string | null = null
+  /** The single probe in flight, if any; see `check()`. */
+  private checkInFlight: Promise<SpeechRailCheckResult> | null = null
 
   constructor(private readonly deps: CoreDependencies) {}
 
@@ -249,6 +251,21 @@ export class SpeechRailInputCore {
    * @returns what the probe observed.
    */
   async check(): Promise<SpeechRailCheckResult> {
+    // One probe at a time: concurrent checks used to race, letting an older probe that
+    // resolved later overwrite the newer snapshot (and the limits stated in it). Every
+    // caller waiting here observes the same committed result.
+    const inFlight = this.checkInFlight
+    if (inFlight !== null) return inFlight
+    const running = this.probeOnce()
+    this.checkInFlight = running
+    try {
+      return await running
+    } finally {
+      if (this.checkInFlight === running) this.checkInFlight = null
+    }
+  }
+
+  private async probeOnce(): Promise<SpeechRailCheckResult> {
     const checkedAt = this.deps.now().toISOString()
     const config = this.deps.config()
     if (config.endpointRefusal !== null) {
@@ -380,6 +397,9 @@ export class SpeechRailInputCore {
 
     const audio = decodeBase64Audio(request.audioBase64)
     if (audio === null) return await refuse('audio-invalid')
+    // The service stated that it cannot transcribe: refuse before uploading anything.
+    // A null snapshot states nothing, so it is not treated as a refusal.
+    if (this.capabilities !== null && !this.capabilities.transcriptionSupported) return await refuse('unsupported')
     const limits = this.capabilities?.limits ?? DEFAULT_LIMITS
     const validated = validateWave(audio, limits.maxAudioSeconds)
     if (!validated.ok || validated.byteLength > limits.maxUploadBytes) return await refuse('audio-invalid')

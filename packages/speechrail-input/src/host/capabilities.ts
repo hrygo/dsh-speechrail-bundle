@@ -66,6 +66,10 @@ export function clampLimits(
 
 /** Normalize an advertised language list into admitted values. */
 function projectLanguages(transcription: Record<string, unknown>): { readonly status: 'supported' | 'unknown'; readonly values: readonly string[] } {
+  // A service that reports transcription as unsupported states nothing useful about
+  // languages: admitting them would widen the selector for an endpoint that cannot
+  // transcribe at all.
+  if (transcription.status !== 'supported') return { status: 'unknown', values: [] }
   const languages = objectAt(transcription, 'languages')
   const raw = languages?.values
   if (languages?.status !== 'supported' || !Array.isArray(raw)) return { status: 'unknown', values: [] }

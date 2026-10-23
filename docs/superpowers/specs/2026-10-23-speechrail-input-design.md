@@ -325,3 +325,12 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **一致性** `check()` 在端点被拒分支原先返回 `capabilities: null`，而 `status()`/`run()` 仍在用缓存，前后不一致；现改为返回缓存，与实际强制值一致。
 - **文档与注释准确性** `tools.ts` 模块头曾称「注册表在执行期校验参数与结果」——结果确实校验，参数不校验（原样注册绕过 `defineTool` 的参数校验），已改正；README 的「垃圾能力响应绝不会放宽限额」按新规则重写；`DEFAULT_LIMITS` 的注释改为「包自身上限，而非保守值」。
 - **核验脚本增强** `tools/check-tool-schema.mjs` 现在同时做两件事：把 `createStatusTool(...)` 的 `parameters` 与 `output.schema` 与 `defineTool` 用等价 spec 编译出的 JSON 做结构比较，并调用注册表真实的 `assertSupportedJsonSchema`。实测输出 `speechrail_input_status is accepted by the registry assertion (12 output fields)`，退出 0。这使 H1 的真实要求（形状必须与注册表一致）自动化可复现，而不是一次性人工核对；脚本头部的路径提示也修正为「指向包目录本身」。
+
+## 第七轮：对第四轮核验新发现项的处置（2026-10-24）
+
+第四轮核验确认第六轮两处修复成立（40 条断言，无可用反例：任何响应序列都无法让运行路径强制一个服务从未明确声明的限额，任何读写失败序列都无法抹掉确认时仍可读的记录），同时提出三项新问题。
+
+- **N1（中，并发 check 丢更新）** 并发调用 `check()` 时「后返回者胜出」：更早开始、携带旧快照的探测若更晚返回，会覆盖更新（更紧）的声明，并连带恢复整份旧快照。已改为**单飞**：同一时刻只允许一次探测，后来者直接复用进行中的 Promise，因此所有调用者看到同一份已提交结果；探测结束后下一次调用重新探测。新增测试断言并发两次只产生一次探测、两者结果相同，且结束后可再次探测。
+- **N2（低，两处防御缺口）** (a) `projectLanguages` 原先只看 `languages.status`，于是服务声明 `transcription.status: 'unsupported'` 时仍会放开语言选择器；现改为仅在 `transcription.status === 'supported'` 时采纳语言。(b) `run()` 原先不看 `transcriptionSupported`，服务已声明不支持转写时仍会先上传；现于上传前以新增稳定错误码 `unsupported` 拒绝（错误码表、类型联合、中英文本均已补齐），且不占用门禁——因为并未发出请求。若快照为 `null`（未声明），则不视为拒绝。
+- **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
+- **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。

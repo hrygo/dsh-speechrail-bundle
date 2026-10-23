@@ -24,6 +24,7 @@ export type SpeechRailFailureCode =
   | 'audio-invalid'
   | 'unauthorized'
   | 'not-found'
+  | 'unsupported'
   | 'model-not-found'
   | 'server-error'
   | 'unreachable'

@@ -106,6 +106,16 @@ describe('projectCapabilities', () => {
     })
   })
 
+  it('admits no language when the service reports transcription as unsupported', () => {
+    const view = projectCapabilities(snapshot({
+      status: 'unsupported',
+      reason: 'disabled',
+      languages: { status: 'supported', values: ['zh', 'en'] },
+    }))
+    expect(view?.transcriptionSupported).toBe(false)
+    expect(view?.languages).toEqual({ status: 'unknown', values: [] })
+  })
+
   it('keeps an unstated limit at the value already in force', () => {
     const inForce = { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 }
     // An unstated limit inherits; a stated one is taken (bounded by the ceilings).

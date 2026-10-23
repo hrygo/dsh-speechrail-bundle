@@ -40,6 +40,7 @@ interface Harness {
   journal: PendingJournal
   fail: SpeechRailFailure | null
   probe: ProbeOutcome
+  probeCalls: number
   clearFails: boolean
   recordFails: boolean
   readFails: boolean
@@ -61,6 +62,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     journal: undefined as unknown as PendingJournal,
     fail: null,
     probe: { ok: true, capabilities: null },
+    probeCalls: 0,
     clearFails: false,
     recordFails: false,
     readFails: false,
@@ -122,7 +124,10 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
       if (state.fail !== null) return { ok: false, failure: state.fail }
       return { ok: true, text: 'hello world', requestSeconds: 1.25 }
     },
-    probe: async () => state.probe,
+    probe: async () => {
+      state.probeCalls += 1
+      return state.probe
+    },
     settingsRevision: () => state.revision,
     writeSettings: async (patch, expectedRevision) => {
       state.writes.push({ ...patch, expectedRevision })
@@ -400,6 +405,42 @@ describe('unproven outcomes', () => {
 
     const cleared = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_ssssssss' }))
     expect(cleared.ok).toBe(true)
+    expect((await h.core.status()).gate).toBe('ready')
+  })
+
+  it('runs one probe for concurrent checks and commits the same result to both', async () => {
+    // Two clients pressing Check at once used to race: the probe that resolved last won,
+    // even when it had started first and carried an older, wider snapshot.
+    const h = harness()
+    const first = h.core.check()
+    const second = h.core.check()
+    const [a, b] = await Promise.all([first, second])
+    expect(h.probeCalls).toBe(1)
+    expect(a).toEqual(b)
+
+    // Once it settles, the next check probes again.
+    await h.core.check()
+    expect(h.probeCalls).toBe(2)
+  })
+
+  it('refuses an upload before sending when the service states transcription is unsupported', async () => {
+    const h = harness()
+    h.probe = {
+      ok: true,
+      capabilities: {
+        schemaVersion: 'effective_capabilities_v1',
+        transcriptionSupported: false,
+        reason: 'disabled',
+        languages: { status: 'supported', values: ['zh', 'en'] },
+        limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+      },
+    }
+    await h.core.check()
+    const result = await h.core.transcribe(payload('op_uuuuuuuu'))
+    expect(result.ok).toBe(false)
+    expect(result.failure?.code).toBe('unsupported')
+    expect(h.sends).toHaveLength(0)
+    // The gate is not held: nothing was uploaded, so a later attempt may proceed.
     expect((await h.core.status()).gate).toBe('ready')
   })
 

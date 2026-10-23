@@ -88,6 +88,9 @@ against the published declarations.
 - The microphone device picker is not implemented; the system default input device is used.
 - The only model-facing entry point is the read-only `speechrail_input_status`; there is no tool
   that starts a recording or an upload.
+- A snapshot that reports transcription as unsupported admits no language and refuses an upload
+  before it is sent, with the stable `unsupported` code; a null snapshot states nothing, so it is
+  never treated as such a refusal.
 - The unproven-outcome path requires an explicit acknowledgement in the composer or settings
   page, and the composer offers that control whenever the gate is blocked; there is no automatic reconciliation with the service's own record. An unreadable
   journal is acknowledged by asserting that nothing is outstanding, which cannot be verified
