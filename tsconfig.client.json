@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.client.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false
+  },
+  "include": [
+    "packages/speechrail-input/tests/**/*.client.spec.ts",
+    "packages/speechrail-input/tests/**/*.client.spec.tsx"
+  ],
+  "references": [{ "path": "./packages/typert-protocol" }, { "path": "./packages/speechrail-input" }]
+}

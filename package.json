@@ -1,0 +1,36 @@
+{
+  "name": "dsh-speechrail-bundle-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "gen:typert": "node scripts/generate-typert.mjs --skip-diagnostics",
+    "build:host": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:host",
+    "build:client": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:client",
+    "build": "pnpm gen:typert && pnpm typecheck && pnpm build:host && pnpm build:client",
+    "test": "vitest run",
+    "test:host": "vitest run --project host",
+    "test:client": "vitest run --project client",
+    "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
+    "verify:baseline": "python3 tools/verify-upstream.py --git",
+    "verify": "pnpm verify:baseline && pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-typert-generator": "0.2.1-rc.2",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.10.1",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "jsdom": "29.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

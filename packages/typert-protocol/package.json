@@ -1,0 +1,16 @@
+{
+  "name": "@deepseek-ai/dsh-typert-protocol",
+  "version": "0.0.0-workspace-shim",
+  "private": true,
+  "description": "Workspace-only type shim for the published @deepseek-ai/dsh-typert-protocol; never published and never loaded at runtime",
+  "type": "module",
+  "main": "lib/types/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/types/index.js"
+    }
+  },
+  "license": "MIT"
+}
