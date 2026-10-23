@@ -1,9 +1,11 @@
 /**
  * Bounded, direct HTTP access to the local SpeechRail service.
  *
- * Every request is issued through `node:http` with an explicit host and port, so no
- * proxy environment variable can redirect a bearer credential, redirects are never
- * followed, responses are byte-capped, and one deadline covers the whole exchange.
+ * Every request is issued through `node:http` with an explicit loopback host and
+ * port. Redirects are never followed, responses are byte-capped, and one deadline
+ * covers the whole exchange. Limits of this approach: Node's opt-in environment
+ * proxy support (`NODE_USE_ENV_PROXY` / `--use-env-proxy`, Node >= 24.5) would apply
+ * to this call, so the no-proxy guarantee holds for a host started without it.
  * @module @hrygo/dsh-speechrail-bundle/host/http
  */
 
@@ -162,6 +164,20 @@ function failureForResponse(status: number, body: Buffer): SpeechRailFailure {
   return failureForStatus(status, envelope.declaredCode, envelope.requestId, envelope.declaredRetryable)
 }
 
+/**
+ * Strip the characters that could break out of one MIME part or header.
+ *
+ * RFC 7578 forbids CR/LF in a field value and quote or CR/LF in a name; a value
+ * carrying them could otherwise inject an extra part. This is a transport sanitiser
+ * rather than validation: a mangled value is still forwarded, so the service can
+ * reject it on its own terms.
+ * @param text - untrusted name or value.
+ * @returns the same text without `"`, CR or LF.
+ */
+function sanitizeMimePart(text: string): string {
+  return text.replace(/["\r\n]/gu, '')
+}
+
 /** Encode one multipart/form-data body with a random boundary. */
 export function encodeMultipart(
   fields: Readonly<Record<string, string>>,
@@ -170,11 +186,14 @@ export function encodeMultipart(
 ): Buffer {
   const head: Buffer[] = []
   for (const [name, value] of Object.entries(fields)) {
-    head.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`, 'utf8'))
+    head.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${sanitizeMimePart(name)}"\r\n\r\n${sanitizeMimePart(value)}\r\n`,
+      'utf8',
+    ))
   }
   head.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\n`
-    + `Content-Type: ${file.contentType}\r\n\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="${sanitizeMimePart(file.name)}"; filename="${sanitizeMimePart(file.filename)}"\r\n`
+    + `Content-Type: ${sanitizeMimePart(file.contentType)}\r\n\r\n`,
     'utf8',
   ))
   return Buffer.concat([
@@ -267,6 +286,7 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
     && (usage as Record<string, unknown>).type === 'duration'
     && typeof (usage as Record<string, unknown>).seconds === 'number'
     && Number.isFinite((usage as Record<string, unknown>).seconds as number)
+    && ((usage as Record<string, unknown>).seconds as number) >= 0
   if (typeof record.text !== 'string' || !usageValid) {
     return { ok: false, failure: failure('malformed-response', { httpStatus: 200 }) }
   }

@@ -180,8 +180,12 @@ export interface SpeechRailTranscriptionResult {
 
 /** Strictly validated acknowledgement of an unproven remote outcome. */
 export interface SpeechRailAcknowledgeRequest {
-  /** Operation id the user acknowledges as unproven. */
-  readonly operationId: string
+  /**
+   * Operation id the user acknowledges as unproven, or `null` when the stored
+   * record could not be read at all and the user asserts that nothing of theirs is
+   * outstanding. A concrete id must match the id this host holds.
+   */
+  readonly operationId: string | null
 }
 
 /** Result of acknowledging an unproven outcome. */

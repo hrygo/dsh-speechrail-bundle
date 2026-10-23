@@ -44,7 +44,7 @@ export const CONFIG_PAYLOAD_MAX_BYTES = 8_192
 export const TRANSCRIBE_PAYLOAD_MAX_BYTES = 6_291_456
 
 /** Largest accepted transcription response body, in bytes. */
-export const TRANSCRIPTION_RESPONSE_MAX_BYTES = 1_048_576
+export const TRANSCRIPTION_RESPONSE_MAX_BYTES = 262_144
 
 /** How long a capability snapshot stays valid before the next check re-reads it. */
 export const CAPABILITY_TTL_MS = 30_000

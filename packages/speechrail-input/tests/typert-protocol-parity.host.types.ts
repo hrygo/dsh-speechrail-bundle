@@ -34,3 +34,28 @@ class PublishedPatternProbe extends PublishedService {
 
 /** Keeps the probe referenced without running a decorator through the executor. */
 export const publishedPatternProbe = PublishedPatternProbe
+
+/**
+ * Structural assignability of the shapes this bundle projects.
+ *
+ * A type-level proof, not a runtime one: everything the *published* declarations
+ * produce must be readable through the shim, so shim-typed code cannot be surprised
+ * by the real package. The reverse direction is deliberately not required: the shim
+ * widens `RemoteResult`'s error side to a plain interface, because this bundle only
+ * ever reads `error.message` and never constructs one.
+ */
+import type * as Shim from '@deepseek-ai/dsh-typert-protocol'
+import type * as Published from '../node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/index.js'
+
+declare const publishedResult: Published.RemoteResult<number>
+declare const publishedContribution: Published.TypertRemoteContribution
+declare const publishedOptions: Published.TypertGatewayBindingOptions
+
+const shimReadsPublished: readonly [
+  Shim.RemoteResult<number>,
+  Shim.TypertRemoteContribution,
+  Shim.TypertGatewayBindingOptions,
+] = [publishedResult, publishedContribution, publishedOptions]
+
+/** Keeps the proof referenced without emitting anything. */
+export const protocolAssignability = { shimReadsPublished }

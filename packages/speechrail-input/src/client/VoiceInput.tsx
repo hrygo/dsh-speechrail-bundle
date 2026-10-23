@@ -242,10 +242,11 @@ export function VoiceInput({
   }
 
   const acknowledgeUnknown = async (): Promise<void> => {
-    const operationId = view?.pendingOperationId
-    if (operationId === null || operationId === undefined) return
+    if (view === undefined) return
+    // A null id means the stored record could not be read at all; the Host accepts it
+    // only as the user's explicit assertion that nothing of theirs is outstanding.
     try {
-      const result = await acknowledge({ operationId })
+      const result = await acknowledge({ operationId: view.pendingOperationId })
       if (!result.ok) { feedback(result.failure === null ? t('failure.internal') : failureText(result.failure)); return }
       await refresh()
       setPending('')

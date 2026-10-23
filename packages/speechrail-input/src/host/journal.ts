@@ -36,6 +36,14 @@ export interface PendingJournal {
   record(entry: JournalRecord): Promise<boolean>
   /** Clear the record when it still belongs to this operation id. */
   clear(operationId: string): Promise<boolean>
+  /**
+   * Clear the slot without matching an id.
+   *
+   * Only an explicit user acknowledgement of an *unreadable* record may call this:
+   * the user is asserting that no upload of theirs is outstanding. It still fails
+   * when the medium cannot be written.
+   */
+  reset(): Promise<boolean>
 }
 
 /** Unit name of the single-ledger journal. */
@@ -117,6 +125,14 @@ export function journalFromUnit(unit: JournalUnit): PendingJournal {
         return false
       }
     },
+    async reset(): Promise<boolean> {
+      try {
+        await unit.writeGlobal(null)
+        return true
+      } catch {
+        return false
+      }
+    },
   }
 }
 
@@ -125,6 +141,7 @@ export const UNAVAILABLE_JOURNAL: PendingJournal = {
   read: async () => ({ available: false }),
   record: async () => false,
   clear: async () => false,
+  reset: async () => false,
 }
 
 /** In-memory journal for compositions and tests without a storage medium. */
@@ -138,5 +155,6 @@ export function memoryJournal(initial: JournalRecord | null = null): PendingJour
       current = null
       return true
     },
+    reset: async () => { current = null; return true },
   }
 }

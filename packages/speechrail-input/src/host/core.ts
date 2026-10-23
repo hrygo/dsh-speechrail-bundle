@@ -34,9 +34,11 @@ import type { ProbeOutcome, TranscribeOutcome } from './http.ts'
 
 /** Effective configuration for one operation, read fresh so volatile updates apply. */
 export interface ResolvedConfig {
-  /** Endpoint exactly as configured. */
-  readonly rawBaseUrl: string
-  /** Normalized loopback base URL, or an empty string when the endpoint is refused. */
+  /**
+   * Normalized loopback base URL, or an empty string when the endpoint is refused.
+   * This is the only URL projection that may cross the Remote boundary, so any
+   * userinfo an operator typed never reaches the client.
+   */
   readonly baseUrl: string
   /** Why the endpoint is unusable, or null. */
   readonly endpointRefusal: EndpointRefusal | null
@@ -168,7 +170,9 @@ export function parseAcknowledgeRequest(text: string): ParseResult<SpeechRailAck
   const record = strictRecord(decodeCarrier(text, CONFIG_PAYLOAD_MAX_BYTES), ['operationId'])
   if (record === null) return refuse('bad-request')
   const operationId = record.operationId
-  if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) return refuse('bad-request')
+  // `null` is the "nothing identifiable is outstanding" acknowledgement used when the
+  // stored record itself could not be read; anything else must be a shaped id.
+  if (operationId !== null && (typeof operationId !== 'string' || !OPERATION_ID.test(operationId))) return refuse('bad-request')
   return { ok: true, value: { operationId } }
 }
 
@@ -219,7 +223,7 @@ export class SpeechRailInputCore {
     const config = this.deps.config()
     const credential = await this.deps.resolveCredential(config.credentialRef)
     return {
-      baseUrl: config.rawBaseUrl,
+      baseUrl: config.baseUrl,
       endpointProblem: config.endpointRefusal === null ? null : describeRefusal(config.endpointRefusal),
       model: config.model,
       credentialRef: config.credentialRef,
@@ -261,7 +265,9 @@ export class SpeechRailInputCore {
       this.capabilities = outcome.capabilities
       return { reachable: true, authenticated: true, capabilities: outcome.capabilities, failure: null, checkedAt }
     }
-    if (!outcome.reachable) this.capabilities = null
+    // A failed probe keeps the last snapshot on purpose: falling back to the
+    // absolute ceilings here would silently widen what this host accepts after a
+    // service that once advertised tighter limits became briefly unreachable.
     return {
       reachable: outcome.reachable,
       authenticated: outcome.authenticated,
@@ -429,6 +435,18 @@ export class SpeechRailInputCore {
     }
     if (this.gateState !== 'unknown') {
       return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
+    }
+    if (parsed.value.operationId === null) {
+      // The stored record was unreadable, so there is no id to match. The user is
+      // asserting that no upload of theirs is outstanding; a medium that cannot be
+      // written still refuses, so the gate cannot be cleared blind.
+      const reset = await this.deps.journal.reset()
+      if (!reset) {
+        return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('journal-unavailable') }
+      }
+      this.gateState = 'ready'
+      this.pendingOperationId = null
+      return { ok: true, pendingOperationId: null, failure: null }
     }
     if (this.pendingOperationId !== parsed.value.operationId) {
       return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('conflict') }

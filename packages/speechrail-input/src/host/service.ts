@@ -18,7 +18,7 @@ import {
   type SpeechRailLanguageMode,
   type SpeechRailTranscriptionResult,
 } from '../contracts.ts'
-import { Config, type SpeechRailInputConfig } from './config.ts'
+import { Config, readConfig, type SpeechRailInputConfig } from './config.ts'
 import { SpeechRailInputCore, type ResolvedConfig } from './core.ts'
 import { normalizeEndpoint } from './endpoint.ts'
 import { probeCapabilities, transcribe as httpTranscribe } from './http.ts'
@@ -124,19 +124,15 @@ export default class SpeechRailInput extends Service {
 
   /** Read the effective configuration, normalizing the endpoint on every call. */
   private resolveConfig(): ResolvedConfig {
-    const rawBaseUrl = this.config.baseUrl
-    const endpoint = normalizeEndpoint(rawBaseUrl)
-    const language: SpeechRailLanguageMode = this.config.language === 'zh' || this.config.language === 'en' || this.config.language === 'auto'
-      ? this.config.language
-      : 'auto'
+    const values = readConfig(this.config)
+    const endpoint = normalizeEndpoint(values.baseUrl)
     return {
-      rawBaseUrl,
       baseUrl: endpoint.ok ? endpoint.baseUrl : '',
       endpointRefusal: endpoint.ok ? null : endpoint.reason,
-      model: this.config.model.trim(),
-      credentialRef: this.config.credentialRef,
-      language,
-      requestTimeoutMs: this.config.requestTimeoutMs,
+      model: values.model.trim(),
+      credentialRef: values.credentialRef,
+      language: values.language,
+      requestTimeoutMs: values.requestTimeoutMs,
     }
   }
 
@@ -225,6 +221,10 @@ export default class SpeechRailInput extends Service {
       read: async (): Promise<JournalState> => {
         const target = await unit()
         return target === null ? { available: false } : await facade(target).read()
+      },
+      reset: async (): Promise<boolean> => {
+        const target = await unit()
+        return target === null ? false : await facade(target).reset()
       },
       record: async (entry) => {
         const target = await unit()

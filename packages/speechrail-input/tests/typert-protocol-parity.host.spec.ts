@@ -17,17 +17,10 @@ describe('published Typert protocol', () => {
     expect(typeof Published.TypertRemoteService.prototype).toBe('object')
   })
 
-  it('keeps the Remote contract shapes this bundle projects', () => {
-    const options: Published.TypertGatewayBindingOptions = { namespace: 'speechrailInput' }
-    const contribution: Published.TypertRemoteContribution = { package: '@hrygo/dsh-speechrail-bundle', descriptors: [] }
-    const ok: Published.RemoteResult<number> = { ok: true, value: 1 }
-    // The published error side is a class instance, so the shape is asserted on a
-    // declared value instead of a literal: this bundle only ever reads `.message`.
-    const failure = undefined as unknown as Published.RemoteFailure
-    const failed: Published.RemoteResult<number> = { ok: false, error: failure }
-    expect(options.namespace).toBe('speechrailInput')
-    expect(contribution.descriptors).toHaveLength(0)
-    expect(ok.ok).toBe(true)
-    expect(failed.ok).toBe(false)
+  it('exposes the base class the shim impersonates', () => {
+    // The compile-time half (typert-protocol-parity.host.types.ts) proves the shapes
+    // are assignable in both directions; this only proves the symbols exist at runtime.
+    expect(Published.TypertRemoteService.length).toBeGreaterThanOrEqual(0)
+    expect(Object.getOwnPropertyNames(Published.TypertRemoteService)).toContain('prototype')
   })
 })

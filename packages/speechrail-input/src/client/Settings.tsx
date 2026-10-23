@@ -97,11 +97,12 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   }
 
   const acknowledgeUnknown = async (): Promise<void> => {
-    const operationId = view?.pendingOperationId
-    if (operationId === null || operationId === undefined) return
+    if (view === undefined) return
+    // A null id means the stored record could not be read at all; the Host accepts it
+    // only as the user's explicit assertion that nothing of theirs is outstanding.
     setBusy(true)
     try {
-      const result = await acknowledge({ operationId })
+      const result = await acknowledge({ operationId: view.pendingOperationId })
       if (!result.ok) { setNote(result.failure === null ? t('failure.internal') : failureText(result.failure)); return }
       adopt(await status())
       setNote(t('acknowledged'))

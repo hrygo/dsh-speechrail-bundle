@@ -22,11 +22,11 @@ authenticated Remote surface and the browser face.
 
 | Boundary | Behaviour |
 | --- | --- |
-| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. |
+| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. Not proxied, unless the host process was started with Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy`. |
 | Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. |
 | Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
 | Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |
-| Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. |
+| Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. If the stored record cannot be read at all, acknowledging asserts that nothing is outstanding and clears the slot; a medium that cannot be written refuses instead. |
 | Journal | A durable pending record is written before the upload; if local storage is unavailable the feature refuses to upload at all. |
 | Failures | Clients receive a closed code, HTTP status, retryable flag, request id and outcome. No body, message, path, credential or transcript text crosses the boundary. |
 
@@ -76,7 +76,12 @@ against the published declarations.
 - No model-facing tool is registered; the Host service and Remote surface are the only entry
   points, so a tool can be added later without changing the wire contract.
 - The unproven-outcome path requires an explicit acknowledgement in the composer or settings
-  page; there is no automatic reconciliation with the service's own record.
+  page; there is no automatic reconciliation with the service's own record. An unreadable
+  journal is acknowledged by asserting that nothing is outstanding, which cannot be verified
+  locally — the alternative would be a permanently blocked feature.
+- The capability snapshot is used opportunistically: any body carrying
+  `operations.transcription` yields a view, and unknown fields or a missing limit fall back to
+  the package's absolute ceilings. Limits only ever narrow, never widen.
 - This repository builds and tests the bundle. It does not activate it in any Harness profile,
   does not write credentials, and never performs a real recording or inference on its own.
 

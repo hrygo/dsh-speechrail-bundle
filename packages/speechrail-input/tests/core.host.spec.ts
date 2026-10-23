@@ -15,7 +15,6 @@ function audio(samples: number): string {
 }
 
 const CONFIG: ResolvedConfig = {
-  rawBaseUrl: 'http://127.0.0.1:8201/v1',
   baseUrl: 'http://127.0.0.1:8201/v1',
   endpointRefusal: null,
   model: '',
@@ -43,6 +42,8 @@ interface Harness {
   clearFails: boolean
   recordFails: boolean
   readFails: boolean
+  /** Readable medium holding a malformed record: unreadable, but writable. */
+  corrupt: boolean
   config: ResolvedConfig
   credential: string | null
   revision: number
@@ -62,6 +63,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     clearFails: false,
     recordFails: false,
     readFails: false,
+    corrupt: false,
     config: CONFIG,
     credential: 'secret-key',
     revision: 3,
@@ -70,18 +72,30 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
   }
   const journal: PendingJournal = {
     async read(): Promise<JournalState> {
-      if (state.readFails) return { available: false }
+      if (state.readFails || state.corrupt) return { available: false }
       return { available: true, pending: stored }
     },
     async record(entry): Promise<boolean> {
-      if (state.recordFails) return false
+      if (state.readFails || state.recordFails) return false
       stored = entry
+      state.corrupt = false
       return true
     },
     async clear(operationId): Promise<boolean> {
-      if (state.clearFails) return false
+      // Faithful to journalFromUnit: a medium whose read throws cannot compare ids,
+      // so it cannot clear either. A double where read fails but clear succeeds
+      // models a state no real medium can be in.
+      if (state.readFails || state.corrupt || state.clearFails) return false
       if (stored !== null && stored.operationId !== operationId) return false
       stored = null
+      return true
+    },
+    async reset(): Promise<boolean> {
+      if (state.readFails || state.clearFails) return false
+      // Overwriting the slot replaces whatever unreadable bytes were there, which is
+      // what makes the reset an actual recovery rather than a one-time unblock.
+      stored = null
+      state.corrupt = false
       return true
     },
   }
@@ -176,13 +190,16 @@ describe('single in-flight gate', () => {
     expect(h.sends[0]?.pendingAtSend?.operationId).toBe('op_cccccccc')
   })
 
-  it('sends nothing and keeps no record when the journal is unusable', async () => {
+  it('sends nothing and holds the gate when the journal cannot be read', async () => {
     const h = harness()
     h.readFails = true
     const result = await h.core.transcribe(payload('op_dddddddd'))
     expect(result.failure?.code).toBe('journal-unavailable')
     expect(h.sends).toHaveLength(0)
-    expect((await h.core.status()).gate).toBe('ready')
+    // Fail-closed: the medium cannot be read, so it cannot be cleared either, and the
+    // gate holds the refused operation rather than reopening as if nothing happened.
+    expect((await h.core.status()).gate).toBe('unknown')
+    expect((await h.core.status()).pendingOperationId).toBe('op_dddddddd')
   })
 
   it('sends nothing when the pending record cannot be written', async () => {
@@ -309,6 +326,45 @@ describe('unproven outcomes', () => {
     h.readFails = true
     await h.core.restore()
     expect((await h.core.status()).gate).toBe('unknown')
+    expect((await h.core.status()).pendingOperationId).toBeNull()
+  })
+
+  it('recovers a corrupt record only through an explicit null acknowledgement', async () => {
+    const h = harness()
+    h.corrupt = true
+    await h.core.restore()
+    expect((await h.core.status()).gate).toBe('unknown')
+    expect((await h.core.status()).pendingOperationId).toBeNull()
+
+    // Nothing can be matched, so any concrete id is refused rather than accepted.
+    const wrong = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_iiiiiiii' }))
+    expect(wrong.failure?.code).toBe('conflict')
+
+    const reset = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    expect(reset).toEqual({ ok: true, pendingOperationId: null, failure: null })
+    expect((await h.core.status()).gate).toBe('ready')
+
+    const next = await h.core.transcribe(payload('op_jjjjjjjj'))
+    expect(next.ok).toBe(true)
+    expect(h.sends).toHaveLength(1)
+  })
+
+  it('refuses a null acknowledgement when the medium cannot be written', async () => {
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    const refused = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    expect(refused.failure?.code).toBe('journal-unavailable')
+    expect((await h.core.status()).gate).toBe('unknown')
+  })
+
+  it('reports a failed pending write instead of leaving a phantom record', async () => {
+    const h = harness()
+    h.recordFails = true
+    const result = await h.core.transcribe(payload('op_kkkkkkkk'))
+    expect(result.failure?.code).toBe('journal-unavailable')
+    expect(h.sends).toHaveLength(0)
+    expect((await h.core.status()).gate).toBe('ready')
     expect((await h.core.status()).pendingOperationId).toBeNull()
   })
 })
