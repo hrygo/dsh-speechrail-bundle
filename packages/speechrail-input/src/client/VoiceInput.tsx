@@ -247,7 +247,13 @@ export function VoiceInput({
     // only as the user's explicit assertion that nothing of theirs is outstanding.
     try {
       const result = await acknowledge({ operationId: view.pendingOperationId })
-      if (!result.ok) { feedback(result.failure === null ? t('failure.internal') : failureText(result.failure)); return }
+      if (!result.ok) {
+        // A refusal can carry the id this host discovered on a re-read; refresh before
+        // reporting so a second attempt sends that id instead of a stale null.
+        await refresh()
+        feedback(result.failure === null ? t('failure.internal') : failureText(result.failure))
+        return
+      }
       await refresh()
       setPending('')
       setMessage(t('acknowledged'))

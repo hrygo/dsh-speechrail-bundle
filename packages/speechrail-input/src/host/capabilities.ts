@@ -15,7 +15,11 @@ import {
 } from '../contracts.ts'
 import { sanitizeReason } from './failure.ts'
 
-/** Conservative limits used before any snapshot has been read. */
+/**
+ * Limits enforced before any snapshot has been read: the package's own ceilings, so
+ * nothing a service can legitimately advertise is refused on a guess. They are the
+ * widest values this package accepts, not conservative ones.
+ */
 export const DEFAULT_LIMITS: SpeechRailLimits = {
   maxUploadBytes: ABSOLUTE_MAX_UPLOAD_BYTES,
   maxAudioSeconds: ABSOLUTE_MAX_AUDIO_SECONDS,
@@ -42,13 +46,21 @@ function positiveNumber(value: unknown): number | null {
 
 /**
  * Clamp advertised limits to this package's absolute ceilings.
- * @param advertised - limits read from a snapshot, each possibly null.
+ *
+ * A limit the snapshot does not state keeps the value already in force. Falling back
+ * to the absolute ceiling here would widen what this host accepts whenever a service
+ * recognises as a transcription endpoint without stating its input limits.
+ * @param advertised - limits read from a snapshot, each possibly null when unstated.
+ * @param previous - limits in force before this snapshot, if any.
  * @returns effective limits that never exceed the package ceilings.
  */
-export function clampLimits(advertised: { readonly maxUploadBytes: number | null; readonly maxAudioSeconds: number | null }): SpeechRailLimits {
+export function clampLimits(
+  advertised: { readonly maxUploadBytes: number | null; readonly maxAudioSeconds: number | null },
+  previous?: SpeechRailLimits | null,
+): SpeechRailLimits {
   return {
-    maxUploadBytes: Math.min(ABSOLUTE_MAX_UPLOAD_BYTES, positiveNumber(advertised.maxUploadBytes) ?? ABSOLUTE_MAX_UPLOAD_BYTES),
-    maxAudioSeconds: Math.min(ABSOLUTE_MAX_AUDIO_SECONDS, positiveNumber(advertised.maxAudioSeconds) ?? ABSOLUTE_MAX_AUDIO_SECONDS),
+    maxUploadBytes: Math.min(ABSOLUTE_MAX_UPLOAD_BYTES, positiveNumber(advertised.maxUploadBytes) ?? previous?.maxUploadBytes ?? ABSOLUTE_MAX_UPLOAD_BYTES),
+    maxAudioSeconds: Math.min(ABSOLUTE_MAX_AUDIO_SECONDS, positiveNumber(advertised.maxAudioSeconds) ?? previous?.maxAudioSeconds ?? ABSOLUTE_MAX_AUDIO_SECONDS),
   }
 }
 
@@ -72,7 +84,7 @@ function projectLanguages(transcription: Record<string, unknown>): { readonly st
  * @param snapshot - decoded response body, untrusted.
  * @returns the projected facts, or null when the body is not a usable snapshot.
  */
-export function projectCapabilities(snapshot: unknown): SpeechRailCapabilitiesView | null {
+export function projectCapabilities(snapshot: unknown, previous?: SpeechRailLimits | null): SpeechRailCapabilitiesView | null {
   if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return null
   const transcription = objectAt(objectAt(snapshot, 'operations'), 'transcription')
   if (transcription === null) return null
@@ -86,7 +98,7 @@ export function projectCapabilities(snapshot: unknown): SpeechRailCapabilitiesVi
     limits: clampLimits({
       maxUploadBytes: positiveNumber(input?.max_upload_bytes),
       maxAudioSeconds: positiveNumber(input?.max_audio_seconds),
-    }),
+    }, previous),
   }
 }
 

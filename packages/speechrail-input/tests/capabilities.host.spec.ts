@@ -105,4 +105,22 @@ describe('projectCapabilities', () => {
       maxAudioSeconds: ABSOLUTE_MAX_AUDIO_SECONDS,
     })
   })
+
+  it('keeps an unstated limit at the value already in force', () => {
+    const inForce = { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 }
+    // An unstated limit inherits; a stated one is taken (bounded by the ceilings).
+    expect(clampLimits({ maxUploadBytes: null, maxAudioSeconds: null }, inForce)).toEqual(inForce)
+    expect(clampLimits({ maxUploadBytes: 524_288, maxAudioSeconds: null }, inForce)).toEqual({
+      maxUploadBytes: 524_288,
+      maxAudioSeconds: 30,
+    })
+    expect(clampLimits({ maxUploadBytes: null, maxAudioSeconds: 120 }, inForce)).toEqual({
+      maxUploadBytes: 1_048_576,
+      maxAudioSeconds: 120,
+    })
+    expect(clampLimits({ maxUploadBytes: 8_388_608, maxAudioSeconds: null }, inForce)).toEqual({
+      maxUploadBytes: ABSOLUTE_MAX_UPLOAD_BYTES,
+      maxAudioSeconds: 30,
+    })
+  })
 })

@@ -22,6 +22,7 @@ import {
   type SpeechRailGateState,
   type SpeechRailInputStatus,
   type SpeechRailLanguageMode,
+  type SpeechRailLimits,
   type SpeechRailTranscribeRequest,
   type SpeechRailTranscriptionResult,
 } from '../contracts.ts'
@@ -73,7 +74,7 @@ export interface CoreDependencies {
     readonly signal?: AbortSignal | undefined
   }) => Promise<TranscribeOutcome>
   /** Probe the capability snapshot. */
-  readonly probe: (options: { readonly baseUrl: string; readonly credential: string }) => Promise<ProbeOutcome>
+  readonly probe: (options: { readonly baseUrl: string; readonly credential: string; readonly previousLimits?: SpeechRailLimits | null }) => Promise<ProbeOutcome>
   /** Current settings revision for this entry, or null when Settings is unavailable. */
   readonly settingsRevision: () => number | null
   /** Persist the editable subset of this entry. */
@@ -252,14 +253,21 @@ export class SpeechRailInputCore {
     const config = this.deps.config()
     if (config.endpointRefusal !== null) {
       this.checkedAt = checkedAt
-      return { reachable: false, authenticated: false, capabilities: null, failure: failure('endpoint-invalid'), checkedAt }
+      // The cached snapshot stays in force, so report the same one this host enforces.
+      return { reachable: false, authenticated: false, capabilities: this.capabilities, failure: failure('endpoint-invalid'), checkedAt }
     }
     const credential = await this.deps.resolveCredential(config.credentialRef)
     if (credential === null) {
       this.checkedAt = checkedAt
       return { reachable: false, authenticated: false, capabilities: this.capabilities, failure: failure('not-configured'), checkedAt }
     }
-    const outcome = await this.deps.probe({ baseUrl: config.baseUrl, credential })
+    const outcome = await this.deps.probe({
+      baseUrl: config.baseUrl,
+      credential,
+      // A snapshot that recognises the endpoint but states no input limits inherits
+      // the limits already in force instead of jumping to the absolute ceilings.
+      previousLimits: this.capabilities?.limits ?? null,
+    })
     this.checkedAt = checkedAt
     if (outcome.ok) {
       // A 200 whose body is not a recognizable snapshot must not discard the last
@@ -445,6 +453,14 @@ export class SpeechRailInputCore {
       // instead: resetting here would erase a real unproven upload.
       if (this.pendingOperationId !== null) {
         return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('conflict') }
+      }
+      // The record looked unreadable at restore, but that read may have failed
+      // transiently. Re-read before erasing: reset() only writes, so without this
+      // check a momentary failure would destroy a record that is readable now.
+      const reread = await this.deps.journal.read()
+      if (reread.available && reread.pending !== null) {
+        this.pendingOperationId = reread.pending.operationId
+        return { ok: false, pendingOperationId: reread.pending.operationId, failure: failure('conflict') }
       }
       const reset = await this.deps.journal.reset()
       if (!reset) {

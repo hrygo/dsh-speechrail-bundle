@@ -10,7 +10,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
-import type { SpeechRailAcknowledgeRequest, SpeechRailInputStatus } from '../src/types.ts'
+import { failure } from '../src/host/failure.ts'
+import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailInputStatus } from '../src/types.ts'
 
 afterEach(() => { cleanup() })
 
@@ -32,7 +33,7 @@ const STATUS: SpeechRailInputStatus = {
 }
 
 /** Props with the injected face replaced by recording stubs. */
-function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request: SpeechRailAcknowledgeRequest) => Promise<never>): VoiceInputProps {
+function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request: SpeechRailAcknowledgeRequest) => Promise<SpeechRailAcknowledgeResult>): VoiceInputProps {
   return {
     inputActions: {
       captureInsertion: () => ({ start: 0, end: 0 }),
@@ -67,6 +68,28 @@ describe('VoiceInput acknowledge', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
     await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: null }) })
+  })
+
+  it('refreshes after a refusal so the next attempt carries the discovered id', async () => {
+    // A transient read failure leaves the gate unproven with no id. If the Host then
+    // finds a readable record it refuses the null and reports the id; the control must
+    // re-read status, otherwise every later click would send the same stale null.
+    let pendingId: string | null = null
+    const status = vi.fn(async () => ({ ...STATUS, gate: 'unknown' as const, pendingOperationId: pendingId }))
+    const acknowledge = vi.fn(async () => {
+      pendingId = 'op_cccccccc'
+      return { ok: false, pendingOperationId: 'op_cccccccc', failure: failure('conflict') }
+    })
+    const base = props({ gate: 'unknown', pendingOperationId: null }, acknowledge)
+    render(<VoiceInput {...base} status={status} acknowledge={acknowledge} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenNthCalledWith(1, { operationId: null }) })
+    // The refusal triggered a re-read, which is what makes the id discoverable.
+    await waitFor(() => { expect(status.mock.calls.length).toBeGreaterThanOrEqual(2) })
+
+    fireEvent.click(screen.getByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenLastCalledWith({ operationId: 'op_cccccccc' }) })
   })
 
   it('offers no acknowledge control while the gate is open', async () => {

@@ -103,7 +103,13 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     setBusy(true)
     try {
       const result = await acknowledge({ operationId: view.pendingOperationId })
-      if (!result.ok) { setNote(result.failure === null ? t('failure.internal') : failureText(result.failure)); return }
+      if (!result.ok) {
+        // A refusal can carry the id this host discovered on a re-read; refresh before
+        // reporting so a second attempt sends that id instead of a stale null.
+        adopt(await status())
+        setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
+        return
+      }
       adopt(await status())
       setNote(t('acknowledged'))
     } catch {

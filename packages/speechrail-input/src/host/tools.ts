@@ -10,9 +10,13 @@
  * The definition is written structurally instead of through `@deepseek-ai/dsh-tools`
  * because importing that package's declarations pulls `@deepseek-ai/dsh-llm` into the
  * Typert-analyzed program, where an unrelated lookup declaration fails analysis. The
- * shapes below are exactly what the registry consumes (verified against
- * `defineTool`'s compiled output); the registry still validates arguments and results
- * against them at execution time.
+ * shapes below are exactly what that package compiles to; `tools/check-tool-schema.mjs`
+ * asserts both the compiled-JSON parity and the registry's own schema check, because
+ * the compiler cannot.
+ *
+ * Registering this way validates `output.schema` and every result against it, but it
+ * does not validate arguments: `execute` therefore treats only an explicit
+ * `probe: true` as a probe and tolerates every other value.
  * @module @hrygo/dsh-speechrail-bundle/host/tools
  */
 

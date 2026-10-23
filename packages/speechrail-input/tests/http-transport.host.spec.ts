@@ -243,6 +243,49 @@ describe('capability probe', () => {
     expect(outcome.capabilities?.languages).toEqual({ status: 'supported', values: ['zh', 'en'] })
   })
 
+  it('keeps the limits in force when a recognized snapshot states none', async () => {
+    // A 200 that recognises the transcription endpoint but omits its input limits must
+    // not lift enforcement to the absolute ceilings: the previous snapshot stays the
+    // authority for every limit this one does not state.
+    let body = JSON.stringify({
+      schema_version: 'effective_capabilities_v1',
+      operations: { transcription: { status: 'supported', input: { max_upload_bytes: 1_048_576, max_audio_seconds: 30 } } },
+    })
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(body)
+    })
+
+    const tight = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 2_000 })
+    expect(tight.ok).toBe(true)
+    if (!tight.ok) throw new Error('unreachable')
+    expect(tight.capabilities?.limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
+
+    body = JSON.stringify({ operations: { transcription: { status: 'supported' } } })
+    const recognized = await probeCapabilities({
+      baseUrl: server.baseUrl,
+      credential: SECRET,
+      timeoutMs: 2_000,
+      previousLimits: tight.capabilities?.limits ?? null,
+    })
+    expect(recognized.ok).toBe(true)
+    if (!recognized.ok) throw new Error('unreachable')
+    expect(recognized.capabilities).not.toBeNull()
+    expect(recognized.capabilities?.limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
+
+    // An explicitly stated limit still takes effect, so the snapshot remains authoritative.
+    body = JSON.stringify({ operations: { transcription: { input: { max_upload_bytes: 524_288, max_audio_seconds: 15 } } } })
+    const tightened = await probeCapabilities({
+      baseUrl: server.baseUrl,
+      credential: SECRET,
+      timeoutMs: 2_000,
+      previousLimits: recognized.capabilities?.limits ?? null,
+    })
+    expect(tightened.ok).toBe(true)
+    if (!tightened.ok) throw new Error('unreachable')
+    expect(tightened.capabilities?.limits).toEqual({ maxUploadBytes: 524_288, maxAudioSeconds: 15 })
+  })
+
   it('accepts an unrecognized body as an empty capability view rather than failing', async () => {
     // Deliberate: the snapshot is used opportunistically. A body this bundle does not
     // understand yields no limits, and enforcement falls back to the absolute ceilings.

@@ -93,12 +93,12 @@ against the published declarations.
   journal is acknowledged by asserting that nothing is outstanding, which cannot be verified
   locally — the alternative would be a permanently blocked feature.
 - The capability snapshot is used opportunistically: any body carrying
-  `operations.transcription` yields a view, and unknown fields or a missing limit fall back to
-  the package's absolute ceilings. Enforced limits change only on an explicitly recognized
-  snapshot; an unreachable service or an unrecognized 200 body keeps the last known limits, so a
-  garbage capability response can never widen what this host accepts. The flip side is that a
-  snapshot does not expire: if the service later loosens or tightens its own limits, a fresh
-  check is what updates them.
+  `operations.transcription` yields a view. Every limit the snapshot does not state keeps the
+  value already in force, so an unreachable service, an unrecognized body, or a recognized
+  endpoint that omits its input limits can never widen what this host accepts. A limit the
+  snapshot does state is taken, bounded by the package's absolute ceilings. The flip side is
+  that a snapshot does not expire: if the service later loosens or tightens its own limits, a
+  fresh check is what updates them.
 - This repository builds and tests the bundle. It does not activate it in any Harness profile,
   does not write credentials, and never performs a real recording or inference on its own.
 

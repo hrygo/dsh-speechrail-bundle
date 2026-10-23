@@ -18,6 +18,7 @@ import {
   type SpeechRailFailure,
   type SpeechRailFailureCode,
 } from '../contracts.ts'
+import type { SpeechRailLimits } from '../types.ts'
 import { projectCapabilities } from './capabilities.ts'
 import { failure, failureForStatus, readErrorEnvelope, unknownFailure } from './failure.ts'
 
@@ -303,6 +304,8 @@ export interface ProbeOptions {
   readonly timeoutMs?: number | undefined
   /** Caller cancellation. */
   readonly signal?: AbortSignal | undefined
+  /** Limits in force before this probe; a limit the snapshot omits keeps its value. */
+  readonly previousLimits?: SpeechRailLimits | null | undefined
 }
 
 /** Successful probe. */
@@ -351,5 +354,5 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
       failure: failureForResponse(result.status, result.body),
     }
   }
-  return { ok: true, capabilities: projectCapabilities(parseJson(result.body)) }
+  return { ok: true, capabilities: projectCapabilities(parseJson(result.body), options.previousLimits ?? null) }
 }

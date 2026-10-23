@@ -362,6 +362,27 @@ describe('unproven outcomes', () => {
     expect((await h.core.status()).gate).toBe('unknown')
   })
 
+  it('does not erase a readable record when the earlier read failed transiently', async () => {
+    // The gate opened on a read failure, so this host holds no id. A null
+    // acknowledgement must still re-read before writing: the medium may be readable
+    // now, and reset() only writes.
+    const h = harness({ pending: { operationId: 'op_tttttttt', phase: 'pending', createdAt: '2026-10-23T12:30:00.000Z' } })
+    h.readFails = true
+    await h.core.restore()
+    expect((await h.core.status()).pendingOperationId).toBeNull()
+
+    h.readFails = false
+    const refused = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    expect(refused.ok).toBe(false)
+    expect(refused.failure?.code).toBe('conflict')
+    expect(refused.pendingOperationId).toBe('op_tttttttt')
+    expect((await h.core.status()).gate).toBe('unknown')
+
+    const cleared = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_tttttttt' }))
+    expect(cleared.ok).toBe(true)
+    expect(await h.journal.read()).toEqual({ available: true, pending: null })
+  })
+
   it('refuses a null acknowledgement while a concrete operation is held', async () => {
     // The record is readable, so only the matching id may clear it: a null would
     // erase the durable evidence that an upload's outcome is still unknown.

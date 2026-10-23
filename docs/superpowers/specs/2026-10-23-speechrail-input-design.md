@@ -271,11 +271,11 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 1. **F1（阻断级）已修复。** `.volatile()` 字段被当普通值读取：schemastery 对 volatile 字段返回 `{ get() }` 句柄，`this.config.baseUrl.trim()` 在运行时抛 `TypeError`，而 tsc 与原有 67 项测试都无法发现（没有测试实例化服务）。修复：只有 `language` 与 `requestTimeoutMs` 保持 volatile，`baseUrl`/`model`/`credentialRef` 改为静态（与注释声明的安全意图一致）；新增唯一允许的读取器 `readConfig()`，类型改为 `Volatile<T>`，直接读普通值会编译失败。新增 `tests/config.host.spec.ts`（5 项）把真实 schema 的输出喂给该读取器。
 2. **F2/F3 已修复。** 不可读 journal 会被永久卡住且两个 UI 的确认按钮静默返回。新增 `PendingJournal.reset()`：仅在门禁为 `unknown` 且无匹配 id 时，接受 `{ operationId: null }` 作为“用户确认没有未决上传”，写入仍失败则拒绝（`journal-unavailable`）。测试替身改为忠实模型（读失败必然清写失败），并补上“损坏记录可恢复”“介质不可写时拒绝重置”“写失败不留幻影记录”三项测试，替换原先断言 `gate === 'ready'` 的错误期望。
 3. **F4 已补测。** 新增 `tests/http-transport.host.spec.ts`（12 项，真实 loopback HTTP 服务）：成功往返、省略可选字段、401 且不泄漏凭据、不跟随重定向（断言目标未收到请求）、响应字节上限、非转写响应、超时后 `outcome: 'unknown'`、取消后 `outcome: 'unknown'`、不可达、能力快照投影与三种探测结果。新增 `tests/remote-entry.host.spec.ts`（7 项）走生成产物的真实 Remote 入口：断言 5 个端点、只读端点无参数、写端点单一 strict string 载体、`signal` 取消参数、结果类型取自 `./types` 子路径，并把该载体字符串喂给 Host 解析器证明未知字段被拒绝。
-4. **F6 已修复。** 探测失败不再清空能力缓存：`check()` 保留上一次快照，避免服务曾声明更小限额后一次瞬时不可达就把强制限额放宽到绝对上限。
+4. **F6 已修复（第六轮补全）。** 探测失败不再清空能力缓存：`check()` 保留上一次快照，避免服务曾声明更小限额后一次瞬时不可达就把强制限额放宽到绝对上限。第六轮进一步发现：可识别但未声明输入限额的 200 仍会按字段回落到绝对上限，故改为「快照未声明的限额继承当前生效值」（见第六轮）。
 5. **F7 已修复。** multipart 字段名与值在写入前剥离 `"`、CR、LF，注入新 part 或新 header 不再可能；新增两项注入测试（字段值、文件名）。
 6. **F9 已修复。** 跨 Remote 的 `baseUrl` 只取规范化结果，操作者键入的 userinfo 不再回显到网页。
 7. **F5/F10 部分修正。** 响应上限从 1 MiB 改回设计规定的 262144；删除无引用的 `CAPABILITY_TTL_MS` 与 `CANCEL_DRAIN_MS`；`usage.seconds` 要求非负；等价性测试的运行时断言不再自证，改为编译期单向可赋值证明（已发布 → 垫片；反向刻意不要求，因为垫片把错误侧放宽为普通接口，而本包只读 `error.message`）。
-8. **F5 剩余项按偏差记录（不改实现）。** `checkTimeoutMs` 未做成可配置，固定为 5000；状态机为三态而非设计中的判别联合（`draining` 未实现，因为上传体没有可取消的排空阶段）；能力快照按“机会式”使用而非严格校验 `schema_version`/`output.formats`/限额齐全——严格校验会在无法实测真实服务的情况下引入误拒，而限额只会收窄，故取此偏差。
+8. **F5 剩余项按偏差记录（不改实现）。** `checkTimeoutMs` 未做成可配置，固定为 5000；状态机为三态而非设计中的判别联合（`draining` 未实现，因为上传体没有可取消的排空阶段）；能力快照按“机会式”使用而非严格校验 `schema_version`/`output.formats`/限额齐全——严格校验会在无法实测真实服务的情况下引入误拒，而限额只会收窄（第六轮起严格为「未声明即继承」，见第六轮），故取此偏差。
 9. **F8 部分修正。** 代理声明降级为“宿主未以 `NODE_USE_ENV_PROXY`/`--use-env-proxy` 启动时成立”，并在 `src/host/http.ts` 顶部注明残余依赖；不新增显式 agent 选项以免影响本机常规配置。
 10. **未验证项澄清。** 客户端面只有字典测试（`locales.client.spec.ts`）为自动化覆盖；设计中原计划的 jsdom 组件测试与 mount/withdraw 测试未实现，实施计划中的“客户端已完成并验证”据此更正为“构建与类型检查通过、字典有测试、组件无自动化测试”。**（第四轮已追加 `voice-input.client.spec.tsx`；mount/withdraw 仍无自动化测试。）**
 
@@ -315,3 +315,13 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **文档准确性**：README 中「未注册任何模型工具」的过期表述已改正；「限额只收窄」改为「只在明确识别到快照时变化，不可达或不可识别时保留上次限额」；`endpoint.ts` 中「describeRefusal 从不发给客户端」的注释与实际（作为 `endpointProblem` 发送）不符，已改写。
 
 仍未解决且已记录：`remote-entry.host.spec.ts` 走的是生成产物的**元数据**与 Host 解析器，而不是真实的 Remote 派发（编解码、错误信封、`requestId` 提取、能力探测的 5xx/404 映射仍未覆盖）；客户端 mount/withdraw 仍无自动化测试。
+
+## 第六轮：对第三轮核验剩余项的处置（2026-10-24）
+
+第三轮核验确认第五轮修复有效，但指出两处仍未闭合的路径，以及若干一致性与文档问题。
+
+- **H3 残余（中，可识别快照仍会放宽限额）** 只修「不可识别 200」不够：形如 `{"operations":{"transcription":{}}}` 的响应体是**可识别**的，但按字段回落到绝对上限，于是 1 MiB/30 s 仍会变成 4 MiB/120 s。已把规则改为「快照未声明的限额继承当前生效值」：`clampLimits(advertised, previous)`，`projectCapabilities(snapshot, previous)`，探测选项新增 `previousLimits`，`check()` 传入当前缓存的限额。快照**明确声明**的限额仍然生效（并在绝对上限内截断），所以服务依旧是自身限额的权威。新增端到端测试走真实回环服务与真实 `probeCapabilities`：紧限额 → 可识别但无限额的 200 → 限额保持 → 明确声明更小限额 → 限额跟随收紧；另有 `clampLimits` 继承语义的单元断言。
+- **H2 残余（中，瞬时读失败后仍可盲清）** 若 `restore()` 时读失败，门禁为 unknown 且本机没有 id，客户端此时发送的正是 `null`；而 `reset()` 只写不读，于是「下次就能读到」的真实记录会被清除。已改为：`null` 分支在 `reset()` 之前**重新读一次**日志，若读到了记录就以 `conflict` 拒绝并采纳该 id。客户端配合修正：确认被拒后先刷新状态再提示，因此第二次点击会带上刚发现的具体 id，而不是继续发陈旧的 `null`（`VoiceInput` 与设置页都改）。新增 Host 测试（读失败 → 门禁 unknown/无 id → 读恢复 → `null` 被拒且采纳 id → 具体 id 清除成功）与客户端测试（拒绝后重新读取状态、第二次点击携带新 id）。
+- **一致性** `check()` 在端点被拒分支原先返回 `capabilities: null`，而 `status()`/`run()` 仍在用缓存，前后不一致；现改为返回缓存，与实际强制值一致。
+- **文档与注释准确性** `tools.ts` 模块头曾称「注册表在执行期校验参数与结果」——结果确实校验，参数不校验（原样注册绕过 `defineTool` 的参数校验），已改正；README 的「垃圾能力响应绝不会放宽限额」按新规则重写；`DEFAULT_LIMITS` 的注释改为「包自身上限，而非保守值」。
+- **核验脚本增强** `tools/check-tool-schema.mjs` 现在同时做两件事：把 `createStatusTool(...)` 的 `parameters` 与 `output.schema` 与 `defineTool` 用等价 spec 编译出的 JSON 做结构比较，并调用注册表真实的 `assertSupportedJsonSchema`。实测输出 `speechrail_input_status is accepted by the registry assertion (12 output fields)`，退出 0。这使 H1 的真实要求（形状必须与注册表一致）自动化可复现，而不是一次性人工核对；脚本头部的路径提示也修正为「指向包目录本身」。

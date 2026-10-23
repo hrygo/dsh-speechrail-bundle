@@ -20,8 +20,8 @@
  * When the package is not resolvable from the workspace at all, point the script at
  * any copy of it, including one still in the pnpm store:
  *
- *   node tools/check-tool-schema.mjs <path to any copy of that package>
- * (a copy usually survives under node_modules/.pnpm/@deepseek-ai+dsh-tools@<version>-<hash>/node_modules/)
+ *   node tools/check-tool-schema.mjs <path to the package directory itself>
+ * (a copy usually survives at node_modules/.pnpm/@deepseek-ai+dsh-tools@<version>-<hash>/node_modules/@deepseek-ai/dsh-tools)
  *
  * The install must not be left in place: generation fails while it is.
  */
@@ -30,6 +30,16 @@ import { pathToFileURL } from 'node:url'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+/** Structural equality with sorted keys, so key order cannot matter. */
+function same(left, right) {
+  const normalize = (value) => {
+    if (Array.isArray(value)) return value.map(normalize)
+    if (typeof value !== 'object' || value === null) return value
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalize(value[key])]))
+  }
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right))
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const built = join(root, 'packages/speechrail-input/lib/types/host/tools.js')
@@ -41,6 +51,7 @@ if (!existsSync(built)) {
 
 const override = process.argv[2]
 let assertion
+let compile
 try {
   const specifier = override === undefined ? '@deepseek-ai/dsh-tools' : pathToFileURL(join(resolve(override), 'lib/index.js')).href
   // Deliberately not the `({ name } = await import(x))` form: inside this module's
@@ -48,6 +59,7 @@ try {
   // initialization" on Node 26.
   const loaded = await import(specifier)
   assertion = loaded.assertSupportedJsonSchema
+  compile = loaded.defineTool
 } catch (error) {
   console.error(`check-tool-schema: cannot load @deepseek-ai/dsh-tools (${error.message}); see the header of this file`)
   process.exit(2)
@@ -74,10 +86,31 @@ for (const name of required) {
 }
 if (definition.parameters.type !== 'object') failures.push('parameters: root must be an object')
 
+// The hand-written shapes must equal what `defineTool` compiles to, because that is
+// what a plugin written the ordinary way would expose; the registry's assertion alone
+// would accept a shape the model-facing contract does not match.
+const spec = {
+  name: definition.name,
+  description: definition.description,
+  // `probe` is optional, so its spec entry carries no `required`: that is how the
+  // spec dialect keeps a property out of the compiled top-level `required` array.
+  parameters: Object.fromEntries(Object.entries(definition.parameters.properties).map(([name, property]) => [name, { ...property }])),
+  output: {
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: Object.fromEntries(Object.entries(properties).map(([name, property]) => [name, { ...property, required: true }])),
+    },
+  },
+}
+const compiled = compile(spec)
+if (!same(compiled.parameters, definition.parameters)) failures.push(`parameters differ from compiled output: ${JSON.stringify(compiled.parameters)}`)
+if (!same(compiled.output.schema, definition.output.schema)) failures.push(`output.schema differs from compiled output: ${JSON.stringify(compiled.output.schema)}`)
+
 if (failures.length > 0) {
   console.error(`check-tool-schema: ${definition.name} would not register:`)
   for (const failure of failures) console.error(`  - ${failure}`)
   process.exit(1)
 }
 
-console.log(`check-tool-schema: ${definition.name} is accepted by the registry assertion (${Object.keys(properties).length} output fields)`)
+console.log(`check-tool-schema: ${definition.name} matches defineTool's compiled shapes and is accepted by the registry assertion (${Object.keys(properties).length} output fields)`)
