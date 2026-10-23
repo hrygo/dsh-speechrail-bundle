@@ -108,7 +108,9 @@ flowchart LR
 
 ## 执行状态（2026-10-23）
 
-已完成并验证：Host 核心（端点规范化、WAV 校验、能力快照、失败映射、journal、HTTP 多部分上传、gate 状态机）、Remote 控制器、插件入口、客户端面（录音、波形、输入控件、设置页、i18n）、Typert 工件生成、双面类型检查、双 bundle、67 项测试、打包清单检查。
+已完成并验证：Host 核心（端点规范化、WAV 校验、能力快照、失败映射、journal、HTTP 多部分上传、gate 状态机）、Remote 控制器、插件入口、客户端面（录音、波形、输入控件、设置页、i18n）、Typert 工件生成、双面类型检查、双 bundle、打包清单检查。
+
+更正（第二轮审查后）：客户端面**没有** jsdom 组件测试与 mount/withdraw 测试，自动化覆盖只有字典测试；此前的“已完成并验证”仅指构建、类型检查与字典测试。测试总数为 98（host 93 + client 5），新增 config/http-transport/remote-entry 三组回归测试。
 
 按上文偏差 2、3 未实现：模型工具入口、麦克风设备选择器。按偏差 1 新增：`packages/typert-protocol` 垫片与等价性测试。
 

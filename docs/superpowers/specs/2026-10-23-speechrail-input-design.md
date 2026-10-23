@@ -263,3 +263,18 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 已实测：Typert 生成产出 host 与 remote-client 工件（命名空间 `speechrailInput`、5 个端点、`payload: string` 载体保留）；`tsc -b` 双面零诊断；host 50.63 kB 与 client 89.42 kB bundle 产出，client 仅 `require` `react`、`react/jsx-runtime`、`zod`（与官方客户端 bundle 同形）；67 项测试通过；`npm pack` 51 个文件、无测试、无 sourcemap、无音频或凭据。
 
 未验证：真实 SpeechRail 服务往返、真实麦克风采集、在 DSH profile 中的实际加载与渲染。以上均需另行授权，本轮以 mock 与静态证据为限。
+
+## 独立审查修正（2026-10-23 第二轮）
+
+一次独立只读审查提交了 10 项发现。逐项处置如下，均已实测（`pnpm verify` 全绿，98 项测试）。
+
+1. **F1（阻断级）已修复。** `.volatile()` 字段被当普通值读取：schemastery 对 volatile 字段返回 `{ get() }` 句柄，`this.config.baseUrl.trim()` 在运行时抛 `TypeError`，而 tsc 与原有 67 项测试都无法发现（没有测试实例化服务）。修复：只有 `language` 与 `requestTimeoutMs` 保持 volatile，`baseUrl`/`model`/`credentialRef` 改为静态（与注释声明的安全意图一致）；新增唯一允许的读取器 `readConfig()`，类型改为 `Volatile<T>`，直接读普通值会编译失败。新增 `tests/config.host.spec.ts`（5 项）把真实 schema 的输出喂给该读取器。
+2. **F2/F3 已修复。** 不可读 journal 会被永久卡住且两个 UI 的确认按钮静默返回。新增 `PendingJournal.reset()`：仅在门禁为 `unknown` 且无匹配 id 时，接受 `{ operationId: null }` 作为“用户确认没有未决上传”，写入仍失败则拒绝（`journal-unavailable`）。测试替身改为忠实模型（读失败必然清写失败），并补上“损坏记录可恢复”“介质不可写时拒绝重置”“写失败不留幻影记录”三项测试，替换原先断言 `gate === 'ready'` 的错误期望。
+3. **F4 已补测。** 新增 `tests/http-transport.host.spec.ts`（12 项，真实 loopback HTTP 服务）：成功往返、省略可选字段、401 且不泄漏凭据、不跟随重定向（断言目标未收到请求）、响应字节上限、非转写响应、超时后 `outcome: 'unknown'`、取消后 `outcome: 'unknown'`、不可达、能力快照投影与三种探测结果。新增 `tests/remote-entry.host.spec.ts`（7 项）走生成产物的真实 Remote 入口：断言 5 个端点、只读端点无参数、写端点单一 strict string 载体、`signal` 取消参数、结果类型取自 `./types` 子路径，并把该载体字符串喂给 Host 解析器证明未知字段被拒绝。
+4. **F6 已修复。** 探测失败不再清空能力缓存：`check()` 保留上一次快照，避免服务曾声明更小限额后一次瞬时不可达就把强制限额放宽到绝对上限。
+5. **F7 已修复。** multipart 字段名与值在写入前剥离 `"`、CR、LF，注入新 part 或新 header 不再可能；新增两项注入测试（字段值、文件名）。
+6. **F9 已修复。** 跨 Remote 的 `baseUrl` 只取规范化结果，操作者键入的 userinfo 不再回显到网页。
+7. **F5/F10 部分修正。** 响应上限从 1 MiB 改回设计规定的 262144；删除无引用的 `CAPABILITY_TTL_MS` 与 `CANCEL_DRAIN_MS`；`usage.seconds` 要求非负；等价性测试的运行时断言不再自证，改为编译期单向可赋值证明（已发布 → 垫片；反向刻意不要求，因为垫片把错误侧放宽为普通接口，而本包只读 `error.message`）。
+8. **F5 剩余项按偏差记录（不改实现）。** `checkTimeoutMs` 未做成可配置，固定为 5000；状态机为三态而非设计中的判别联合（`draining` 未实现，因为上传体没有可取消的排空阶段）；能力快照按“机会式”使用而非严格校验 `schema_version`/`output.formats`/限额齐全——严格校验会在无法实测真实服务的情况下引入误拒，而限额只会收窄，故取此偏差。
+9. **F8 部分修正。** 代理声明降级为“宿主未以 `NODE_USE_ENV_PROXY`/`--use-env-proxy` 启动时成立”，并在 `src/host/http.ts` 顶部注明残余依赖；不新增显式 agent 选项以免影响本机常规配置。
+10. **未验证项澄清。** 客户端面只有字典测试（`locales.client.spec.ts`）为自动化覆盖；设计中原计划的 jsdom 组件测试与 mount/withdraw 测试未实现，实施计划中的“客户端已完成并验证”据此更正为“构建与类型检查通过、字典有测试、组件无自动化测试”。
