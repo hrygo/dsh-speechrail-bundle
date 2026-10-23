@@ -30,7 +30,8 @@
     "./remote": {
       "types": "./lib/typert.remote-client.d.ts",
       "default": "./lib/typert.remote-client.js"
-    }
+    },
+    "./icon": "./icon.svg"
   },
   "files": [
     "icon.svg",
@@ -49,6 +50,36 @@
     "lib/client.js"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrygo/dsh-speechrail-bundle.git"
+  },
+  "homepage": "https://github.com/hrygo/dsh-speechrail-bundle#readme",
+  "bugs": {
+    "url": "https://github.com/hrygo/dsh-speechrail-bundle/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "speech-to-text",
+    "transcription",
+    "voice-input",
+    "dictation",
+    "openai-compatible",
+    "speechrail",
+    "local-first",
+    "whisper"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.18.5",
     "zod": "^4.4.3"

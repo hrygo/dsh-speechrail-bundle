@@ -1,16 +1,19 @@
 import { defineConfig } from 'tsdown'
 
 /**
- * Module-table rows resolved through the injected require, never inlined. The
- * official client bundles require the same set (react, cordis, zod and the
- * injected UI packages), so these rows exist in the shell's module table.
+ * Module-table rows resolved through the injected require, never inlined.
+ *
+ * React (and the shell's own cordis runtime) are the baseline a third-party client
+ * artifact may rely on. Everything else is inlined, including the zod runtime the
+ * generated Typert remote client uses: real third-party bundles carry their own
+ * dependencies rather than assuming the module table exposes them, and no installed
+ * plugin declares `dsh.client.external`.
  */
 const CLIENT_EXTERNALS = [
   'react',
   'react-dom',
   'react-dom/client',
   'react/jsx-runtime',
-  'zod',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-api-remotes/client',
   '@deepseek-ai/dsh-client-locale/client',
@@ -19,10 +22,11 @@ const CLIENT_EXTERNALS = [
 ]
 
 /**
- * The published protocol helpers are a pure wire layer with no shared runtime
- * identity, so they are inlined (subpaths included) rather than required.
+ * Inlined instead of required: the published protocol helpers are a pure wire layer
+ * with no shared runtime identity, and zod is listed as a dependency of this package
+ * (tsdown externalizes dependencies by default), yet the browser face must carry it.
  */
-const CLIENT_INLINED = [/^@deepseek-ai\/dsh-typert-protocol(\/|$)/]
+const CLIENT_INLINED = [/^@deepseek-ai\/dsh-typert-protocol(\/|$)/, /^zod(\/|$)/]
 
 /** Browser face: one module-loader registration served as /plugins/<package>/client.js. */
 export default defineConfig({
