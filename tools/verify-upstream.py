@@ -22,6 +22,22 @@ def main() -> int:
     observed = {path.relative_to(archive).as_posix() for path in archive.rglob("*") if path.is_file()}
     problems = [f"missing: {path}" for path in sorted(expected - observed)]
     problems += [f"unexpected: {path}" for path in sorted(observed - expected)]
+    if len(expected) != len(entries) or manifest["file_count"] != len(entries):
+        problems.append("manifest file count or duplicate paths are invalid")
+    pinned: dict[str, str] = {}
+    if args.git:
+        tree = subprocess.check_output([
+            "git", "ls-tree", "-r", "-z", manifest["commit"], "--", *manifest["selected_paths"],
+        ], cwd=root)
+        for row in tree.split(b"\0"):
+            if row:
+                metadata, path = row.split(b"\t", 1)
+                mode, kind, blob = metadata.decode().split()
+                if mode != "100644" or kind != "blob":
+                    problems.append(f"unsupported pinned entry: {path.decode()}")
+                pinned[path.decode()] = blob
+        if set(pinned) != expected:
+            problems.append("pinned commit path inventory differs from manifest")
     for entry in entries:
         path = archive / entry["path"]
         if entry["path"] not in observed:
@@ -35,10 +51,8 @@ def main() -> int:
         git_blob = hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest()
         if git_blob != entry["git_blob"]:
             problems.append(f"git blob mismatch: {entry['path']}")
-        if args.git:
-            git_content = subprocess.check_output(["git", "cat-file", "blob", entry["git_blob"]], cwd=root)
-            if content != git_content:
-                problems.append(f"upstream object mismatch: {entry['path']}")
+        if args.git and (pinned.get(entry["path"]) != entry["git_blob"] or pinned.get(entry["path"]) != git_blob):
+            problems.append(f"pinned commit mismatch: {entry['path']}")
     if problems:
         print("\n".join(problems), file=sys.stderr)
         return 1
