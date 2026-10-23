@@ -115,3 +115,9 @@ flowchart LR
 按上文偏差 2、3 未实现：模型工具入口、麦克风设备选择器。按偏差 1 新增：`packages/typert-protocol` 垫片与等价性测试。
 
 验证命令：`pnpm verify`（基线校验 → 生成 → 类型检查 → 双 bundle → 测试）、`pnpm --filter @hrygo/dsh-speechrail-bundle exec npm pack --dry-run`。
+
+### 第三轮追加（2026-10-24）
+
+已完成：薄 agent 工具 `speechrail_input_status`（只读、可选基础设施、结构化定义，避免 `dsh-tools` 声明牵入 `dsh-llm` 使 Typert 生成失败），`tests/tools.host.spec.ts` 6 项，测试总数 104（host 99 + client 5）。
+
+仍未完成：客户端组件的 jsdom 测试、麦克风设备选择器、真实服务/真实麦克风验证、profile 激活。

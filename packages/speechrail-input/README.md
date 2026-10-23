@@ -17,6 +17,10 @@ authenticated Remote surface and the browser face.
 - Probes connectivity and the advertised capability snapshot (`/v1/speechrail/capabilities`)
   to bound upload size and duration, and to offer only the languages the service enumerates.
 - Persists language and request budget through the Harness settings page.
+- Registers one read-only agent tool, `speechrail_input_status`, that reports the effective
+  endpoint, credential and service state, the limits in force, and whether an earlier recording
+  still needs acknowledgement. It never uploads audio, never changes the gate, and never carries
+  a credential or a transcript.
 
 ## Security boundaries
 
@@ -29,6 +33,7 @@ authenticated Remote surface and the browser face.
 | Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. If the stored record cannot be read at all, acknowledging asserts that nothing is outstanding and clears the slot; a medium that cannot be written refuses instead. |
 | Journal | A durable pending record is written before the upload; if local storage is unavailable the feature refuses to upload at all. |
 | Failures | Clients receive a closed code, HTTP status, retryable flag, request id and outcome. No body, message, path, credential or transcript text crosses the boundary. |
+| Agent tool | `speechrail_input_status` reads the same status projection as the settings page: booleans and short strings only, no audio and no upload. It contacts the service only when the caller asks for a probe. |
 
 ## Configuration
 
@@ -53,6 +58,11 @@ pnpm test              # host and client unit tests
 
 `pnpm verify` runs, in order: the frozen upstream baseline check, Typert generation,
 `tsc -b` over both faces, the host and client bundles, and the unit tests.
+
+The agent tool registers only where the Harness offers its tools service; the definition is
+declared structurally rather than through `@deepseek-ai/dsh-tools`, because importing that
+package's declarations pulls an unrelated Typert lookup into the analyzed program and fails
+generation. See the design appendix for the exact shapes and the verification behind them.
 
 ### Why `packages/typert-protocol` exists
 

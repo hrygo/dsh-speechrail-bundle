@@ -82,7 +82,11 @@ export interface SpeechRailCapabilitiesView {
 
 /** Everything the settings page and the composer control need to render. */
 export interface SpeechRailInputStatus {
-  /** Configured endpoint exactly as written, so the settings page can show and fix it. */
+  /**
+   * Effective endpoint: the normalized loopback URL, or an empty string when the
+   * configured value was refused. Never the raw value, so operator userinfo cannot
+   * reach the page.
+   */
   readonly baseUrl: string
   /** Why the configured endpoint was refused, or null when it is usable. */
   readonly endpointProblem: string | null

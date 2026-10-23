@@ -11,6 +11,7 @@ import { BUNDLE_ENTRY_ID } from './contracts.ts'
 import type { SpeechRailInputConfig } from './host/config.ts'
 import SpeechRailInputController from './host/controller.ts'
 import SpeechRailInput from './host/service.ts'
+import { createStatusTool, type ToolRegistry } from './host/tools.ts'
 
 export { Config } from './host/config.ts'
 // The service class is part of the public surface: the Typert analyzer attributes a
@@ -44,4 +45,10 @@ export async function apply(ctx: Context, config: SpeechRailInputConfig): Promis
   const service = new SpeechRailInput(ctx, config)
   await service.restore()
   new SpeechRailInputController(ctx)
+  // Optional infrastructure: the tool is registered wherever the tools service
+  // exists, and the rest of the bundle keeps working where it does not.
+  ctx.inject(['tools'], (toolCtx) => {
+    const registry = (toolCtx as unknown as { readonly tools: ToolRegistry }).tools
+    toolCtx.effect(() => registry.register(createStatusTool(service)))
+  })
 }
