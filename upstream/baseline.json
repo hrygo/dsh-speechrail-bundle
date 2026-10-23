@@ -1,0 +1,674 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "tag": "dsh-v0.2.1-rc.2",
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "captured_on": "2026-10-23",
+  "extraction": "git archive of exact selected paths; no file modifications",
+  "purpose": "read-only upstream source baseline, not a standalone runnable application",
+  "license": "MIT",
+  "selected_paths": [
+    "LICENSE",
+    "docs/subsystems/voice-input.md",
+    "packages/client/tsdown.client.ts",
+    "packages/experimental/voice-input-bundle",
+    "packages/experimental/speech-to-text",
+    "packages/experimental/speech-to-text-sensevoice",
+    "packages/experimental/api-speech-to-text",
+    "packages/experimental/client-ui-voice-input",
+    "packages/typert/generator/README.md",
+    "packages/typert/generator/package.json"
+  ],
+  "file_count": 108,
+  "total_bytes": 458516,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1065,
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "git_blob": "c1f7a78e89e4e4dc7b86664c3b3c76eb5eee1785"
+    },
+    {
+      "path": "docs/subsystems/voice-input.md",
+      "bytes": 9729,
+      "sha256": "1f8f38af0b83b7d90db2e2ef6c57533e11377017448a560c7d77bfd7c8c11989",
+      "git_blob": "1d85e8226afddad187533cfe5b14b6750d46c158"
+    },
+    {
+      "path": "packages/client/tsdown.client.ts",
+      "bytes": 37893,
+      "sha256": "97e5a2e3097b7a13bd1335c52a94f0f7269f5361a6120da709ec815c243e621e",
+      "git_blob": "90b26c196e6fc69acef39ccc4fad16fcaf1a0b5f"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/README.i18n.yaml",
+      "bytes": 1583,
+      "sha256": "5ad9514e9ea0df9599bc6860b12595a0d7ddcbfa46cc14912b08b02770cce174",
+      "git_blob": "1db635bcd97f50dc8ba8c16199475a729a099677"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/README.md",
+      "bytes": 2842,
+      "sha256": "a95bf33c200820158a900b52205e4c88e4046a7559efa5c5721abba3a61888b9",
+      "git_blob": "226df827adfbd1e8b9b36bd6247b65e4968c5052"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/README.zh.md",
+      "bytes": 2479,
+      "sha256": "ede274731ba690782240178c4f4d2659f7368060dae3af1ce3429c085d740ffc",
+      "git_blob": "27927b922f9b7688cf98b489391fd39b1e2bc64b"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/locale/en.json",
+      "bytes": 132,
+      "sha256": "da9cb80074d8fb9f0744b351cf7feb391fc084242e55367d3766ca74717fe6c1",
+      "git_blob": "13dc1e6fad3ff27c20d7d8fc8b9460b9e150c083"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/locale/zh.json",
+      "bytes": 116,
+      "sha256": "74d423cd9d9bb7ce98e0ffdc776670f5d6c93addf4a69b3cb497c208d4f45a80",
+      "git_blob": "ffcca2e772940145b95ddb8bd778e777a8488cc1"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/package.json",
+      "bytes": 1767,
+      "sha256": "be93bd5d9d92c0b276f4e90c49286565c310cb57bf54001fcc84bb0281460548",
+      "git_blob": "5b3428293386b0936a3268352cec0c2712ba217b"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/src/index.ts",
+      "bytes": 4673,
+      "sha256": "714b9bb48ba4340f216960b0f811d76fff0642f895b2e3ac097cc0ceecc65f1e",
+      "git_blob": "4d19d7c5afc90cd892e61888ab51ac4097c6776e"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/src/types.ts",
+      "bytes": 1001,
+      "sha256": "3af4a96b3d30d37be468d6cb53bef570625f6bea305b3df4cfbbca301768c6f4",
+      "git_blob": "d7436e7a62362f32944a4097c33d3cfd0e3d7fa3"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/tests/controller.spec.ts",
+      "bytes": 5152,
+      "sha256": "54d9eef3a1731ee7d53f8bbd785d70d25242847945267cdb89c573b4f6ad86e6",
+      "git_blob": "caa2145ea2c930215e3dfe447a7faa92e6625b75"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/tests/wave.spec.ts",
+      "bytes": 1381,
+      "sha256": "5d559f01400e26aab7c3d338f01de80438930f8bb02a2dfe7411f2e68acc911a",
+      "git_blob": "925953eccbbb7782b8c26b2b6c71088729586d3f"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/tsconfig.json",
+      "bytes": 382,
+      "sha256": "f1ebac4f78ede7f7a658f562a3a9f20970ca57bbfb974a1a2b58fdfadcf11aa9",
+      "git_blob": "6d8baae1149fe4d9340f0dc488f9d99df570c5c7"
+    },
+    {
+      "path": "packages/experimental/api-speech-to-text/tsdown.config.ts",
+      "bytes": 219,
+      "sha256": "7d8027472e763bad3b9a5885214f5687a4d89dde847ea274d48ffcc70a7555fd",
+      "git_blob": "be29690579e2a6b392eabb52cc171827dda2d6f4"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/README.i18n.yaml",
+      "bytes": 1616,
+      "sha256": "bca4337ac80b16ca6206824088dde850eaf0bc8064e515fd6ee7eb1d08e2d5cb",
+      "git_blob": "c906ffc9c717405d49bd69650616b732e690557e"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/README.md",
+      "bytes": 5955,
+      "sha256": "230fcba4b2eb2d3f1a967ae270ec903c5efa2949c673f85fb1ec9f3a87422f97",
+      "git_blob": "3eba1c3825992fe0ec05f2cae95303338aeeec0a"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/README.zh.md",
+      "bytes": 5166,
+      "sha256": "aa211cd9cbcb29df90a81241d32a94805f23cb09addff2c415fa0adbc0e49c45",
+      "git_blob": "b7e9164a0270a0f811153d1be8a578baf75619cc"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/locale/en.json",
+      "bytes": 141,
+      "sha256": "cda757109c5e2687819a307c0326c8e0a48488d665a6668b3581d3e5c1c48f4f",
+      "git_blob": "4f4aa36248cc841d2717e46f3ef999228b9d83e1"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/locale/zh.json",
+      "bytes": 146,
+      "sha256": "0cb96756eb42591583162e9271fd64bd70fe3cff5477d702e9cfac116546b881",
+      "git_blob": "8f714c3f5a36433f0eef9200740752410673d5f4"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/package.json",
+      "bytes": 2682,
+      "sha256": "97b908a7372be4962aa8d7709fbad0353f7c3d3bde16e87d94e68a7fe1d541de",
+      "git_blob": "d9c5790f8954405aac870fcc1e5b65438cd28fb3"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/MicrophonePicker.tsx",
+      "bytes": 7566,
+      "sha256": "0ebc6f1253c45fda7bbbd0a605e68c00b63d6b221442e224a01048c65eae568b",
+      "git_blob": "b73f23711376c89e81631ef2bd192c1ecdec6037"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/PreparationCard.tsx",
+      "bytes": 11285,
+      "sha256": "3f41bbe550ee1edd0ad58a32958c13d0ecc54f7692b5510a4911f27cd4fa2bc5",
+      "git_blob": "bdff8e4b850589c73b9566c5b81043129c2461dd"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/VoiceInput.module.css",
+      "bytes": 4262,
+      "sha256": "f881e77b0550417b02817385a78f70b194cbbc5aed881a61cf43fd3b8ed838ba",
+      "git_blob": "715007b36ad587093f6d427d9811e32e31b94553"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/VoiceInput.tsx",
+      "bytes": 10394,
+      "sha256": "07f865d164279a36fe53587c7dcd59afc36a16fd34bd981885222557b41d90c6",
+      "git_blob": "7b60ca9b7e2eaaf147bf38e5e267e768f169037d"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/VoiceSetupDialog.tsx",
+      "bytes": 1391,
+      "sha256": "c08555d7d2f210f31b81c229e906c0752c85e803d89624010f3346918c54a828",
+      "git_blob": "9456bc6b2dcc75245e6e819be7c9e07bbe2de913"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/VoiceSetupPrompt.tsx",
+      "bytes": 1611,
+      "sha256": "be7f396afe52fa8271520d81e96986f1077423ed66b0e6d27ef68f485123b19e",
+      "git_blob": "afce24f6ce6cb48260f3d6621478905b0a2b96df"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/Waveform.tsx",
+      "bytes": 1663,
+      "sha256": "c4c6adfa8b60dd5193de92a325d2ba07d670e5021cd7607e3501f843e3b767d3",
+      "git_blob": "a24227793278e48115f4186adb16d582c068ae82"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/audio.ts",
+      "bytes": 8434,
+      "sha256": "890d7cf703ad664fc9aeb763ff6cd8d9baafc90e9ebae08d354c3f9458bf1b27",
+      "git_blob": "0079cdb2431830e3ff8237b1a0742a56a6407eab"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/failure-text.ts",
+      "bytes": 651,
+      "sha256": "671eb2cd4cd3a09690283157042923f2637a38cacf47c8e24271daff872a2809",
+      "git_blob": "4bd7ded8082c4881fb197e1cf6ef5e0da3d7f96b"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/index.ts",
+      "bytes": 569,
+      "sha256": "f8a58f7750e89b8c0164d635d49af1113d628455aef855c551f10fb13e0558ab",
+      "git_blob": "f9c38385075a67b7cc0e54d5ad4b22177358028a"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/locales.ts",
+      "bytes": 13774,
+      "sha256": "e559a939659e677d61029502ed8f70f4a7edaf203094009002ece519720256c7",
+      "git_blob": "19e3a9513de215d5b0368b5c4bcbac3a6e0076b7"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/microphone-device.ts",
+      "bytes": 997,
+      "sha256": "a8c9db72f4e259e00da74eed152c5a25f2701d9e65a38845e15906e94ca5e935",
+      "git_blob": "47c3159fad231a63469ed88feeb4be39daf72627"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/mount.ts",
+      "bytes": 3843,
+      "sha256": "f8f132071a0727219ed0e3e25bf2fb2289838fdb0769651d968786d4e0b5d94b",
+      "git_blob": "7d7c1311fd325361405786ab75c9dbd1252cd54e"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/client/readiness.ts",
+      "bytes": 1976,
+      "sha256": "d48196cd76e59e5e739aaa839458ec6a697c2b8499cb5d87a855571d3f9450ac",
+      "git_blob": "55245b5a7acdedf6af56c0e54299e6bc8b197e4b"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/css-modules.d.ts",
+      "bytes": 154,
+      "sha256": "b3ba729f7ecdbc88adf00e2de5f217696505a6a4449639f0ac1b6aa3fe87a5b6",
+      "git_blob": "b63bfbe015c01061680ad71495e7cc549a19f1c0"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/src/index.ts",
+      "bytes": 161,
+      "sha256": "64b3fedbf40bf8c58da7017cd92e5e6a5bcb9acf0f91ea351a7085423a1e79a1",
+      "git_blob": "4912e3f2a4b5833fa6a9612e24646bcbe18012f9"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/audio-fixture.client.ts",
+      "bytes": 2712,
+      "sha256": "7ce601123de58c2a13e2ec3e88bc27d0e793cd19cf0489e0807367ebb148c920",
+      "git_blob": "bdef07b12d90d5ff42ab2543a006401c6e466843"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/audio.client.spec.ts",
+      "bytes": 9812,
+      "sha256": "fe3c2b4e13c3a13dff14e3af049e075f72b8132fab589efc9419d13bc3a9e587",
+      "git_blob": "4179705483ab56da3f2f13600125460433bd197b"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/microphone-picker.client.spec.tsx",
+      "bytes": 26277,
+      "sha256": "1a9a449c0823bc065deb63258f2732851ac7c2e1c712841bc915bc592a22893f",
+      "git_blob": "20560642a5856c3e7eb7cd17d78f65334b9903c5"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/mount.client.spec.ts",
+      "bytes": 8024,
+      "sha256": "424b41429b5a27475ebe6c5ea9808011a587d1c33d2faa9ac7a1a3abe78d8b86",
+      "git_blob": "3287f92a1f5b2b09689c88eb85b19529edb0b3b2"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/preparation.client.spec.tsx",
+      "bytes": 15005,
+      "sha256": "fd5448ed480aca2870d77df5b6e76bf11ceca6ed932171ca5b56b63181d2112f",
+      "git_blob": "94fc23af4c69ee6abaf79bbb5594a52b9a93a689"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/readiness.client.spec.ts",
+      "bytes": 3041,
+      "sha256": "57a61225b66fd9b6908d682b7ee200aea1a500a2bc624886b55163211fddf229",
+      "git_blob": "8e7787bcc4c4c574a20f96543ffef2d7d1af978c"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/setup-prompt.client.spec.tsx",
+      "bytes": 3172,
+      "sha256": "0f41119ce7477a89dbc311807109bf773e1f58f850b537a8fd47cda739950b2f",
+      "git_blob": "16fe9f538a5cbded1a196504062f9ba6d97eae27"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/voice-input.client.spec.tsx",
+      "bytes": 21882,
+      "sha256": "1a5bff71b5af5e1f428b6500edf666fe0f1fe8900b32cf02d6135b22d3e4e179",
+      "git_blob": "e376ac2578d5ad16484e1d69a7730285765c3053"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tests/waveform.client.spec.tsx",
+      "bytes": 1412,
+      "sha256": "102c8678c6d2b167bd283a88a8bb73101208b72c65aa023ecc2c06fc848f3d39",
+      "git_blob": "2f305992cec80e5ed57303ade7aa2b5748e1a02d"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tsconfig.json",
+      "bytes": 1138,
+      "sha256": "c9d3d82a1e2fb69ea06b0cfda7d8b834c4824aeee9760e82f9367ee4aee96527",
+      "git_blob": "eab610db2d6e86fd4c63b50df3a53bfc00e77bff"
+    },
+    {
+      "path": "packages/experimental/client-ui-voice-input/tsdown.config.ts",
+      "bytes": 135,
+      "sha256": "eecc62a29cb44e5a66839a9a6a6e0461e4ebd5dc673398bd67dcb3313a516a47",
+      "git_blob": "71d5bd77f85a1bc0378ea441b06e7581618ee777"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/README.i18n.yaml",
+      "bytes": 1660,
+      "sha256": "68fc22bd711a2b8c426f42e50e66f6e3def792c6acd5921ddbb56436f8820e8b",
+      "git_blob": "03ca17a5ebb485bbc082ccaa118767f2e84e7105"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/README.md",
+      "bytes": 6343,
+      "sha256": "1e48890f9d7711930032bc0ab5885b5a3dc91c570ed88aec6186282c3caed462",
+      "git_blob": "d05c655eccf2036e37be1da8b3a45c25e5da93d5"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/README.zh.md",
+      "bytes": 5631,
+      "sha256": "e776f9de6fdb7e590500aa005cf01fe7b97d06ebac27eb2e325ea77e65f3bcc7",
+      "git_blob": "ba3fc207f06f607a46855de85962853e062656fe"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/locale/en.json",
+      "bytes": 143,
+      "sha256": "515415040abd38d44f8d719c35f0a952f2403b9c94ae59cf10df253cf19efade",
+      "git_blob": "7e216a5a621d950d6544595133610181f074299f"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/locale/zh.json",
+      "bytes": 133,
+      "sha256": "9991b8f16929a85c0a74847e9ea0d590be4c30872d56db31a4129dc8f4403cb8",
+      "git_blob": "e650c4410c96c2a0f2be2fbb490f88c06eca6e8a"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/package.json",
+      "bytes": 1598,
+      "sha256": "0cd5e954dcfacc3c193bd6ac694dfec880a076d8923bf89e37a265b44fccd3a7",
+      "git_blob": "ecb2e257a73ab14a2a3ee0e27a2f0456825a1868"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/runtime/assets.json",
+      "bytes": 1242,
+      "sha256": "d46d8e9dd0493725535997100bd2c1389fd3d0ddc5d2e2aefa5495a996d3f5d5",
+      "git_blob": "1ea7876a2d32c642517f788e5edba168df5d175f"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/config.ts",
+      "bytes": 4155,
+      "sha256": "9fb6ae8c84acd5e7c6b9b34f45415e7a7cf1b597d72f354e73a3a3d1cd15dd53",
+      "git_blob": "938d557310b7f36a27bd3e02957a5d75a1ff7d4d"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/download-error.ts",
+      "bytes": 2531,
+      "sha256": "437140f08dd8769e0b39f7fb772b883cd7b3069423196001e800296439232a17",
+      "git_blob": "358f267a1a32b31cd63544b2e515260cb7317250"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/index.ts",
+      "bytes": 2076,
+      "sha256": "fa3b8f6f0eb6738b1c2639d53ddb6bd1fc005608a0b112104350aec3156baf1b",
+      "git_blob": "f714a022c741bce147f985f0b7d8660cb3e3b779"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/inference.ts",
+      "bytes": 4403,
+      "sha256": "6cc857b7c3f11c46659d37940a0d5be4627321d836970235377d2589aedd36d1",
+      "git_blob": "facbb0ddf9d56bff82a28118a63a4254d8b179c0"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/input.ts",
+      "bytes": 1254,
+      "sha256": "46d087f67b9aa7044b619bd70b4f53196c965702d6d9f8fac5517a24db7d6c9b",
+      "git_blob": "613c19e9410cf6b6bd5d81f129cffe581ce539c7"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/model-sources.ts",
+      "bytes": 2137,
+      "sha256": "64fabddae1efdecd84e7a5393eb56f440a2af0bc50c3a1dacdc88ce770e8afd1",
+      "git_blob": "e321dedbfa8531568c51e28a751a4ceb7d0105ac"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/process-server.ts",
+      "bytes": 2688,
+      "sha256": "f15f8c1936d2acfa97ac8a0b4d1ddabe1fc77e9808d10cc12c3d3702e78e6164",
+      "git_blob": "fe24cd8a5e4f4027a5ee7ad6d524913e6c5000d2"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/recognizer.ts",
+      "bytes": 15562,
+      "sha256": "1a0ad0955901d092d0d3a01b08bbff7f2b24ea5cb6ae10a65fe9f8321bc14bb0",
+      "git_blob": "a74e204b6d9f9b2a4c90a6b4337a31e9a338de74"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/runtime.ts",
+      "bytes": 8884,
+      "sha256": "55d1cb9769eb7d7535ab02b00d806024043d51e8b7216a9a6d06da0711116079",
+      "git_blob": "67da743073915394cc5b88d0b55b2ed6dd32acc1"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/src/worker.ts",
+      "bytes": 1596,
+      "sha256": "fef62a1b9324b38882f7aab48ea141272bc883a9c0a266b1d96d69fc524a46a7",
+      "git_blob": "e205e847af5bd242519b1ecdf4d9c19c2ee016b7"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/download-error.spec.ts",
+      "bytes": 1633,
+      "sha256": "823e4c9f3f06399812aff1ba0dd2a8e7cb60471d9893ce82180091d91cee37f5",
+      "git_blob": "71a24b08cbbde8978fa0369b84159a19e9122c49"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/inference.spec.ts",
+      "bytes": 4695,
+      "sha256": "a416b4461524f9642952d6e68a001be111b3c787a977f9b62e4d36a1c8db5ba8",
+      "git_blob": "f6f0bf58ea51c5133fab78e0970bfe7eff65ba11"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/installer.spec.ts",
+      "bytes": 12314,
+      "sha256": "090542a5c0508ddf2715fbc7f25e3f33a5d54904fe2fc02d283af3ada63569aa",
+      "git_blob": "c6059e06a5f7994df647cc001568124ed4be2006"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/local.e2e.ts",
+      "bytes": 1973,
+      "sha256": "063b711187ff275a92f9625ca880a7a25641e2638f40cb32c617c055b8147647",
+      "git_blob": "e6e16e22b354c7f4129a38cf1270e34fadd011c0"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/model-sources.spec.ts",
+      "bytes": 4562,
+      "sha256": "86717248310f7aeba52615e2a3b173eeec92c76b8fedaf5fea4bd1765ba90031",
+      "git_blob": "43cc295d8c8328af0e45f5c5a588852b7ce0c74f"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/process-server.spec.ts",
+      "bytes": 2483,
+      "sha256": "9eac2731606e82d4021fbbe4261aeddc1676304e144d3d821c9334f50c36329c",
+      "git_blob": "23d78df2a06e2e217e10ae8a88ce40f18498d65c"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/protocol.spec.ts",
+      "bytes": 4574,
+      "sha256": "b81adea472c60b1e2f9361dfffee3787d5899c69a8a748c757efd5046abc9e45",
+      "git_blob": "17363d29155cd0dacc68f92f2757664ba2734c84"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/provider-queue.spec.ts",
+      "bytes": 4244,
+      "sha256": "fee720bf4b7f2cae107b37c5fbc35b07e74f01cf493191ab19360307a8e187cc",
+      "git_blob": "47f77250fc775a6b3a4c8d844342e0a88bd8c765"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/provider.spec.ts",
+      "bytes": 2753,
+      "sha256": "2b8ac0fa327c915af806b330a2a58064b147afe3cd9bead5bc10a7b95ad5fe32",
+      "git_blob": "ed05490aa22497038d373f45d931626e82162d23"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/runtime.spec.ts",
+      "bytes": 6543,
+      "sha256": "32bac678c79233e399165fc587a8263d2777d7c8f66ea1d79df6cb744487f610",
+      "git_blob": "1cbb5f355c41c6cfb41df949be7a8c8e8ac65874"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/worker-entry.spec.ts",
+      "bytes": 2757,
+      "sha256": "cebfdde73bc5505248c97545db4fbbcb4ab4962cbb0c1606c224922123281154",
+      "git_blob": "6e1312a3a42c20a3e984878de5d786b2a95b71c6"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/worker-source.fixture.ts",
+      "bytes": 112,
+      "sha256": "ae14796e49e8ab7b83f89c7c4f85d091bb845b9ba7948a5faf0083af4ddef284",
+      "git_blob": "291f44516cd41640efe59aec1ed86c6f9ee53f0b"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/worker.fixture.mjs",
+      "bytes": 1268,
+      "sha256": "ac1e7ff5f495155d258a9812cabd38e4d81b07f525a9b682887d8d6d315a0b03",
+      "git_blob": "e461185866cca0f1a3390c6fc08a07541f4166ee"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tests/worker.spec.ts",
+      "bytes": 25509,
+      "sha256": "3500d864a10119c8c44de2daefd045752d410ecc0c16fc01be3786b93aac034f",
+      "git_blob": "5ee007e489fe112527b216f9b212407848420677"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tsconfig.json",
+      "bytes": 436,
+      "sha256": "12c4abd59aa4dff9a584c171093e8c7d4bdeed0dc489ffb2160268cbbc2b9da7",
+      "git_blob": "e427956ec17c504704f38cd7e87ae89daf2bacc7"
+    },
+    {
+      "path": "packages/experimental/speech-to-text-sensevoice/tsdown.config.ts",
+      "bytes": 256,
+      "sha256": "ef5441318e3a6f32c609f3c509aee8f9c901fa2f434286791fe85206c9f37da7",
+      "git_blob": "fc88ec7099c3b10c0d2ec7698ce8db2468fc74fe"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/README.i18n.yaml",
+      "bytes": 1539,
+      "sha256": "ec12a0546f3fee74c6320b1537d09a998f6feb8a24c336ead58f411c660a06c0",
+      "git_blob": "5149d7e2ea946edc911bfe74c281fc40a58d35b2"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/README.md",
+      "bytes": 3615,
+      "sha256": "98ff7730154dbef9c526c477dedd4db799011313def1be854e53b13ee9c07ba4",
+      "git_blob": "afaa0089dc83b168bfdfe20fb095238f987a6708"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/README.zh.md",
+      "bytes": 3217,
+      "sha256": "8b07879780f5f10eb79cffe733c5aa283dea188438a0375dd30a524628bd915f",
+      "git_blob": "a613480e0df19e181fde56e6bcac69a5d01b1d52"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/locale/en.json",
+      "bytes": 138,
+      "sha256": "fd84d56ce5ece16d19c3a951c9bfad184ccad178c24bf836656ed682940823f5",
+      "git_blob": "7615fe7abc2530f06373979ad0384570ed90b04b"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/locale/zh.json",
+      "bytes": 122,
+      "sha256": "33c00c5cab036e97ddac0f8511ea4538a4e6c397dd3a8fe50745212e11e6e9b2",
+      "git_blob": "a383d395ba454f7d854e54eff093da83df0ee31f"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/package.json",
+      "bytes": 1704,
+      "sha256": "b0415455afcda9462a33c898fde171e621650104111a8dca5005ea680646045b",
+      "git_blob": "f214e58ef257d2f9ca05e079c725d4c5ce78af03"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/src/index.ts",
+      "bytes": 9291,
+      "sha256": "f1b22112a39101d5b44778233bb893309a78ba8b5f994f7efca0c0c3f669f0a8",
+      "git_blob": "d88bf7aa398032b9455d51a07048d28a0dafb594"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/src/types.ts",
+      "bytes": 5696,
+      "sha256": "95df3b4c761f7f9131aef2fc72aff456ff99a3d51c53597d0e54b5beb4818f59",
+      "git_blob": "1500aabe3e598fd35f6ebeaebc7cb1c71121652d"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/src/wave.ts",
+      "bytes": 1317,
+      "sha256": "327ccada351389c7f56cc2c868cfec12bd7a065bc24b559bbe8f1ee99ab386a4",
+      "git_blob": "6ed5f514fa5ad6f35e5250b725eefe266fd18c92"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/tests/configuration.spec.ts",
+      "bytes": 3506,
+      "sha256": "119b1ddc89c83656cef632aba6b22f591031df4d25590fe406414a301b3d7559",
+      "git_blob": "05a2b97f3536f82eca4e41698f2753e71e493c43"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/tests/fixtures/selection.patch.yml",
+      "bytes": 214,
+      "sha256": "53d5ef3bac3939720388f90927e82c8f488a911b33d8c33a1c07ec5e9215a7d0",
+      "git_blob": "693db5923706557dbb9718c464d6590d65a4d3fa"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/tests/service.spec.ts",
+      "bytes": 11550,
+      "sha256": "162287880d5c7353cec90bbe32e0fbcfe9c65420054f06740001f150c0498509",
+      "git_blob": "bf09c0af5f06c0ec782f41790ae925b7f4a2d562"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/tsconfig.json",
+      "bytes": 383,
+      "sha256": "b04ad017db467edf5f7218ab9152f672eafecf392a7cab036730bab853db73a7",
+      "git_blob": "fb48bc517152e2f2d89c6bc34c5aa8c31854ea0b"
+    },
+    {
+      "path": "packages/experimental/speech-to-text/tsdown.config.ts",
+      "bytes": 219,
+      "sha256": "7d8027472e763bad3b9a5885214f5687a4d89dde847ea274d48ffcc70a7555fd",
+      "git_blob": "be29690579e2a6b392eabb52cc171827dda2d6f4"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/README.i18n.yaml",
+      "bytes": 1583,
+      "sha256": "a23e2b7390eff4ebf29cf07e0315038368942ac11076966453c7cc857601d9bd",
+      "git_blob": "1bcaba6dac4c90b0ec2dc061cda1dd1b4c29c4f8"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/README.md",
+      "bytes": 3187,
+      "sha256": "35e1a7d2d463aa8d584161d49ac9781df40b652edcf3ef3b5f266cd4d2ceff3b",
+      "git_blob": "70046ec14597df736262e62d46d7b2bc62bee54c"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/README.zh.md",
+      "bytes": 2875,
+      "sha256": "2a96d9aeef0a449c424a0aafc94591411c938460860256c85c3befbb61d877c5",
+      "git_blob": "51ed5a6c34e88867b3ffd677bade82d8cdb47ee9"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/cordis.patch.yml",
+      "bytes": 520,
+      "sha256": "3f13611403e1c7611b9a9609c0407b30064d1c889c65147dc27d70145e085e57",
+      "git_blob": "255734df804ff635a1bc7880478283e7937bbbbb"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/icon.svg",
+      "bytes": 701,
+      "sha256": "8dfb48d8c9d96cb3db23f0e237bf5df25d65a212ef8d75b134a50d0895c788e7",
+      "git_blob": "4dd3ef06ac74c986e536bff7ee1b9907b4e19394"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/locale/en.json",
+      "bytes": 159,
+      "sha256": "1fad5e1a11d63596cbea14e2cf12739e12dcb9b6981db88b853d7680f5afad9b",
+      "git_blob": "8d48bbeec7699d815fac778d44509e96710a3775"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/locale/zh.json",
+      "bytes": 143,
+      "sha256": "fa5e368cd0347e28db9c2f271c2b58f9e092fa406b88744e746dab27db4a5c9b",
+      "git_blob": "3ad24e67b3d78864c665e1fbdb4db2965c430fb8"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/package.json",
+      "bytes": 1543,
+      "sha256": "d2cedc6c7e6a7f531699952929d4405fa0686a905a3c049e4ed2d606ca639dfc",
+      "git_blob": "64d41834c85320d34b323164ea1d8ac07341149d"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/src/index.ts",
+      "bytes": 94,
+      "sha256": "ae8132bb80c9669a8bb26e67339f9974f82094433dcfd44743a11a6f498caaf0",
+      "git_blob": "b9058ad59d280e36fa286ffb5123a80246e3f5cb"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/tsconfig.json",
+      "bytes": 227,
+      "sha256": "830f8af1689fb79931766eb12d2e46dceaf9fdeda5bcaef536814fe62f906f22",
+      "git_blob": "f1a449634c8bdf8f87359b0b4307e07dae350408"
+    },
+    {
+      "path": "packages/experimental/voice-input-bundle/tsdown.config.ts",
+      "bytes": 219,
+      "sha256": "7d8027472e763bad3b9a5885214f5687a4d89dde847ea274d48ffcc70a7555fd",
+      "git_blob": "be29690579e2a6b392eabb52cc171827dda2d6f4"
+    },
+    {
+      "path": "packages/typert/generator/README.md",
+      "bytes": 17877,
+      "sha256": "976179ef4d8b5861378ebd2fc5bd240700f64543c45db66837325e91da396c70",
+      "git_blob": "c4551f4bcbf48a5c87e0c07e594da1b8fb60db26"
+    },
+    {
+      "path": "packages/typert/generator/package.json",
+      "bytes": 1268,
+      "sha256": "3c21b571869cb82e930c5caf6868a7c9ad8cdbbc367ca274230508e1bab33d10",
+      "git_blob": "aa83900ca4398ead87fa358acb03c93cda92e365"
+    }
+  ]
+}
