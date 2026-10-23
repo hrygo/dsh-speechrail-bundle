@@ -2,13 +2,15 @@
 
 独立的 DeepSeek Harness SpeechRail 语音输入 bundle 项目。
 
-**状态：官方基线与方案阶段。没有 SpeechRail 适配实现，没有可安装的根 package，也未在当前 DSH profile 安装或启用。**
+**状态：实现已完成并通过验证，未安装、未启用。**
+
+已交付 `packages/speechrail-input`（发布包名 `@hrygo/dsh-speechrail-bundle`）：Host 服务、Typert Remote 面、客户端麦克风控件与设置页、只读 agent 工具 `speechrail_input_status`。构建与测试见下文；设计、审查与实施记录见 [设计文档](docs/superpowers/specs/2026-10-23-speechrail-input-design.md)。
 
 ## 当前授权边界
 
-用户于 2026-10-23 要求：创建仓库，建立官方基线，再设计重构与替代方案；方案审查通过后，必须经用户明确批准才实施。
+用户于 2026-10-23 要求创建仓库、建立官方基线、设计方案，并在明确批准后实施；随后批准“采纳建议方案实施”，并单独确认采用工作区类型垫片（A 方案）。据此本轮允许编写实现源码、安装仓库内 devDependencies、生成 Typert 工件、构建、运行 mock 测试与打包清单检查。
 
-本轮只允许官方源码快照、来源校验、设计文档与方案审查。不得把方案审查通过解释为实施、安装、采集音频、调用推理或写入凭据的授权。
+仍未授权、本轮也确实未做：把插件安装或激活到任何 DSH profile、写入凭据、真实录音、连接 SpeechRail 或发起真实推理、UI 自动化、创建远程仓库或推送。上面“实现已完成”仅指代码、构建与 mock 测试，不代表任何本机 profile 已加载它。
 
 ## 官方基线
 
@@ -19,6 +21,16 @@
 - [来源清单](upstream/baseline.json)：逐文件 SHA-256、Git blob ID 与来源信息。
 - 本地基线 tag：`baseline/official-voice-input-0.2.1-rc.2`；设计分支：`design/speechrail-input`。
 - 快照是只读参照，不是本项目的运行入口。它保留上游 monorepo 构建引用，不宣称可以脱离上游直接运行。
+
+## 构建与验证
+
+```bash
+pnpm install
+pnpm verify     # 基线校验 → Typert 生成 → 双面类型检查 → host/client bundle → 测试
+pnpm test       # host 与 client 单元测试（107 项，全部 mock/合成音频）
+```
+
+两种验证都不访问 SpeechRail、不录音、不发起推理。包级用法、安全边界与已知限制见 [包 README](packages/speechrail-input/README.md)。
 
 只校验本地基线（不安装依赖、不访问服务、不运行模型）：
 
