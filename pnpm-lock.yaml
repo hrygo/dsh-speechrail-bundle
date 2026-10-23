@@ -97,6 +97,8 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1
 
+  packages/typert-protocol: {}
+
 packages:
 
   '@asamuzakjp/css-color@5.1.11':
