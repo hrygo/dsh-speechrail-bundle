@@ -17,6 +17,12 @@
  *   node tools/check-tool-schema.mjs
  *   pnpm --filter @hrygo/dsh-speechrail-bundle remove @deepseek-ai/dsh-tools
  *
+ * When the package is not resolvable from the workspace at all, point the script at
+ * any copy of it, including one still in the pnpm store:
+ *
+ *   node tools/check-tool-schema.mjs <path to any copy of that package>
+ * (a copy usually survives under node_modules/.pnpm/@deepseek-ai+dsh-tools@<version>-<hash>/node_modules/)
+ *
  * The install must not be left in place: generation fails while it is.
  */
 
@@ -33,11 +39,17 @@ if (!existsSync(built)) {
   process.exit(2)
 }
 
+const override = process.argv[2]
 let assertion
 try {
-  ({ assertSupportedJsonSchema: assertion } = await import('@deepseek-ai/dsh-tools'))
-} catch {
-  console.error('check-tool-schema: @deepseek-ai/dsh-tools is not installed; see the header of this file')
+  const specifier = override === undefined ? '@deepseek-ai/dsh-tools' : pathToFileURL(join(resolve(override), 'lib/index.js')).href
+  // Deliberately not the `({ name } = await import(x))` form: inside this module's
+  // top-level await, that form throws a spurious "Cannot access 'specifier' before
+  // initialization" on Node 26.
+  const loaded = await import(specifier)
+  assertion = loaded.assertSupportedJsonSchema
+} catch (error) {
+  console.error(`check-tool-schema: cannot load @deepseek-ai/dsh-tools (${error.message}); see the header of this file`)
   process.exit(2)
 }
 
