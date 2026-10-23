@@ -243,6 +243,31 @@ describe('capability probe', () => {
     expect(outcome.capabilities?.languages).toEqual({ status: 'supported', values: ['zh', 'en'] })
   })
 
+  it('reports a service that declares transcription unsupported as unusable', async () => {
+    // The end-to-end shape the run path refuses on: a real 200 body, projected, must
+    // come back with transcriptionSupported false and no admitted language.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        schema_version: 'effective_capabilities_v1',
+        operations: {
+          transcription: {
+            status: 'unsupported',
+            reason: 'disabled',
+            languages: { status: 'supported', values: ['zh', 'en'] },
+            input: { max_upload_bytes: 1_048_576, max_audio_seconds: 30 },
+          },
+        },
+      }))
+    })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 2_000 })
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) throw new Error('unreachable')
+    expect(outcome.capabilities?.transcriptionSupported).toBe(false)
+    expect(outcome.capabilities?.languages).toEqual({ status: 'unknown', values: [] })
+    expect(outcome.capabilities?.reason).toBe('disabled')
+  })
+
   it('keeps the limits in force when a recognized snapshot states none', async () => {
     // A 200 that recognises the transcription endpoint but omits its input limits must
     // not lift enforcement to the absolute ceilings: the previous snapshot stays the

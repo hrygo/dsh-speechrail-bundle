@@ -136,4 +136,4 @@ flowchart LR
 
 ### 第七轮追加（2026-10-24）
 
-已完成：`check()` 单飞（消除并发丢更新）、语言采纳以 `transcription.status` 为前提、服务明确声明不支持转写时上传前以新错误码 `unsupported` 拒绝、确认幂等语义的注释与文档。测试总数 116（host 107 + client 9）。
+已完成：`check()` 单飞（消除并发丢更新）、语言采纳以 `transcription.status` 为前提、服务明确声明不支持转写时上传前以新错误码 `unsupported` 拒绝、确认幂等语义的注释与文档。测试总数 117（host 108 + client 9）。
