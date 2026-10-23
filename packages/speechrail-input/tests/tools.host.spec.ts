@@ -46,20 +46,35 @@ function source(overrides: Partial<SpeechRailInputStatus> = {}): { stub: StatusT
 }
 
 describe('speechrail_input_status', () => {
-  it('declares one optional boolean parameter and an exact output schema', () => {
+  it('declares the parameter contract and every registry schema invariant', () => {
     const tool = createStatusTool(source().stub)
     expect(tool.name).toBe(STATUS_TOOL_NAME)
     expect(tool.description).toContain('voice input is usable')
-    const parameters = tool.parameters as { properties: Record<string, { type?: string }>, required?: readonly string[] }
-    expect(tool.parameters.type).toBe('object')
+
+    const parameters = tool.parameters as { properties: Record<string, { type?: string }>, required?: readonly string[], type: string }
+    expect(parameters.type).toBe('object')
     expect(parameters.properties.probe?.type).toBe('boolean')
     // An optional property carries no `required` annotation at the root.
     expect(parameters.required).toBeUndefined()
-    expect(Object.keys(tool.output.schema.properties ?? {}).sort()).toEqual([
-      'authenticated', 'credentialConfigured', 'endpoint', 'endpointProblem',
-      'gate', 'language', 'maxAudioSeconds', 'maxUploadBytes', 'model',
-      'pendingOperationId', 'probed', 'reachable',
-    ])
+
+    const schema = tool.output.schema as {
+      type: string
+      additionalProperties: boolean
+      properties: Record<string, { type?: string, required?: unknown }>
+      required: readonly string[]
+    }
+    expect(schema.type).toBe('object')
+    expect(schema.additionalProperties).toBe(false)
+    const names = Object.keys(schema.properties)
+    expect(names).toHaveLength(12)
+    expect([...schema.required].sort()).toEqual([...names].sort())
+    for (const [name, property] of Object.entries(schema.properties)) {
+      // Requiredness belongs to the top-level array only. A per-property `required`
+      // is rejected by the registry's assertSupportedJsonSchema, which is exactly how
+      // this tool was dead on arrival once; re-verify against the real registry with
+      // `node tools/check-tool-schema.mjs`.
+      expect(property, name).not.toHaveProperty('required')
+    }
   })
 
   it('reports the cached state without touching the network by default', async () => {

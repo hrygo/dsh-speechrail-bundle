@@ -279,9 +279,18 @@ export function VoiceInput({
   if (!expanded) {
     // A blocked gate reports itself through the message row once the user tries to
     // record, but the control that clears it must be reachable without that attempt.
-    return view?.gate === 'unknown'
-      ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{trigger}<button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button></div>
-      : trigger
+    if (view?.gate !== 'unknown' && message === '') return trigger
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {trigger}
+        {view?.gate === 'unknown' && (
+          // Deliberately not disabled while `locked`: clearing an unproven outcome is
+          // recovery, and another plugin holding the composer must not trap the gate.
+          <button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
+        )}
+        {message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
+      </div>
+    )
   }
 
   return (

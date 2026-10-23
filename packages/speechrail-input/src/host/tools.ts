@@ -115,18 +115,18 @@ const OUTPUT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    credentialConfigured: { type: 'boolean', required: true, description: 'Whether the configured credential reference resolves to a non-empty value.' },
-    endpoint: { type: 'string', required: true, description: 'Effective loopback base URL, or an empty string when the configured endpoint was refused.' },
-    endpointProblem: { type: 'string', required: true, description: 'Why the configured endpoint is unusable, or an empty string when it is fine.' },
-    model: { type: 'string', required: true, description: 'Configured model id, or an empty string when the service chooses.' },
-    language: { type: 'string', required: true, description: 'Effective language hint: `auto`, `zh` or `en`.' },
-    gate: { type: 'string', required: true, description: 'Whether a recording may start: `ready` otherwise, or the blocking state.' },
-    pendingOperationId: { type: 'string', required: true, description: 'Operation id awaiting acknowledgement, or an empty string when none is.' },
-    maxUploadBytes: { type: 'number', required: true, description: 'Largest upload the next recording may produce.' },
-    maxAudioSeconds: { type: 'number', required: true, description: 'Longest recording the next upload may contain.' },
-    probed: { type: 'boolean', required: true, description: 'Whether the local service was asked during this call.' },
-    reachable: { type: 'boolean', required: true, description: 'Whether the local service answered; false when it was not asked.' },
-    authenticated: { type: 'boolean', required: true, description: 'Whether the service accepted the credential; false when it was not asked.' },
+    credentialConfigured: { type: 'boolean', description: 'Whether the configured credential reference resolves to a non-empty value.' },
+    endpoint: { type: 'string', description: 'Effective loopback base URL, or an empty string when the configured endpoint was refused.' },
+    endpointProblem: { type: 'string', description: 'Why the configured endpoint is unusable, or an empty string when it is fine.' },
+    model: { type: 'string', description: 'Configured model id, or an empty string when the service chooses.' },
+    language: { type: 'string', description: 'Effective language hint: `auto`, `zh` or `en`.' },
+    gate: { type: 'string', description: 'Whether a recording may start: `ready` otherwise, or the blocking state.' },
+    pendingOperationId: { type: 'string', description: 'Operation id awaiting acknowledgement, or an empty string when none is.' },
+    maxUploadBytes: { type: 'number', description: 'Largest upload the next recording may produce.' },
+    maxAudioSeconds: { type: 'number', description: 'Longest recording the next upload may contain.' },
+    probed: { type: 'boolean', description: 'Whether the local service was asked during this call.' },
+    reachable: { type: 'boolean', description: 'Whether the local service answered; false when it was not asked.' },
+    authenticated: { type: 'boolean', description: 'Whether the service accepted the credential; false when it was not asked.' },
   },
   required: [
     'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'gate',
@@ -159,7 +159,9 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
       render: (_args, value) => [{ type: 'text', text: describeStatus(value as StatusToolValue) }],
     },
     async execute(args) {
-      const probed = args.probe === true
+      // Raw registration does not re-validate arguments, so treat anything other
+      // than an explicit `true` as "do not probe".
+      const probed = (args as { readonly probe?: unknown } | null | undefined)?.probe === true
       const check = probed ? await source.check() : null
       const view = await source.status()
       return {

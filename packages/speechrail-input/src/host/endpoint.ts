@@ -65,7 +65,11 @@ export function normalizeEndpoint(input: string): EndpointResult {
   return { ok: true, baseUrl: `${url.protocol}//${url.host}/v1`, origin: `${url.protocol}//${url.host}` }
 }
 
-/** Human-readable refusal text used by tooling and tests; never sent to a client. */
+/**
+ * Human-readable refusal text. It names only the refusal kind, never the configured
+ * value, and this is what the status projection sends to clients as
+ * `endpointProblem`.
+ */
 export function describeRefusal(reason: EndpointRefusal): string {
   switch (reason) {
     case 'not-a-url':

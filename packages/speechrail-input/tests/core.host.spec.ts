@@ -5,6 +5,7 @@ import {
   type SpeechRailFailure,
 } from '../src/contracts.ts'
 import { SpeechRailInputCore, type CoreDependencies, type ResolvedConfig } from '../src/host/core.ts'
+import { failure, unknownFailure } from '../src/host/failure.ts'
 import { journalFromUnit, memoryJournal, type JournalRecord, type JournalState, type PendingJournal } from '../src/host/journal.ts'
 import type { ProbeOutcome, TranscribeOutcome } from '../src/host/http.ts'
 import { encodeWave } from '../src/protocol/wave.ts'
@@ -91,7 +92,9 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
       return true
     },
     async reset(): Promise<boolean> {
-      if (state.readFails || state.clearFails) return false
+      // Faithful to journalFromUnit.reset(): it only writes, so a read failure is
+      // irrelevant and the write outcome is what decides.
+      if (state.recordFails) return false
       // Overwriting the slot replaces whatever unreadable bytes were there, which is
       // what makes the reset an actual recovery rather than a one-time unblock.
       stored = null
@@ -352,10 +355,57 @@ describe('unproven outcomes', () => {
   it('refuses a null acknowledgement when the medium cannot be written', async () => {
     const h = harness()
     h.readFails = true
+    h.recordFails = true
     await h.core.restore()
     const refused = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
     expect(refused.failure?.code).toBe('journal-unavailable')
     expect((await h.core.status()).gate).toBe('unknown')
+  })
+
+  it('refuses a null acknowledgement while a concrete operation is held', async () => {
+    // The record is readable, so only the matching id may clear it: a null would
+    // erase the durable evidence that an upload's outcome is still unknown.
+    const h = harness()
+    h.fail = unknownFailure('timeout')
+    await h.core.transcribe(payload('op_ssssssss'))
+    const status = await h.core.status()
+    expect(status.gate).toBe('unknown')
+    expect(status.pendingOperationId).toBe('op_ssssssss')
+
+    const refused = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    expect(refused.failure?.code).toBe('conflict')
+    expect((await h.core.status()).gate).toBe('unknown')
+    expect((await h.core.status()).pendingOperationId).toBe('op_ssssssss')
+
+    const cleared = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_ssssssss' }))
+    expect(cleared.ok).toBe(true)
+    expect((await h.core.status()).gate).toBe('ready')
+  })
+
+  it('never widens the enforced limits when a probe answers without a snapshot', async () => {
+    const h = harness()
+    h.probe = {
+      ok: true,
+      capabilities: {
+        schemaVersion: 'effective_capabilities_v1',
+        transcriptionSupported: true,
+        reason: null,
+        languages: { status: 'supported', values: ['zh'] },
+        limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+      },
+    }
+    await h.core.check()
+    expect((await h.core.status()).limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
+
+    // The service answers 200 with a body this bundle cannot recognise.
+    h.probe = { ok: true, capabilities: null }
+    await h.core.check()
+    expect((await h.core.status()).limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
+
+    // An unreachable service must not widen them either.
+    h.probe = { ok: false, reachable: false, authenticated: false, failure: failure('unreachable') }
+    await h.core.check()
+    expect((await h.core.status()).limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
   })
 
   it('reports a failed pending write instead of leaving a phantom record', async () => {

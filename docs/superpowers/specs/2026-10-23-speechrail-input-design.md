@@ -300,3 +300,18 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 ### 清单修正：`dsh.client.inject` 只列客户端插件（2026-10-24）
 
 对照官方客户端插件清单（`dsh-client-ui-conversation`、`dsh-client-ui-plugin-manager`）核对后修正：`inject` 的语义是“本插件等待哪些**客户端插件**的服务”，而 `@deepseek-ai/dsh-client-ui-slots` 既无 `dsh.client` 也无 `./client` 导出，是纯类型/工具库，列出它属于错误声明；真正提供 `ctx.slots` 服务的是客户端插件 `@deepseek-ai/dsh-client-ui-renderer`，已改为列出后者。最终列表：`dsh-api-remotes`（`ctx.remote`）、`dsh-client-locale`（`ctx.locale`）、`dsh-client-ui-conversation`（槽位属主）、`dsh-client-ui-renderer`（`ctx.slots`）。客户端 bundle 的运行时 `require` 仍是 `react`、`react/jsx-runtime`、`zod`，与官方客户端 bundle 同形。
+
+## 第五轮：对第三轮核验发现的处置（2026-10-24）
+
+第二次独立核验（对抗性）在修复后的提交上又发现 6 项问题，其中一项使 agent 工具**完全无法注册**。逐项处置：
+
+- **H1（高，工具形同不存在）** `OUTPUT_SCHEMA` 在每个属性上写了 `required: true`。注册表的 `assertSupportedJsonSchema`（dsh-tools `lib/index.js` 的 `register()` 调用）只在对象节点上接受 `required`，因此注册抛错、工具从未生效；而 `defineTool` 的编译产物把必需性放在顶层 `required` 数组、属性上不留该键。已改为该形状，并用**真实断言**验证：修复后的 schema 被接受，改回旧形状则被拒（`schema.properties.endpoint.required is not supported on type "string"`）。新增 `tools/check-tool-schema.mjs` 把这个检查固化：它需要临时安装 `@deepseek-ai/dsh-tools`（该依赖会破坏 Typert 生成，因此不能常驻），脚本头部写明了安装/运行/卸载三步。单元测试同时断言该不变式（属性上无 `required`、顶层 `required` 覆盖全部属性、`additionalProperties: false`）。
+- **同时修正一处错误陈述**：注册表**不会**在执行期重新校验参数——原样注册绕过参数校验。工具因此把「非 `true` 即不探测」作为唯一入口条件，并在 `execute` 里对 `args` 做空值防护。
+- **H2（中，会抹掉真实的未决记录）** `{operationId: null}` 原先只看门禁状态，不看 `pendingOperationId`，于是在记录**可读**时也能把一次真实未决上传清掉，违反 `journal.ts` 与 `types.ts` 的契约。已改为：只要本机持有具体 id，就要求匹配该 id，否则返回 `conflict`；`null` 仅用于「记录不可读」的恢复。新增测试断言 `null` 在持有 id 时被拒、且随后用具体 id 可以正常清除。
+- **H3（中，成功的探测仍会放宽限额）** 探测返回 200 但响应体不可识别时，原先把快照置空，限额回落到绝对上限（实测 1 MiB/30 s → 4 MiB/120 s）。已改为：只有识别出快照才替换，200 但不可识别时保留上次快照，并把该快照用于本次 check 结果。新增测试覆盖「可识别→不可识别 200→不可达」三种情况下限额不变。
+- **H4（低，测试替身不忠实）** 真实 `journalFromUnit.reset()` 只写不读，读失败不影响它；替身此前把 `readFails` 当作重置失败，导致真正的写失败分支没被测到。已按真实语义修正替身，并把「介质不可写时拒绝 null 确认」改为同时设置读失败（构造 `null` id 的恢复场景）与写失败。
+- **H5（低，常量未真正删除）** `CAPABILITY_TTL_MS` 与 `CANCEL_DRAIN_MS` 上一轮声称删除但实际仍在（当时的校验打印被我误读）。现已确认删除；快照不过期这一取舍记入 README（宁可偏紧，刷新靠下一次成功探测）。
+- **H6（低，测试依赖被忽略的生成产物）** `remote-entry.host.spec.ts` 导入 `lib/typert.remote-client.js`，而 `lib/` 被 gitignore，干净检出下单独跑 `pnpm test` 会失败。根部 `test`/`test:host`/`test:client` 脚本已改为先执行 `gen:typert`，使测试可独立复现。
+- **文档准确性**：README 中「未注册任何模型工具」的过期表述已改正；「限额只收窄」改为「只在明确识别到快照时变化，不可达或不可识别时保留上次限额」；`endpoint.ts` 中「describeRefusal 从不发给客户端」的注释与实际（作为 `endpointProblem` 发送）不符，已改写。
+
+仍未解决且已记录：`remote-entry.host.spec.ts` 走的是生成产物的**元数据**与 Host 解析器，而不是真实的 Remote 派发（编解码、错误信封、`requestId` 提取、能力探测的 5xx/404 映射仍未覆盖）；客户端 mount/withdraw 仍无自动化测试。

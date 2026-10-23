@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+/**
+ * Verify the agent tool definition against the Harness registry's real schema check.
+ *
+ * The tool definition is written structurally (see
+ * `packages/speechrail-input/src/host/tools.ts`) because importing
+ * `@deepseek-ai/dsh-tools` declarations pulls `@deepseek-ai/dsh-llm` into the
+ * Typert-analyzed program and breaks generation. That means the compiler cannot
+ * check the schema against the registry, and an unsupported keyword would only
+ * surface at runtime as a tool that never registers.
+ *
+ * This script closes that gap. It needs the package available, which is why it is
+ * not part of `pnpm verify`:
+ *
+ *   pnpm --filter @hrygo/dsh-speechrail-bundle add -D @deepseek-ai/dsh-tools@0.2.1-rc.2
+ *   pnpm --filter @hrygo/dsh-speechrail-bundle run build:host
+ *   node tools/check-tool-schema.mjs
+ *   pnpm --filter @hrygo/dsh-speechrail-bundle remove @deepseek-ai/dsh-tools
+ *
+ * The install must not be left in place: generation fails while it is.
+ */
+
+import { pathToFileURL } from 'node:url'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const built = join(root, 'packages/speechrail-input/lib/types/host/tools.js')
+
+if (!existsSync(built)) {
+  console.error(`check-tool-schema: ${built} is missing; run the host build first`)
+  process.exit(2)
+}
+
+let assertion
+try {
+  ({ assertSupportedJsonSchema: assertion } = await import('@deepseek-ai/dsh-tools'))
+} catch {
+  console.error('check-tool-schema: @deepseek-ai/dsh-tools is not installed; see the header of this file')
+  process.exit(2)
+}
+
+const { createStatusTool } = await import(pathToFileURL(built).href)
+const definition = createStatusTool({ status: async () => ({}), check: async () => ({}) })
+const failures = []
+
+try {
+  assertion(definition.output.schema)
+} catch (error) {
+  failures.push(`output.schema: ${error.message}`)
+}
+
+const properties = definition.output.schema.properties ?? {}
+const required = definition.output.schema.required ?? []
+for (const [name, property] of Object.entries(properties)) {
+  if ('required' in property) failures.push(`${name}: requiredness must live in the top-level array, not on the property`)
+  if (!required.includes(name)) failures.push(`${name}: missing from the top-level required array`)
+}
+for (const name of required) {
+  if (!(name in properties)) failures.push(`${name}: required but not declared`)
+}
+if (definition.parameters.type !== 'object') failures.push('parameters: root must be an object')
+
+if (failures.length > 0) {
+  console.error(`check-tool-schema: ${definition.name} would not register:`)
+  for (const failure of failures) console.error(`  - ${failure}`)
+  process.exit(1)
+}
+
+console.log(`check-tool-schema: ${definition.name} is accepted by the registry assertion (${Object.keys(properties).length} output fields)`)

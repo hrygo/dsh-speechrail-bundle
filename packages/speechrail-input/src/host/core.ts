@@ -262,8 +262,11 @@ export class SpeechRailInputCore {
     const outcome = await this.deps.probe({ baseUrl: config.baseUrl, credential })
     this.checkedAt = checkedAt
     if (outcome.ok) {
-      this.capabilities = outcome.capabilities
-      return { reachable: true, authenticated: true, capabilities: outcome.capabilities, failure: null, checkedAt }
+      // A 200 whose body is not a recognizable snapshot must not discard the last
+      // known limits: falling back to the absolute ceilings would silently widen what
+      // this host accepts, and enforce nothing the service ever stated.
+      if (outcome.capabilities !== null) this.capabilities = outcome.capabilities
+      return { reachable: true, authenticated: true, capabilities: this.capabilities, failure: null, checkedAt }
     }
     // A failed probe keeps the last snapshot on purpose: falling back to the
     // absolute ceilings here would silently widen what this host accepts after a
@@ -437,9 +440,12 @@ export class SpeechRailInputCore {
       return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
     }
     if (parsed.value.operationId === null) {
-      // The stored record was unreadable, so there is no id to match. The user is
-      // asserting that no upload of theirs is outstanding; a medium that cannot be
-      // written still refuses, so the gate cannot be cleared blind.
+      // A null id means "the stored record could not be read". If this host is holding
+      // an id, a readable record exists after all, so the concrete id must be matched
+      // instead: resetting here would erase a real unproven upload.
+      if (this.pendingOperationId !== null) {
+        return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('conflict') }
+      }
       const reset = await this.deps.journal.reset()
       if (!reset) {
         return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('journal-unavailable') }

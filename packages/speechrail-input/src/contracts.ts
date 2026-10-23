@@ -46,14 +46,8 @@ export const TRANSCRIBE_PAYLOAD_MAX_BYTES = 6_291_456
 /** Largest accepted transcription response body, in bytes. */
 export const TRANSCRIPTION_RESPONSE_MAX_BYTES = 262_144
 
-/** How long a capability snapshot stays valid before the next check re-reads it. */
-export const CAPABILITY_TTL_MS = 30_000
-
 /** Budget for one capability probe, which must never hold the transcription gate. */
 export const CAPABILITY_TIMEOUT_MS = 5_000
-
-/** Bounded window in which a cancelled request is drained while the gate stays held. */
-export const CANCEL_DRAIN_MS = 5_000
 
 export type * from './types.ts'
 

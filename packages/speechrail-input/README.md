@@ -62,7 +62,10 @@ pnpm test              # host and client unit tests
 The agent tool registers only where the Harness offers its tools service; the definition is
 declared structurally rather than through `@deepseek-ai/dsh-tools`, because importing that
 package's declarations pulls an unrelated Typert lookup into the analyzed program and fails
-generation. See the design appendix for the exact shapes and the verification behind them.
+generation. The compiler therefore cannot check the schema against the registry, and an
+unsupported keyword would leave the tool silently unregistered. `tools/check-tool-schema.mjs`
+closes that gap against the registry's own assertion; its header documents the temporary install
+that the check needs and that must not be left in place.
 
 ### Why `packages/typert-protocol` exists
 
@@ -83,15 +86,19 @@ against the published declarations.
 ## Known limitations
 
 - The microphone device picker is not implemented; the system default input device is used.
-- No model-facing tool is registered; the Host service and Remote surface are the only entry
-  points, so a tool can be added later without changing the wire contract.
+- The only model-facing entry point is the read-only `speechrail_input_status`; there is no tool
+  that starts a recording or an upload.
 - The unproven-outcome path requires an explicit acknowledgement in the composer or settings
   page, and the composer offers that control whenever the gate is blocked; there is no automatic reconciliation with the service's own record. An unreadable
   journal is acknowledged by asserting that nothing is outstanding, which cannot be verified
   locally — the alternative would be a permanently blocked feature.
 - The capability snapshot is used opportunistically: any body carrying
   `operations.transcription` yields a view, and unknown fields or a missing limit fall back to
-  the package's absolute ceilings. Limits only ever narrow, never widen.
+  the package's absolute ceilings. Enforced limits change only on an explicitly recognized
+  snapshot; an unreachable service or an unrecognized 200 body keeps the last known limits, so a
+  garbage capability response can never widen what this host accepts. The flip side is that a
+  snapshot does not expire: if the service later loosens or tightens its own limits, a fresh
+  check is what updates them.
 - This repository builds and tests the bundle. It does not activate it in any Harness profile,
   does not write credentials, and never performs a real recording or inference on its own.
 

@@ -11,9 +11,9 @@
     "build:host": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:host",
     "build:client": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:client",
     "build": "pnpm gen:typert && pnpm typecheck && pnpm build:host && pnpm build:client",
-    "test": "vitest run",
-    "test:host": "vitest run --project host",
-    "test:client": "vitest run --project client",
+    "test": "pnpm gen:typert && vitest run",
+    "test:host": "pnpm gen:typert && vitest run --project host",
+    "test:client": "pnpm gen:typert && vitest run --project client",
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "verify:baseline": "python3 tools/verify-upstream.py --git",
     "verify": "pnpm verify:baseline && pnpm build && pnpm test"
