@@ -529,7 +529,8 @@ export class SpeechRailInputCore {
       const reread = await this.deps.journal.read()
       // The read is asynchronous: an upload may have healed the gate, claimed it and
       // recorded its operation while it was in flight. Deciding on the state read before it
-      // would report an open gate and erase that operation's only record.
+      // would answer with a conflict over that live upload (the erase itself is prevented
+      // further down, which refuses to run while a readable record exists).
       if (this.gateState !== 'unknown' || this.pendingOperationId !== null) {
         return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
       }
@@ -568,6 +569,11 @@ export class SpeechRailInputCore {
     const cleared = await this.deps.journal.clear(parsed.value.operationId)
     if (!cleared) {
       return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('journal-unavailable') }
+    }
+    // The clear is asynchronous: an upload can heal the gate, claim it and record its own
+    // operation while it is in flight. Only open the gate when this id still owns it.
+    if (this.gateState !== 'unknown' || (this.pendingOperationId !== null && this.pendingOperationId !== parsed.value.operationId)) {
+      return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
     }
     this.gateState = 'ready'
     this.pendingOperationId = null

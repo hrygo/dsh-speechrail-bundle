@@ -52,6 +52,9 @@ interface Harness {
   /** When set, the erase waits for a resolver, holding it in flight. */
   deferReset: boolean
   pendingResets: Array<(ok: boolean) => void>
+  /** When set, the id-matched clear waits for a resolver, holding it in flight. */
+  deferClear: boolean
+  pendingClears: Array<(ok: boolean) => void>
   /** Readable medium holding a malformed record: unreadable, but writable. */
   corrupt: boolean
   config: ResolvedConfig
@@ -79,6 +82,8 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     transcribeHold: null,
     deferReset: false,
     pendingResets: [],
+    deferClear: false,
+    pendingClears: [],
     corrupt: false,
     config: CONFIG,
     credential: 'secret-key',
@@ -99,6 +104,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
       return true
     },
     async clear(operationId): Promise<boolean> {
+      if (state.deferClear) return await new Promise<boolean>((resolve) => { state.pendingClears.push(resolve) })
       // Faithful to journalFromUnit: a medium whose read throws cannot compare ids,
       // so it cannot clear either. A double where read fails but clear succeeds
       // models a state no real medium can be in.
@@ -395,6 +401,97 @@ describe('unreadable medium recovery', () => {
     h.deferReads = false
     const journalState = await h.journal.read()
     h.pendingReads.shift()?.({ available: true, pending: journalState.available ? journalState.pending : null })
+    await upload
+  })
+
+  it('answers with the live upload when its record lands during the pre-erase read', async () => {
+    // The pre-erase read is issued before the upload's own reads, so it can resolve last and
+    // observe a record written after it was issued. Adopting that record would answer with a
+    // conflict - "refresh and retry" - over an upload that is running fine.
+    const h = harness()
+    const tick = async (times = 1): Promise<void> => {
+      for (let index = 0; index < times; index += 1) await Promise.resolve()
+    }
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    await tick(2)
+    expect(h.pendingReads).toHaveLength(1)
+
+    let releaseUpload: (() => void) | undefined
+    h.transcribeHold = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const upload = h.core.transcribe(payload('op_bbbbbbbb'))
+    await tick(2)
+    // The acknowledgement's read is first, the upload's recovery read second.
+    expect(h.pendingReads).toHaveLength(2)
+    h.pendingReads.pop()?.({ available: true, pending: null })
+    await tick(6)
+    expect((await h.core.status()).gate).toBe('busy')
+
+    // Claim is done and the upload is inside its own read; its record is not written yet.
+    expect(h.pendingReads).toHaveLength(2)
+    h.pendingReads.pop()?.({ available: true, pending: null })
+    await tick(6)
+
+    h.deferReads = false
+    const settled = await h.journal.read()
+    expect(settled.available && settled.pending?.operationId).toBe('op_bbbbbbbb')
+    h.pendingReads.shift()?.({ available: true, pending: settled.available ? settled.pending : null })
+
+    const result = await ack
+    expect(result.ok).toBe(true)
+    expect(result.pendingOperationId).toBe('op_bbbbbbbb')
+    expect((await h.core.status()).gate).toBe('busy')
+
+    releaseUpload?.()
+    await upload
+  })
+
+  it('leaves a gate alone when something claims it while the id-matched clear is in flight', async () => {
+    // The same window as the erase path, on the concrete-id path: the clear is asynchronous,
+    // and an upload that heals the gate during it must not have its claim overwritten.
+    const h = harness({ pending: { operationId: 'op_cccccccc', phase: 'unknown', createdAt: '2026-10-23T14:00:00.000Z' } })
+    const tick = async (times = 1): Promise<void> => {
+      for (let index = 0; index < times; index += 1) await Promise.resolve()
+    }
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    const adopted = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    expect(adopted.pendingOperationId).toBe('op_cccccccc')
+
+    h.deferClear = true
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_cccccccc' }))
+    await tick(2)
+    expect(h.pendingClears).toHaveLength(1)
+
+    // The clear has written, so the slot reads empty: this upload heals the gate and claims it.
+    h.deferReads = true
+    let releaseUpload: (() => void) | undefined
+    h.transcribeHold = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const upload = h.core.transcribe(payload('op_dddddddd'))
+    await tick(2)
+    h.pendingReads.shift()?.({ available: true, pending: null })
+    await tick(6)
+    expect((await h.core.status()).gate).toBe('busy')
+    expect((await h.core.status()).pendingOperationId).toBe('op_dddddddd')
+
+    h.pendingClears.shift()?.(true)
+    const result = await ack
+    expect(result.ok).toBe(true)
+    expect(result.pendingOperationId).toBe('op_dddddddd')
+    const after = await h.core.status()
+    expect(after.gate).toBe('busy')
+    expect(after.pendingOperationId).toBe('op_dddddddd')
+
+    // The settle path clears the record again, so the deferred clear must be released first.
+    h.deferClear = false
+    h.deferReads = false
+    h.pendingReads.shift()?.({ available: true, pending: null })
+    releaseUpload?.()
     await upload
   })
 
