@@ -346,6 +346,13 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
 - **两处死导出：先在观察项中记录，后按要求删除。** 全仓库（src/tests/tools/scripts）扫描后，`core.ts` 的 `decodeBase64Audio` 与 `journal.ts` 的 `UNAVAILABLE_JOURNAL` 无任何引用——前者是 0.6.0 引入 `decodeValidatedBase64` 后留下的旧入口（它看起来像"仍在校验的安全网"，其实不再被调用）。当轮按"不顺手清理"的约定**只记录未动**；用户随后要求处理遗留项，遂删除。删除前确认无牵连：`isBase64` 仍被解析器使用、`decodeValidatedBase64` 仍被真实调用点使用、`PendingJournal` 类型仍被广泛使用；删除后 `pnpm verify` 退出码 0、246 测试全绿（什么都没坏，即证明它们确为死代码）。
 
+## 2026-10-24 决定记录（0.8.0：DSH 升到 0.2.1-rc.3 的兼容响应）
+
+- **事实**：运行时 `dsh --version` 为 **0.2.1-rc.3**，而本包把 `@deepseek-ai/dsh-*` 的 **peer 精确钉在 `0.2.1-rc.2`**——新运行时不再满足。Harness 的版本要求检查会看 `engines.dsh`，否则看 DSH peer 依赖，因此这不只是警告，存在**阻断安装/激活**的风险。（`engines.dsh` 因是范围 `>=0.2.1-rc.2`，同 tuple 预发布被允许，本来就不受影响。）
+- **处置**：peer 放宽为 **`^0.2.1-rc.2`**；**devDependencies** 与根 `@deepseek-ai/dsh-typert-generator` 提到 **`0.2.1-rc.3`**，使构建、Typert 生成与全部测试都在**真实运行的那个版本**上执行；CI 的注册表 schema 检查固定版本同步到 rc.3。顺带把根与包两处不一致的钉法统一（原先根钉 rc.2、包钉 rc.3 会让 store 同时留两份）。
+- **结果**：**未改任何源码**，rc.3 下 `pnpm verify` 退出码 0、**246 测试**；运行时矩阵 22.23.4 / 24.22.1 / 26.11.1 全绿。即"不改代码即兼容"，这正是我们要的证据形态——依赖元数据的兼容问题，不应靠改行为去适配。
+- **记录一条 semver 事实与刻意取舍**：`^0.2.1-rc.2` 按 semver 的预发布规则**不会**接受"另一个 patch 层级的预发布"（例如 `0.2.2-rc.1`），届时必须再次显式抬升 peer。这是刻意的：把声明支持范围写成显式的，而不是用 `*`/无限上界开放。
+
 ## 2026-10-24 决定记录（0.7.1：真实转写验证、CI 真跑 schema 检查、两处死代码清除）
 
 - **真实转写验证（用户授权，本机真实推理一次）。** 用 macOS `say` 合成 3.13 s 的**规范 WAV**（单声道/16 kHz/16 位），用**插件自己的 `transcribe()`**（不是 curl 复刻）打真实服务，再用 curl 独立复现。结果：`language=zh`、`language=en`、不传语言**三种都是 200**，正文 `{"text":"你好，这是一次语音输入测试。","usage":{"type":"duration","seconds":3.129}}`——即服务端**接受我们的完整线格式**（multipart 的 `response_format`/可选 `model`/可选 `language` + `file` 部件的 `filename="recording.wav"` 与 `Content-Type: audio/wav` + Bearer 与 `Accept`）并真的转写成功。此前「服务接受 `language`」只有 OpenAPI 与快照证据，**这一环节现已关闭**。

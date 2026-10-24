@@ -41,5 +41,5 @@ jobs:
       # The version matches what the other @deepseek-ai devDependencies pin.
       - name: Check the tool schema against @deepseek-ai/dsh-tools
         run: |
-          npm install --prefix "$RUNNER_TEMP/dsh-tools" --no-save --ignore-scripts @deepseek-ai/dsh-tools@0.2.1-rc.2
+          npm install --prefix "$RUNNER_TEMP/dsh-tools" --no-save --ignore-scripts @deepseek-ai/dsh-tools@0.2.1-rc.3
           node tools/check-tool-schema.mjs "$RUNNER_TEMP/dsh-tools/node_modules/@deepseek-ai/dsh-tools"
