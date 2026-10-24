@@ -45,7 +45,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.7/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.8/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。
@@ -62,6 +62,9 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 - 修改非易失设置（端点、模型、凭据引用）会重启 bundle 条目：释放 journal 存储单元后立即重新打开。释放
   是"发射后不管"的，而存储后端会拒绝同名单元的第二个句柄，因此新实例可能短暂地把 journal 读成不可用
   （出现"结果未确认"门禁与多余的确认提示）。重试即恢复；等待释放完成可消除该窗口。
+- 记录不可读的确认所走的擦除是先读后写，而存储服务没有 compare-and-set：若某次操作恰好在该窗口内
+  写入记录，它会被覆盖（门禁本身仍然正确——宿主在擦除后会复核占用者）。该窗口仅两个 await 宽，且只在
+  确认一个不可读槽位时存在。
 - bundle 本身从不读取或保存凭据：每次请求都按配置的凭据名称向 Harness 凭据库解析。
 
 ## 验证

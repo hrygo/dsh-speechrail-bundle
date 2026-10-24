@@ -356,6 +356,48 @@ describe('unreadable medium recovery', () => {
     await upload
   })
 
+  it('adopts a live upload when the erase was refused while it claimed', async () => {
+    // The refusal path awaits a second read before it decides, and an upload can heal the
+    // gate, claim it and record its operation during that read. Reporting an unavailable
+    // medium then would tell the user their storage is broken while an upload is running.
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+    h.deferReset = true
+
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingReads.shift()?.({ available: false })
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingResets.shift()?.(false)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingReads).toHaveLength(1)
+
+    const upload = h.core.transcribe(payload('op_bbbbbbbb'))
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingReads.pop()?.({ available: true, pending: null })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect((await h.core.status()).gate).toBe('busy')
+
+    h.pendingReads.shift()?.({ available: false })
+    const result = await ack
+    expect(result.ok).toBe(true)
+    expect(result.pendingOperationId).toBe('op_bbbbbbbb')
+    expect((await h.core.status()).gate).toBe('busy')
+
+    h.deferReads = false
+    const journalState = await h.journal.read()
+    h.pendingReads.shift()?.({ available: true, pending: journalState.available ? journalState.pending : null })
+    await upload
+  })
+
   it('accepts both inclusive budget bounds and refuses just outside them', async () => {
     const h = harness()
     for (const timeout of [1_000, 180_000]) {

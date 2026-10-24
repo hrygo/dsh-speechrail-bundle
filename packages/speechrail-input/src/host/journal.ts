@@ -145,6 +145,10 @@ export function journalFromUnit(unit: JournalUnit): PendingJournal {
       // evidence that an operation is outstanding. Unreadable bytes are still erased, which
       // is the case this exists for.
       if (parseJournalRecord(stored) !== null) return false
+      // Between this read and the write below another task can record an operation, and the
+      // storage service offers no compare-and-set to close that gap; the write can therefore
+      // erase a record that appeared in it. The gate is still protected, because the core
+      // re-checks who holds it after this returns.
       try {
         await unit.writeGlobal(null)
         return true

@@ -58,7 +58,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.7/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.8/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.
@@ -79,6 +79,10 @@ Then set the endpoint and credential reference on its settings page.
   fire-and-forget, and the backend rejects a second handle for a unit that is still open, so the new
   instance can transiently read the journal as unavailable (an unproven gate with a spurious
   acknowledgement prompt). A retry heals it; awaiting the release would remove the window.
+- The erase used by an unreadable-record acknowledgement reads the slot and then writes it, and the
+  storage service offers no compare-and-set. An operation recorded between those two steps is
+  therefore erased (the gate itself stays correct: the host re-checks who holds it afterwards). The
+  window is two awaits wide and only exists while an unreadable slot is being acknowledged.
 - The bundle never reads or stores the credential itself: it resolves the configured reference name
   through the Harness credential store on each request.
 
