@@ -30,6 +30,7 @@ export type SpeechRailFailureCode =
   | 'redirected'
   | 'unsupported'
   | 'model-not-found'
+  | 'rate-limited'
   | 'server-error'
   | 'unreachable'
   | 'timeout'

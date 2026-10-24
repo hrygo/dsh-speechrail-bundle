@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { failure, failureForStatus, provesNotProcessed, readErrorEnvelope, sanitizeReason, sanitizeRequestId, unknownFailure } from '../src/host/failure.ts'
 
+describe('failureForStatus', () => {
+  it('prefers a declared code that names the condition over the status alone', () => {
+    // Measured against the live service: a non-audio upload answered 422 with
+    // {"error":{"code":"audio_decode_failed", ...}}. Reported by status alone that reads as a
+    // configuration problem, and the user is sent to check settings for a recording that was simply
+    // not audio.
+    const declared = failureForStatus(422, 'audio_decode_failed', 'req_1', false)
+    expect(declared.code).toBe('audio-invalid')
+    expect(declared.retryable).toBe(false)
+    expect(declared.httpStatus).toBe(422)
+    // An unrecognised declared code must change nothing: the table stays evidence-based, so a new
+    // code from a service this bundle has never seen keeps the status reading.
+    expect(failureForStatus(422, 'some_new_code', null, null).code).toBe('bad-request')
+  })
+
+  it('reads the throttling the endpoint declares as retryable', () => {
+    // The endpoint declares 429. Reporting it as a non-retryable bad request told the user to check
+    // their configuration when the service was asking them to come back shortly.
+    const throttled = failureForStatus(429, null, null, null)
+    expect(throttled.code).toBe('rate-limited')
+    expect(throttled.retryable).toBe(true)
+    // 413 is declared by the same endpoint and stays an audio refusal.
+    expect(failureForStatus(413, null, null, null).code).toBe('audio-invalid')
+  })
+})
+
 describe('provesNotProcessed', () => {
   it('proves non-processing only for a refusal, and for nothing else', () => {
     // The single rule the whole gate settlement rests on. Every other status - a 5xx a gateway may

@@ -438,6 +438,21 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     }[] = [
       { status: 400, settles: true, code: 'bad-request', body: '{"error":"bad"}' },
       { status: 401, settles: true, code: 'unauthorized', body: '{"error":"no"}' },
+      // Both bodies below are the live service's own envelopes, captured from it: 422 with
+      // `audio_decode_failed` for a non-audio upload, and the declared 429. They settle because the
+      // service refused the request, and they carry the code the service named.
+      {
+        status: 422,
+        settles: true,
+        code: 'audio-invalid',
+        body: '{"error":{"message":"Unsupported audio upload","type":"invalid_request_error","code":"audio_decode_failed","request_id":"req_21f7fcbdedef4c2685422d508f23684f","retryable":false,"param":"file"}}',
+      },
+      {
+        status: 429,
+        settles: true,
+        code: 'rate-limited',
+        body: '{"error":{"message":"Too many requests","code":"rate_limited","request_id":"req_1","retryable":true}}',
+      },
       { status: 500, settles: false, code: 'server-error', body: '{"error":"boom"}' },
       { status: 504, settles: false, code: 'timeout', body: '{"error":"slow"}' },
       { status: 302, settles: false, code: 'redirected', body: '' },

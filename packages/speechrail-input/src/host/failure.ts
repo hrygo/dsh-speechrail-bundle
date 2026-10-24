@@ -10,8 +10,21 @@ const RETRYABLE: ReadonlySet<SpeechRailFailureCode> = new Set([
   'unreachable',
   'timeout',
   'busy',
+  'rate-limited',
   'server-error',
 ])
+
+/**
+ * Declared error codes that name a condition better than the status can.
+ *
+ * Measured against the live service: a non-audio upload answered `422` with
+ * `{"error":{"code":"audio_decode_failed", ...}}`, which the status alone would report as a
+ * configuration problem. Only codes observed or documented for this endpoint belong here; an
+ * unrecognised declared code changes nothing.
+ */
+const DECLARED_CODES: Readonly<Record<string, SpeechRailFailureCode>> = {
+  audio_decode_failed: 'audio-invalid',
+}
 
 /**
  * Build one sanitized failure.
@@ -122,7 +135,8 @@ export function failureForStatus(
   requestId: string | null,
   declaredRetryable: boolean | null,
 ): SpeechRailFailure {
-  const code: SpeechRailFailureCode = status === 401 || status === 403
+  const declared = declaredCode === null ? undefined : DECLARED_CODES[declaredCode]
+  const code: SpeechRailFailureCode = declared ?? (status === 401 || status === 403
     ? 'unauthorized'
     : status === 404
       ? 'not-found'
@@ -134,13 +148,17 @@ export function failureForStatus(
             ? 'model-not-found'
             : status >= 500
               ? 'server-error'
-              : status >= 400
-                ? 'bad-request'
-                : status >= 300
-                  // This bundle never follows a redirect, so a 3xx is a deliberate refusal
-                  // by the server and not an internal fault.
-                  ? 'redirected'
-                  : 'internal'
+              : status === 429
+                // The endpoint declares 429; the service is throttling, which is worth retrying
+                // rather than reading as a configuration problem.
+                ? 'rate-limited'
+                : status >= 400
+                  ? 'bad-request'
+                  : status >= 300
+                    // This bundle never follows a redirect, so a 3xx is a deliberate refusal
+                    // by the server and not an internal fault.
+                    ? 'redirected'
+                    : 'internal')
   const base = failure(code, { httpStatus: status, requestId })
   return declaredRetryable === null ? base : { ...base, retryable: declaredRetryable && base.retryable }
 }
