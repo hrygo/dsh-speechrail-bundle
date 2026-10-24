@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.12.4",
   "engines": {
-    "node": ">=22"
+    "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
     "gen:typert": "node scripts/generate-typert.mjs --skip-diagnostics",
