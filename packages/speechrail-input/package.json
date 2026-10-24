@@ -1,7 +1,7 @@
 {
   "name": "@hrygo/dsh-speechrail-bundle",
   "description": "Independent DeepSeek Harness voice-input bundle: browser recording transcribed by a local SpeechRail service or any other loopback OpenAI-compatible engine, with a capability-snapshot aware Host, a Strict Remote surface and an agent-facing status tool",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icon": "./icon.svg",
   "type": "module",
   "main": "lib/index.js",

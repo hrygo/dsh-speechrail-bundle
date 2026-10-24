@@ -24,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.3.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.4.0/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -78,6 +78,11 @@ What changes on a non-SpeechRail engine, and what does not:
 - Discovery is fixed: only `/v1/speechrail/capabilities` is consulted, never `/v1/models`, so an
   engine without that endpoint is permanently "unstated" by construction. `usage` is likewise no
   longer evidence that the response came from SpeechRail — its absence is accepted on purpose.
+- A take that is refused for its length or size is named as such: `audio-too-long` and
+  `audio-too-large` distinguish "speak for less time" and "send less audio" from a malformed
+  recording, including a take too large to fit the transport that carries it. When the service states
+  a reason of its own, that reason is used rather than the status code alone (a declared
+  `audio_decode_failed` is an audio problem, and a declared 429 is throttling worth retrying).
 - `model` is sent only when configured. Configure the engine's own model id (or leave it empty for
   engines that ignore the field); a SpeechRail model id sent to another engine surfaces as
   `bad-request`.
