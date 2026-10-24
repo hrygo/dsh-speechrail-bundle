@@ -75,6 +75,14 @@ function documentedUrls() {
 
 const urls = documentedUrls()
 if (urls.length === 0) problems.push('no documented install URL names a release tag')
+// A dropped URL is as misleading as a stale one: the English entry point and the package README are
+// where someone looks for the install command, so each must carry one.
+const requiredFiles = ['README.md', ...packages.map((manifest) => `packages/${manifest.dir}/README.md`)]
+for (const required of requiredFiles) {
+  if (!urls.some((url) => url.file === required)) {
+    problems.push(`${required}: no install URL naming a release tag`)
+  }
+}
 for (const url of urls) {
   if (!versions.includes(url.version)) {
     problems.push(`${url.file}: install URL names v${url.version}, but the bundle is ${versions.join('/')}`)
@@ -96,4 +104,5 @@ if (problems.length > 0) {
 
 const names = packages.map((manifest) => `${manifest.name}@${manifest.version}`).join(', ')
 const tags = tag === '' ? 'no tag checked' : tag
-console.log(`check-release-consistency: ${names}; ${String(urls.length)} install URL(s) agree; ${tags}`)
+const files = [...new Set(urls.map((url) => url.file))].join(', ')
+console.log(`check-release-consistency: ${names}; ${String(urls.length)} install URL(s) in ${files} agree; ${tags}`)
