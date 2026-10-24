@@ -1,7 +1,7 @@
 {
   "name": "@hrygo/dsh-speechrail-bundle",
   "description": "Independent voice input bundle that transcribes browser recordings with a local SpeechRail service",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "./icon.svg",
   "type": "module",
   "main": "lib/index.js",
@@ -15,7 +15,6 @@
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
@@ -42,7 +41,7 @@
     "lib/typert.host.d.ts",
     "lib/typert.remote-client.js",
     "lib/typert.remote-client.d.ts",
-    "lib/types/**/*.js",
+    "lib/types/types.js",
     "lib/types/**/*.d.ts",
     "LICENSE",
     "README.md",

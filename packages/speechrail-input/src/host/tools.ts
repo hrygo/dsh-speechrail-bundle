@@ -165,8 +165,13 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
     async execute(args) {
       // Raw registration does not re-validate arguments, so treat anything other
       // than an explicit `true` as "do not probe".
-      const probed = (args as { readonly probe?: unknown } | null | undefined)?.probe === true
-      const check = probed ? await source.check() : null
+      const asked = (args as { readonly probe?: unknown } | null | undefined)?.probe === true
+      const check = asked ? await source.check() : null
+      // A check that never left the host (no credential, unusable endpoint) did not ask
+      // the service anything, so reporting it as an unreachable service would be false.
+      const probed = check !== null
+        && check.failure?.code !== 'not-configured'
+        && check.failure?.code !== 'endpoint-invalid'
       const view = await source.status()
       return {
         credentialConfigured: view.credentialConfigured,

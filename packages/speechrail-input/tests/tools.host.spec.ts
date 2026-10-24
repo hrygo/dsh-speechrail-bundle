@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { STATUS_TOOL_NAME, describeStatus, createStatusTool, type StatusToolSource, type StatusToolValue } from '../src/host/tools.ts'
+import { failure } from '../src/host/failure.ts'
 import type { SpeechRailCheckResult, SpeechRailInputStatus } from '../src/types.ts'
 
 const STATUS: SpeechRailInputStatus = {
@@ -122,6 +123,22 @@ describe('speechrail_input_status', () => {
     expect(value.pendingOperationId).toBe('op_aaaaaaaa')
     // Nothing sensitive can appear: the canonical value has no free-text carrier.
     expect(JSON.stringify(value)).not.toContain('SPEECHRAIL_API_KEY')
+  })
+
+  it('does not report a service as unreachable when no request was ever made', async () => {
+    const { stub } = source({ credentialConfigured: false })
+    const neverAsked: StatusToolSource = {
+      ...stub,
+      check: async () => ({ ...CHECK, reachable: false, authenticated: false, failure: failure('not-configured') }),
+    }
+    const tool = createStatusTool(neverAsked)
+    const value = await tool.execute({ probe: true }) as StatusToolValue
+
+    expect(value.probed).toBe(false)
+    const [block] = tool.output.render({ probe: true }, value)
+    const text = (block as { text: string }).text
+    expect(text).toContain('service not probed')
+    expect(text).not.toContain('service unreachable')
   })
 
   it('renders one bounded line naming the blocking facts', async () => {

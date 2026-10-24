@@ -10,6 +10,8 @@
  */
 
 import {
+  MAX_REQUEST_TIMEOUT_MS,
+  MIN_REQUEST_TIMEOUT_MS,
   CONFIG_PAYLOAD_MAX_BYTES,
   TRANSCRIBE_PAYLOAD_MAX_BYTES,
   type SpeechRailAcknowledgeRequest,
@@ -157,7 +159,12 @@ export function parseConfigureRequest(text: string): ParseResult<SpeechRailConfi
   const timeout = record.requestTimeoutMs
   const revision = record.expectedRevision
   if (language !== 'auto' && language !== 'zh' && language !== 'en') return refuse('bad-request')
-  if (typeof timeout !== 'number' || !Number.isInteger(timeout)) return refuse('bad-request')
+  // The schema bound is the only other place this range exists, and `settings.write`
+  // validates shape and volatility rather than `min`/`max`: without this check an
+  // out-of-range value is persisted, after which the entry fails to activate.
+  if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < MIN_REQUEST_TIMEOUT_MS || timeout > MAX_REQUEST_TIMEOUT_MS) {
+    return refuse('bad-request')
+  }
   if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return refuse('bad-request')
   return { ok: true, value: { language, requestTimeoutMs: timeout, expectedRevision: revision } }
 }
@@ -223,6 +230,23 @@ export class SpeechRailInputCore {
       this.gateState = 'unknown'
       this.pendingOperationId = state.pending.operationId
     }
+  }
+
+  /**
+   * Re-read the journal after an unreadable medium, adopting whatever it now reports.
+   * @returns after the gate reflects the readable record, if any.
+   */
+  private async reopenJournal(): Promise<void> {
+    const state = await this.deps.journal.read()
+    this.journalUnreadable = !state.available
+    if (!state.available) return
+    if (state.pending === null) {
+      this.gateState = 'ready'
+      this.pendingOperationId = null
+      return
+    }
+    this.gateState = 'unknown'
+    this.pendingOperationId = state.pending.operationId
   }
 
   /**
@@ -390,6 +414,11 @@ export class SpeechRailInputCore {
   async transcribe(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
     const parsed = parseTranscribeRequest(text)
     if (!parsed.ok) return { ok: false, transcript: null, failure: parsed.failure }
+    // A medium that could not be opened at boot may be available now. Without this
+    // re-read a transient storage failure would disable every upload until the user
+    // acknowledged a record that never existed; only the unreadable variant is retried,
+    // never a genuinely unproven outcome.
+    if (this.gateState === 'unknown' && this.journalUnreadable) await this.reopenJournal()
     const claim = this.claim(parsed.value.operationId)
     if (!claim.ok) return { ok: false, transcript: null, failure: claim.failure }
     return await this.run(parsed.value, signal)

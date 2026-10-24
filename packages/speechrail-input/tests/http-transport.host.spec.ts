@@ -250,6 +250,20 @@ describe('capability probe', () => {
     expect(unbracketHostname('localhost')).toBe('localhost')
   })
 
+  it('reports a service that answered as reachable when its body never arrives', async () => {
+    // The response head proves the service is up; a stall after it must not be reported
+    // as an unreachable service.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.write('{"transcription"')
+    })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 300 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.failure?.code).toBe('timeout')
+    expect(outcome.reachable).toBe(true)
+  })
+
   it('reports a response that arrived as reachable even when its body is refused', async () => {
     const server = await start((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })

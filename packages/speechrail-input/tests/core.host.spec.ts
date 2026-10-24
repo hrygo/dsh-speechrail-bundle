@@ -143,6 +143,21 @@ function payload(operationId: string, samples = 16_000): string {
   return JSON.stringify({ operationId, audioBase64: audio(samples) })
 }
 
+describe('unreadable medium recovery', () => {
+  it('re-reads the journal once it is readable instead of refusing forever', async () => {
+    // A medium that cannot be opened at boot used to disable every upload until the user
+    // acknowledged a record that never existed, even after storage came back.
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+
+    const result = await h.core.transcribe(payload('op_wwwwwwww'))
+    expect(result.ok).toBe(true)
+    expect(h.sends).toHaveLength(1)
+  })
+})
+
 describe('journal descriptor', () => {
   it('uses a unit name the storage backend accepts', () => {
     // The backend rule is /^[a-z][a-z0-9_]*$/: a hyphen makes kv.open() reject the
@@ -183,6 +198,11 @@ describe('payload strictness', () => {
     expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, expectedRevision: 3, extra: 1 }))).failure?.code).toBe('bad-request')
     expect((await h.core.configure(JSON.stringify({ language: 'ja', requestTimeoutMs: 5_000, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 1.5, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    // The schema bound exists only in the Config schema, and settings.write validates
+    // shape rather than min/max: an out-of-range value would be persisted and would then
+    // stop the entry activating on the next load.
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 10, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 999_999_999, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     expect((await h.core.configure('x'.repeat(CONFIG_PAYLOAD_MAX_BYTES + 1))).failure?.code).toBe('bad-request')
     expect(h.writes).toHaveLength(0)
   })

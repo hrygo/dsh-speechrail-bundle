@@ -97,11 +97,19 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
       resolve(result)
     }
 
-    /** Classify a transport failure: bytes already written make the remote outcome unprovable. */
+    /**
+     * Classify a transport failure: bytes already written make the remote outcome unprovable.
+     *
+     * `responded` is the status of a response head that did arrive. A stall or a reset
+     * mid-body therefore still reports the service as reachable, which is what the
+     * probe's `reachable` field promises.
+     */
     const transportFailure = (code: SpeechRailFailureCode): void => {
-      finish({ ok: false, failure: wrote ? unknownFailure(code) : failure(code), sent: wrote })
+      const options = { httpStatus: responded }
+      finish({ ok: false, failure: wrote ? unknownFailure(code, options) : failure(code, options), sent: wrote })
     }
 
+    let responded: number | null = null
     let request: ClientRequest
     try {
       const target = new URL(options.url)
@@ -146,6 +154,7 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
     request.on('error', () => { transportFailure(aborted ? 'cancelled' : timedOut ? 'timeout' : 'unreachable') })
 
     request.on('response', (response: IncomingMessage) => {
+      responded = response.statusCode ?? null
       const chunks: Buffer[] = []
       let bytes = 0
       response.on('data', (chunk: Buffer) => {
