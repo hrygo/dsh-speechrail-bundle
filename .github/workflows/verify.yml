@@ -20,5 +20,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # verify:ci checks the frozen snapshot hashes only: the pinned upstream commit's
+      # git objects are not in this repository (the local `pnpm verify` also compares
+      # them, from the upstream remote this runner does not have).
       - name: Verify baseline, generate, typecheck, build, test
-        run: pnpm verify
+        run: pnpm verify:ci

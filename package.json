@@ -17,7 +17,8 @@
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "verify:baseline": "python3 tools/verify-upstream.py --git",
     "verify": "pnpm verify:baseline && pnpm build && pnpm check:journal && pnpm test",
-    "check:journal": "node tools/check-journal-unit.mjs"
+    "check:journal": "node tools/check-journal-unit.mjs",
+    "verify:ci": "python3 tools/verify-upstream.py && pnpm build && pnpm check:journal && pnpm test"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
