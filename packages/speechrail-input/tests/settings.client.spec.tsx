@@ -196,7 +196,7 @@ describe('SpeechRailSettings check row verdicts', () => {
   it('adopts a value nobody edited instead of writing the stale one back', async () => {
     // The refresh moves the revision, so an untouched field must move with it; otherwise
     // the next save reverts another writer's change while passing the conflict check.
-    const configure = vi.fn(async () => ({ ok: true, revision: 2, failure: null }))
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
     const base = props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })
     const status = vi.fn()
       .mockResolvedValueOnce({ ...STATUS, language: 'auto' as const, requestTimeoutMs: 150_000, revision: 1 })
@@ -307,7 +307,7 @@ describe('SpeechRailSettings check row verdicts', () => {
     const status = vi.fn()
       .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { releaseMount = resolve }))
       .mockResolvedValue({ ...STATUS, language: 'en', languageOptions: ['auto', 'zh', 'en'], requestTimeoutMs: 60_000, revision: 2 })
-    const configure = vi.fn(async () => ({ ok: true, revision: 2, failure: null }))
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
     render(<SpeechRailSettings {...props({}, { configure: configure as never })} status={status} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
