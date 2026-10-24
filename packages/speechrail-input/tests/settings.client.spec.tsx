@@ -59,6 +59,27 @@ function props(
   } as unknown as SpeechRailSettingsProps
 }
 
+describe('SpeechRailSettings gate cause', () => {
+  it('names the cause of a closed gate the host still remembers', async () => {
+    // The host keeps the failure that left the attempt unproven, so the page can say what happened
+    // rather than only that something is unconfirmed - the case after a reload, when this component
+    // knows nothing about the attempt itself.
+    render(
+      <SpeechRailSettings {...props({
+        gate: 'unknown',
+        pendingOperationId: 'op_aaaaaaaa',
+        unprovenFailure: { code: 'timeout', httpStatus: 0, retryable: true, requestId: null, outcome: 'unknown' },
+      })} />,
+    )
+    expect(await screen.findByText('gateUnknown failure.timeout')).toBeTruthy()
+  })
+
+  it('says only that the gate is closed when the host has no cause to give', async () => {
+    render(<SpeechRailSettings {...props({ gate: 'unknown', pendingOperationId: 'op_aaaaaaaa', unprovenFailure: null })} />)
+    expect(await screen.findByText('gateUnknown')).toBeTruthy()
+  })
+})
+
 describe('SpeechRailSettings acknowledge', () => {
   it('does not claim success while an operation still holds the gate', async () => {
     const acknowledge = vi.fn(async () => ({ ok: true, pendingOperationId: 'op_bbbbbbbb', failure: null }))

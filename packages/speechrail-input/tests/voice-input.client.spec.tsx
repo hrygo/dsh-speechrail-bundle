@@ -68,6 +68,29 @@ describe('VoiceInput acknowledge', () => {
     expect(await screen.findByText('failure.internal')).toBeTruthy()
   })
 
+  it('names the cause of a closed gate the host still remembers', async () => {
+    // A page reload forgets this component's own record of the attempt, but the host keeps the failure
+    // that left it unproven, so the row can say what happened instead of only that something is
+    // unconfirmed. Nothing is invented when the host knows nothing.
+    const acknowledge = async () => ({ ok: true, pendingOperationId: null, failure: null })
+    render(
+      <VoiceInput
+        {...props({
+          gate: 'unknown',
+          pendingOperationId: 'op_aaaaaaaa',
+          unprovenFailure: { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' },
+        }, acknowledge)}
+      />,
+    )
+    expect(await screen.findByText('gateUnknown failure.server-error (req_1)')).toBeTruthy()
+  })
+
+  it('says only that the gate is closed when the host has no cause to give', async () => {
+    const acknowledge = async () => ({ ok: true, pendingOperationId: null, failure: null })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: 'op_aaaaaaaa' }, acknowledge)} />)
+    expect(await screen.findByText('gateUnknown')).toBeTruthy()
+  })
+
   it('sends an explicit null when the stored record was unreadable', async () => {
     // Previously the control returned silently here, leaving the gate closed forever.
     const acknowledge = vi.fn(async () => { throw new Error('refused') })

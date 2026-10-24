@@ -248,7 +248,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       <div style={rowStyle}>
         <span style={labelStyle}>{t('settings.gate')}</span>
         <span style={valueStyle}>
-          {view?.gate === 'unknown' ? t('gateUnknown') : view?.gate === 'busy' ? t('gateBusy') : t('gateReady')}
+          {view !== undefined && view.gate === 'unknown'
+            // The host remembers the failure that left this attempt unproven, so the page can name
+            // the cause even after a reload cleared everything this component knew about it.
+            ? (view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`)
+            : view?.gate === 'busy' ? t('gateBusy') : t('gateReady')}
         </span>
         {view?.pendingOperationId !== null && view?.pendingOperationId !== undefined && (
           <span style={valueStyle}>{t('settings.pendingOperation', { id: view.pendingOperationId })}</span>

@@ -200,6 +200,13 @@ export function VoiceInput({
     return failure.requestId === null ? text : `${text} (${failure.requestId})`
   }
 
+  // What the closed gate is waiting for, plus the cause when the host knows one: the host keeps the
+  // failure that left the attempt unproven, so the reason survives a page reload that forgets this
+  // component's own record of it.
+  const gateCause = view !== undefined && view.gate === 'unknown' && view.unprovenFailure !== null
+    ? `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`
+    : t('gateUnknown')
+
   const captureText = (error: unknown): string => {
     if (error instanceof RecordingError) return t(`capture.${error.kind}`)
     return t('failure.internal')
@@ -383,7 +390,14 @@ export function VoiceInput({
         )}
         {message !== ''
           ? <span role="status" style={messageStyle} title={message}>{message}</span>
-          : view?.gate === 'unknown' && <span role="status" style={messageStyle} title={t('gateUnknown')}>{t('gateUnknown')}</span>}
+          : view?.gate === 'unknown' && (
+            // The host keeps the failure that left this attempt unproven, so the cause survives a page
+            // reload even though this component's own record of the attempt does not. Without it the
+            // row can only say that something is unconfirmed.
+            <span role="status" style={messageStyle} title={gateCause}>
+              {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`}
+            </span>
+          )}
       </div>
     )
   }
