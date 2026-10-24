@@ -2,7 +2,8 @@
  * Defensive projection of the untrusted SpeechRail capability snapshot.
  *
  * Nothing here trusts a field: an absent, mistyped or unexpected value degrades to
- * "unknown", and unknown language support never widens the language selector.
+ * "unknown", and a snapshot that does not enumerate languages never decides one for the service: the
+ * selector offers every known mode and the choice travels as an unverified hint.
  * @module @hrygo/dsh-speechrail-bundle/host/capabilities
  */
 
@@ -65,12 +66,15 @@ export function clampLimits(
 }
 
 /** Normalize an advertised language list into admitted values. */
-function projectLanguages(transcription: Record<string, unknown>): { readonly status: 'supported' | 'unknown'; readonly values: readonly string[] } {
+function projectLanguages(transcription: Record<string, unknown>): { readonly status: 'supported' | 'unknown' | 'unsupported'; readonly values: readonly string[] } {
   // A service that reports transcription as unsupported states nothing useful about
   // languages: admitting them would widen the selector for an endpoint that cannot
   // transcribe at all.
   if (transcription.status !== 'supported') return { status: 'unknown', values: [] }
   const languages = objectAt(transcription, 'languages')
+  // An explicit refusal is not the same statement as silence: the service said it takes no language
+  // hint, so none may be invented for it.
+  if (languages?.status === 'unsupported') return { status: 'unsupported', values: [] }
   const raw = languages?.values
   if (languages?.status !== 'supported' || !Array.isArray(raw)) return { status: 'unknown', values: [] }
   const values = new Set<string>()
@@ -124,6 +128,7 @@ export function projectCapabilities(snapshot: unknown, previous?: SpeechRailLimi
 export function languageOptionsFor(view: SpeechRailCapabilitiesView | null): readonly SpeechRailLanguageMode[] {
   if (view === null) return ['auto', ...KNOWN_LANGUAGES]
   if (!view.transcriptionSupported) return ['auto']
+  if (view.languages.status === 'unsupported') return ['auto']
   if (view.languages.status !== 'supported') return ['auto', ...KNOWN_LANGUAGES]
   const admitted = KNOWN_LANGUAGES.filter((mode) => view.languages.values.includes(mode))
   return ['auto', ...admitted]

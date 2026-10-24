@@ -105,9 +105,26 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
      * mid-body therefore still reports the service as reachable, which is what the
      * probe's `reachable` field promises.
      */
+    /**
+     * Classify a transport failure: bytes already written make the remote outcome unprovable.
+     *
+     * Unless a final status of 300 or more arrived first. That is a proven refusal - the service
+     * answered, and did not process the request - so the gate settles instead of demanding that the
+     * user acknowledge an operation the service already rejected. A 2xx (or an informational 1xx)
+     * head proves nothing about the body, so that stays an unproven outcome.
+     */
     const transportFailure = (code: SpeechRailFailureCode): void => {
-      const options = { httpStatus: responded }
-      finish({ ok: false, failure: wrote ? unknownFailure(code, options) : failure(code, options), sent: wrote })
+      const status = responded
+      const options = { httpStatus: status }
+      finish({
+        ok: false,
+        failure: !wrote
+          ? failure(code, options)
+          : status !== null && status >= 300
+            ? failureForStatus(status, null, null, null)
+            : unknownFailure(code, options),
+        sent: wrote,
+      })
     }
 
     let responded: number | null = null
@@ -177,7 +194,16 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         bytes += chunk.byteLength
         if (bytes > options.maxResponseBytes) {
           response.destroy()
-          finish({ ok: false, failure: unknownFailure('malformed-response', { httpStatus: response.statusCode ?? null }), sent: true })
+          const status = response.statusCode ?? null
+          // Same rule as a stalled body: a >=300 head is a proven refusal even when the body that
+          // followed it was unusable.
+          finish({
+            ok: false,
+            failure: status !== null && status >= 300
+              ? failureForStatus(status, null, null, null)
+              : unknownFailure('malformed-response', { httpStatus: status }),
+            sent: true,
+          })
           return
         }
         chunks.push(chunk)
@@ -399,12 +425,16 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
     // headers); `httpStatus` records that it did, so report reachability honestly. A
     // 404/405 that arrived with an unusable body still proves the endpoint is absent, so
     // that is classified from the status rather than from the failure the body produced.
+    // A status head that arrived judges what it judges, whatever the body then did: a 401 whose
+    // body was over the cap or stalled still proves the credential was refused, and a 404/405 still
+    // proves the endpoint is absent. Only a status that judged nothing leaves the verdict open.
     const status = result.failure.httpStatus
     const absent = status === 404 || status === 405
+    const refused = status === 401 || status === 403
     return {
       ok: false,
       reachable: status !== null,
-      authenticated: 'unverified',
+      authenticated: refused ? 'refused' : 'unverified',
       failure: absent ? failure('capabilities-absent', { httpStatus: status }) : result.failure,
     }
   }

@@ -286,6 +286,85 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     expect((await core.status()).gate).toBe('ready')
   })
 
+  it('reports the language the wire will carry, never the one that was configured', async () => {
+    // The tool's own description promises the language in force. Before this, a snapshot that
+    // admitted only `en` still made it report `zh` while the upload carried no language at all.
+    const service = await engine({
+      capabilities: (response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({
+          schema_version: 'effective_capabilities_v1',
+          operations: {
+            transcription: {
+              status: 'supported',
+              languages: { status: 'supported', values: ['en'] },
+              input: { max_upload_bytes: 1_048_576, max_audio_seconds: 30 },
+            },
+          },
+        }))
+      },
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end('{"text":"ok"}')
+      },
+    })
+    const core = coreOver(service, 'zh')
+    const value = await createStatusTool(core).execute({ probe: true }) as StatusToolValue
+    expect(value.language).toBe('zh')
+    expect(value.languageHint).toBe('')
+    expect(value.languageOptions).toEqual(['auto', 'en'])
+    expect(describeStatus(value)).toContain('language zh with no hint sent')
+
+    // And the wire agrees with the line the agent was given.
+    await core.transcribe(payload('op_ge0000004'))
+    expect(fieldOf(service.posts[0] ?? '', 'language')).toBeNull()
+  })
+
+  it('says out loud that an unsupported snapshot refuses every upload', async () => {
+    // `service reachable and authorized` is true of the credential and was read as "usable" while
+    // the host refused every upload: the operation's own state is now part of the line.
+    const service = await engine({
+      capabilities: (response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({
+          schema_version: 'effective_capabilities_v1',
+          operations: { transcription: { status: 'unsupported', reason: 'asr_not_ready' } },
+        }))
+      },
+      transcription: (_request, response) => { response.writeHead(500).end() },
+    })
+    const core = coreOver(service, 'zh')
+    const value = await createStatusTool(core).execute({ probe: true }) as StatusToolValue
+    expect(value.transcriptionSupported).toBe('unsupported')
+    expect(value.languageHint).toBe('')
+    const text = describeStatus(value)
+    expect(text).toContain('transcription unsupported by the service')
+    expect(text).toContain('every upload is refused before the audio is sent')
+    // The credential verdict still reports what the probe proved, and nothing more.
+    expect(value.authenticated).toBe('accepted')
+  })
+
+  it('settles the gate on a 401 the service plainly answered', async () => {
+    // A proven refusal must not look like an unproven outcome: the user would have to acknowledge
+    // an operation the service had already rejected.
+    const service = await engine({
+      capabilities: (response) => { response.writeHead(404).end() },
+      transcription: (_request, response) => {
+        response.writeHead(401, { 'content-type': 'application/json' })
+        response.end(`{"error":"${'a'.repeat(300_000)}"}`)
+      },
+    })
+    const core = coreOver(service)
+    await core.check()
+    const result = await core.transcribe(payload('op_ge0000005'))
+    expect(result.failure?.code).toBe('unauthorized')
+    expect(result.failure?.outcome).toBe('failed')
+
+    const view = await core.status()
+    expect(view.gate).toBe('ready')
+    expect(view.pendingOperationId).toBeNull()
+  })
+
   it('describes each profile truthfully to the agent that asks', async () => {
     // The agent-facing line once called a transcription-only engine "not accepting the request";
     // it is pinned here for both profiles, over the same real sockets the rest of this file uses.

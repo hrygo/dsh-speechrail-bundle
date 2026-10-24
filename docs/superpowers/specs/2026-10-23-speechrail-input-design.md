@@ -149,14 +149,14 @@ requestSeconds 用 Host monotonic clock 测量出站请求开始至响应正文�
 
 有效快照必须满足：schema_version 精确为 `effective_capabilities_v1`；`operations.transcription.status === 'supported'`；`operations.transcription.output.formats` 含 json；`operations.transcription.input.max_upload_bytes`、`.max_audio_seconds` 是有限正数。没有 `.available` 或 `.ready` 公开字段，不能猜字段。
 
-读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、只开放 auto，不把语言域 unknown 偷换成整个 ASR 不可用。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible（**2026-10-24 修订，0.2.0**：能力端点答 404/405 时不再算
+读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、开放全部已知语言并把用户选择作为**未验证提示**发送（**2026-10-24 修订，0.2.3**：原设计"unknown 只开放 auto"已被活的 SpeechRail 证据推翻——本机快照为 `transcription.status: supported` + `languages.status: unknown`，而其 `/v1/audio/transcriptions` 的 OpenAPI 明确接受 `language` 提示；不把语言域 unknown 偷换成整个 ASR 不可用）；`unsupported` 则只开放 auto，不臆造语言域。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible（**2026-10-24 修订，0.2.0**：能力端点答 404/405 时不再算
   失败，而是稳定的 `capabilities-absent`，服务按纯转写端点继续可用；501 仍按 5xx 处理）；supported 以外显示 unavailable。能力服务自身故障不能推断 ASR 模型已坏。
 
 这些嵌套字段来自本机 SpeechRail 参考实现的 `capability_snapshot.py`（未随本仓库分发），OpenAPI 对 operations 为开放对象；因此必须有专用投影测试，不声称机器契约已完整枚举。
 
 有效录音上限取 `min(4194304, max_upload_bytes)` 与 `min(120, max_audio_seconds, (有效字节上限-44)/32000)`，按完整PCM帧向下取整。不能容纳至少一个PCM帧则 unavailable。将两项有效上限随 status 发给 Client，计时器/编码截断与 Host 校验共用；服务限额更小不静默超限。
 
-检查结果只表示当时路由可用性，缓存最长30秒且绑定规范化端点、配置revision和凭据引用上下文。录音前过期则只读刷新，失败不开始麦克风；每次真正POST前重新解析凭据并重做能力检查，服务或语言变化时不上传。配置/已知凭据更新使缓存失效；不跨认证上下文复用304。检查不能清除 draining/outcome-unknown，也不证明前一请求完成，不触发模型准备或服务管理。
+检查结果只表示当时路由可用性。（**2026-10-24 修订，0.2.5**：以下为原设计，已由实现有意取代——快照**不设过期时间**，`checkedAt` 只作展示，`check()` 仅由设置页按钮与 agent 工具触发，上传前不做能力重检。理由：每次听写都插入一轮网络往返，并可能在用户已经说完之后才新增一次拒绝；最后一次服务声明持续生效，若服务实际不同意则由它自己的错误回答暴露。原"缓存最长30秒""每次POST前重做能力检查"未实现，故不在此继续声称。）能力检查的结论仍受规范化端点、配置 revision 与凭据引用上下文约束；配置或已知凭据更新会重启条目并丢弃快照；不跨认证上下文复用任何结论。检查不能清除 draining/outcome-unknown，也不证明前一请求完成，不触发模型准备或服务管理。
 
 ## 7. 生命周期、取消和并发
 
@@ -340,6 +340,14 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N2（低，两处防御缺口）** (a) `projectLanguages` 原先只看 `languages.status`，于是服务声明 `transcription.status: 'unsupported'` 时仍会放开语言选择器；现改为仅在 `transcription.status === 'supported'` 时采纳语言。(b) `run()` 原先不看 `transcriptionSupported`，服务已声明不支持转写时仍会先上传；现于上传前以新增稳定错误码 `unsupported` 拒绝（错误码表、类型联合、中英文本均已补齐），且不占用门禁——因为并未发出请求。若快照为 `null`（未声明），则不视为拒绝。该链路已有端到端测试：真实回环服务返回 `status: 'unsupported'` 的 200 → 投影得到 `transcriptionSupported: false` 且语言为空 → 运行路径据此在上传前拒绝。
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
+
+## 2026-10-24 决定记录（0.2.5：把"报什么"和"做什么"对齐）
+
+- agent 工具此前把**配置的**语言当作"生效语言"报告，且不报告转写操作本身的状态：对一个快照声明 `transcription: unsupported` 的服务，工具输出 `service reachable and authorized; gate ready; limits …`，而 core 会拒绝每一次上传。现在 `status()` 与上传共用同一个 `effectiveLanguageHint()`，工具新增 `languageHint` / `transcriptionSupported` / `languageOptions` 三个字段，并在文本里显式写出"transcription unsupported … every upload is refused before the audio is sent"。
+- 401/403 的判定只看**状态行**，与响应体是否可用无关：此前 401+超限/卡住的响应体会被报成 `unverified`，同一个 401 的结论取决于响应体形状。
+- 上传路径上"已经到达的 ≥300 状态"是**已证明的拒绝**，不再升级为未证明结果：此前 401+超限体会让 gate 进入 unknown 并要求用户确认一次服务已经明确拒绝的操作；200/1xx 头到达后响应体损坏仍按未证明处理（那确实什么都没证明）。
+- 能力投影保留 `languages.status: unsupported` 这一**明确拒绝**，与"没有声明"分开；此前两者都被折成 unknown，于是会给明确拒绝语言提示的服务发送语言提示。
+- composer 在转写中显示随本次请求发出的语言提示；设置页的语言标注改为与 `languageOptions` 同源（`view.capabilities`），避免用旧检查结果配新投影。
 
 ## 2026-10-24 决定记录（0.2.0：同机其他引擎）
 

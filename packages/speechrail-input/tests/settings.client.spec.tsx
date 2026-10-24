@@ -28,6 +28,8 @@ const STATUS: SpeechRailInputStatus = {
   credentialRef: 'SPEECHRAIL_API_KEY',
   credentialConfigured: false,
   language: 'auto',
+  languageHint: '' as const,
+  transcriptionSupported: 'unknown' as const,
   languageOptions: ['auto'],
   requestTimeoutMs: 150_000,
   limits: { maxUploadBytes: 4_194_304, maxAudioSeconds: 120 },

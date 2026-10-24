@@ -54,9 +54,21 @@ export interface SpeechRailFailure {
 }
 
 /** Advertised language support, projected from the service snapshot. */
+/**
+ * What is known about the transcription operation itself.
+ *
+ * Three states, because "the service never said" must not read as "the service said no": the
+ * settings page and the agent tool both have to distinguish an engine that refuses every upload
+ * from one that simply does not describe itself.
+ */
+export type SpeechRailTranscriptionSupport = 'supported' | 'unsupported' | 'unknown'
+
 export interface SpeechRailLanguageView {
-  /** `supported` only when the service enumerated concrete language values. */
-  readonly status: 'supported' | 'unknown'
+  /**
+   * `supported` only when the service enumerated concrete language values, `unsupported` when it
+   * said so explicitly, `unknown` when it said nothing usable.
+   */
+  readonly status: 'supported' | 'unknown' | 'unsupported'
   /** Enumerated language values, lower-cased and de-duplicated. */
   readonly values: readonly string[]
 }
@@ -101,6 +113,16 @@ export interface SpeechRailInputStatus {
   readonly credentialConfigured: boolean
   /** Configured language mode. */
   readonly language: SpeechRailLanguageMode
+  /**
+   * The language hint the next upload will actually carry, or an empty string when none will:
+   * `auto` never sends one and a language the service refused to admit is withheld.
+   */
+  readonly languageHint: string
+  /**
+   * What the snapshot in force states about the transcription operation, or `unknown` when none
+   * is in force.
+   */
+  readonly transcriptionSupported: SpeechRailTranscriptionSupport
   /** Language modes the capability snapshot currently admits. */
   readonly languageOptions: readonly SpeechRailLanguageMode[]
   /** One request budget in milliseconds. */

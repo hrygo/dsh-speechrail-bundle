@@ -19,6 +19,8 @@ const STATUS: SpeechRailInputStatus = {
   credentialRef: 'SPEECHRAIL_API_KEY',
   credentialConfigured: true,
   language: 'zh',
+  languageHint: '' as const,
+  transcriptionSupported: 'unknown' as const,
   languageOptions: ['auto', 'zh', 'en'],
   requestTimeoutMs: 150_000,
   limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
@@ -69,7 +71,7 @@ describe('speechrail_input_status', () => {
     expect(schema.type).toBe('object')
     expect(schema.additionalProperties).toBe(false)
     const names = Object.keys(schema.properties)
-    expect(names).toHaveLength(13)
+    expect(names).toHaveLength(16)
     expect([...schema.required].sort()).toEqual([...names].sort())
     for (const [name, property] of Object.entries(schema.properties)) {
       // Requiredness belongs to the top-level array only. A per-property `required`
@@ -114,6 +116,11 @@ describe('speechrail_input_status', () => {
       endpointProblem: '',
       model: 'asr-1.7b-q8',
       language: 'zh',
+      // The stub's fixture stands in for a host that has no snapshot in force: it reports the
+      // language that was configured, no hint that would travel, and no statement about support.
+      languageHint: '',
+      transcriptionSupported: 'unknown',
+      languageOptions: ['auto', 'zh', 'en'],
       gate: 'ready',
       pendingOperationId: '',
       maxUploadBytes: 1_048_576,
@@ -222,6 +229,9 @@ describe('speechrail_input_status', () => {
       endpointProblem: '',
       model: '',
       language: 'auto',
+      languageHint: '',
+      transcriptionSupported: 'unknown',
+      languageOptions: ['auto'],
       gate: 'ready',
       pendingOperationId: '',
       maxUploadBytes: 4_194_304,
@@ -245,6 +255,9 @@ describe('speechrail_input_status', () => {
       endpointProblem: '',
       model: '',
       language: 'auto',
+      languageHint: '',
+      transcriptionSupported: 'unknown',
+      languageOptions: ['auto'],
       gate: 'ready',
       pendingOperationId: '',
       maxUploadBytes: 4_194_304,

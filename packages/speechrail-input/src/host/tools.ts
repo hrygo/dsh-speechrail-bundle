@@ -20,7 +20,12 @@
  * @module @hrygo/dsh-speechrail-bundle/host/tools
  */
 
-import type { SpeechRailAuthentication, SpeechRailCheckResult, SpeechRailInputStatus } from '../types.ts'
+import type {
+  SpeechRailAuthentication,
+  SpeechRailCheckResult,
+  SpeechRailInputStatus,
+  SpeechRailTranscriptionSupport,
+} from '../types.ts'
 
 /** Registered tool name. */
 export const STATUS_TOOL_NAME = 'speechrail_input_status'
@@ -96,8 +101,14 @@ export interface StatusToolValue {
   readonly endpointProblem: string
   /** Configured model id, or an empty string when the service chooses. */
   readonly model: string
-  /** Effective language hint. */
+  /** Configured language mode. */
   readonly language: string
+  /** Language hint the next upload will actually carry, or an empty string when none will. */
+  readonly languageHint: string
+  /** What the snapshot in force states about the transcription operation. */
+  readonly transcriptionSupported: SpeechRailTranscriptionSupport
+  /** Language modes the snapshot in force admits for this endpoint. */
+  readonly languageOptions: readonly string[]
   /** Whether a recording may start, or the state blocking it. */
   readonly gate: string
   /** Operation id awaiting acknowledgement, or an empty string. */
@@ -125,7 +136,18 @@ const OUTPUT_SCHEMA = {
     endpoint: { type: 'string', description: 'Effective loopback base URL, or an empty string when the configured endpoint was refused.' },
     endpointProblem: { type: 'string', description: 'Why the configured endpoint is unusable, or an empty string when it is fine.' },
     model: { type: 'string', description: 'Configured model id, or an empty string when the service chooses.' },
-    language: { type: 'string', description: 'Effective language hint: `auto`, `zh` or `en`.' },
+    language: { type: 'string', description: 'Configured language mode: `auto`, `zh` or `en`.' },
+    languageHint: { type: 'string', description: 'The language hint the next upload will actually carry, or an empty string when none will.' },
+    languageOptions: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Language modes the snapshot in force admits for this endpoint.',
+    },
+    transcriptionSupported: {
+      type: 'string',
+      enum: ['supported', 'unsupported', 'unknown'],
+      description: 'Whether the endpoint states it can transcribe: `unsupported` means every upload is refused before the audio is sent, `unknown` that no snapshot said.',
+    },
     gate: { type: 'string', description: 'Whether a recording may start: `ready` otherwise, or the blocking state.' },
     pendingOperationId: { type: 'string', description: 'Operation id awaiting acknowledgement, or an empty string when none is.' },
     maxUploadBytes: { type: 'number', description: 'Largest upload the next recording may produce.' },
@@ -140,9 +162,9 @@ const OUTPUT_SCHEMA = {
     failureCode: { type: 'string', description: 'Probe failure code in this call, or an empty string.' },
   },
   required: [
-    'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'gate',
-    'pendingOperationId', 'maxUploadBytes', 'maxAudioSeconds', 'probed', 'reachable', 'authenticated',
-    'failureCode',
+    'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'languageHint',
+    'languageOptions', 'transcriptionSupported', 'gate', 'pendingOperationId', 'maxUploadBytes',
+    'maxAudioSeconds', 'probed', 'reachable', 'authenticated', 'failureCode',
   ],
 } as const
 
@@ -155,7 +177,7 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
   return {
     name: STATUS_TOOL_NAME,
     description:
-      'Report whether local SpeechRail voice input is usable right now: the effective loopback endpoint, whether it is accepted, whether the configured credential resolves, whether the service answers and accepts that credential, the language and upload limits in force, and whether an earlier recording is still awaiting acknowledgement.',
+      'Report whether local SpeechRail voice input is usable right now: the effective loopback endpoint, whether it is accepted, whether the configured credential resolves, whether the service answers and accepts that credential, whether the endpoint states it can transcribe at all, the language hint that will actually be sent and the upload limits in force, and whether an earlier recording is still awaiting acknowledgement.',
     parameters: {
       type: 'object',
       properties: {
@@ -187,6 +209,9 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
         endpointProblem: view.endpointProblem ?? '',
         model: view.model,
         language: view.language,
+        languageHint: view.languageHint,
+        transcriptionSupported: view.transcriptionSupported,
+        languageOptions: [...view.languageOptions],
         gate: view.gate,
         pendingOperationId: view.pendingOperationId ?? '',
         maxUploadBytes: view.limits.maxUploadBytes,
@@ -225,6 +250,17 @@ export function describeStatus(value: StatusToolValue): string {
       : 'service unreachable')
   }
   else parts.push('service not probed')
+  // The language the wire will carry, not the one that was configured: the tool's own
+  // description promises what is in force, and an agent must not be told a hint will travel when
+  // the snapshot withholds it.
+  parts.push(value.languageHint === ''
+    ? `language ${value.language} with no hint sent`
+    : `language hint ${value.languageHint} sent`)
+  if (value.transcriptionSupported === 'unsupported') {
+    parts.push('transcription unsupported by the service: every upload is refused before the audio is sent')
+  } else if (value.transcriptionSupported === 'unknown') {
+    parts.push('transcription support not stated')
+  }
   parts.push(`gate ${value.gate}`)
   if (value.pendingOperationId !== '') parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)
   parts.push(`limits ${String(value.maxUploadBytes)} bytes / ${String(value.maxAudioSeconds)}s`)

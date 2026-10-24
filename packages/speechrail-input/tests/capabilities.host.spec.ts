@@ -75,6 +75,15 @@ describe('projectCapabilities', () => {
     expect(languageIsAdmitted('zh', null)).toBe(true)
   })
 
+  it('keeps an explicit language refusal distinct from silence', () => {
+    // The service said it takes no language hint. Folding that into `unknown` would make the
+    // selector offer a hint the service refused; the two statements are now kept apart.
+    const view = projectCapabilities(snapshot({ ...SUPPORTED, languages: { status: 'unsupported', values: [] } }))
+    expect(view?.languages).toEqual({ status: 'unsupported', values: [] })
+    expect(languageOptionsFor(view)).toEqual(['auto'])
+    expect(languageIsAdmitted('zh', view)).toBe(false)
+  })
+
   it('offers no language at all for an endpoint that cannot transcribe', () => {
     // Nothing can be exercised here: the upload is refused before the audio leaves the host, so a
     // language hint would promise a choice the endpoint cannot honour.
@@ -135,7 +144,12 @@ describe('projectCapabilities', () => {
       languages: { status: 'supported', values: ['zh', 'en'] },
     }))
     expect(view?.transcriptionSupported).toBe(false)
+    // An endpoint that cannot transcribe states nothing usable about languages, however many it
+    // listed: admitting them would widen the selector for an operation that is refused outright.
     expect(view?.languages).toEqual({ status: 'unknown', values: [] })
+    // Which is the claim the name makes, so it is asserted rather than assumed.
+    expect(languageOptionsFor(view)).toEqual(['auto'])
+    expect(languageIsAdmitted('zh', view)).toBe(false)
   })
 
   it('keeps an unstated limit at the value already in force', () => {

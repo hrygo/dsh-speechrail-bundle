@@ -324,6 +324,59 @@ describe('capability probe', () => {
     expect(outcome.authenticated).toBe('unverified')
   })
 
+  it('judges a 401 from its status even when its body is unusable', async () => {
+    // Same 401, three body shapes: the verdict must not depend on what followed the status line.
+    for (const shape of ['clean', 'oversized', 'stalled'] as const) {
+      const server = await start((_request, response) => {
+        response.writeHead(401, { 'content-type': 'application/json' })
+        if (shape === 'clean') response.end('{"error":"bad key"}')
+        else if (shape === 'oversized') response.end(`{"error":"${'a'.repeat(300_000)}"}`)
+        else {
+          // A head that reached the client, then a body that never arrives. `flushHeaders` is what
+          // makes this the case under test; without it Node would hold the status line back and the
+          // request really would be unproven.
+          response.flushHeaders()
+        }
+      })
+      const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 500 })
+      expect(outcome.ok, shape).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.authenticated, shape).toBe('refused')
+      expect(outcome.reachable, shape).toBe(true)
+    }
+  })
+
+  it('treats an unusable body on a 401 upload as a proven refusal', async () => {
+    // The status head arrived before the body broke, so the service refused the request: the
+    // outcome is proven and the gate must settle rather than demand an acknowledgement.
+    for (const shape of ['oversized', 'stalled'] as const) {
+      const server = await start((_request, response) => {
+        response.writeHead(401, { 'content-type': 'application/json' })
+        if (shape === 'oversized') response.end(`{"error":"${'a'.repeat(300_000)}"}`)
+        else response.flushHeaders()
+      })
+      const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 500 })
+      expect(outcome.ok, shape).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code, shape).toBe('unauthorized')
+      expect(outcome.failure.outcome, shape).toBe('failed')
+      expect(outcome.failure.httpStatus, shape).toBe(401)
+    }
+  })
+
+  it('keeps an unusable body on a 200 unproven', async () => {
+    // The contrast that makes the rule above meaningful: a 200 head says the service accepted the
+    // request, so a body that then broke proves nothing either way.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(`{"text":"${'a'.repeat(300_000)}"}`)
+    })
+    const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 2_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.failure.outcome).toBe('unknown')
+  })
+
   it('reports a server that never answered as unverified', async () => {
     const outcome = await probeCapabilities({ baseUrl: 'http://127.0.0.1:1/v1', credential: SECRET, timeoutMs: 1_000 })
     expect(outcome.ok).toBe(false)

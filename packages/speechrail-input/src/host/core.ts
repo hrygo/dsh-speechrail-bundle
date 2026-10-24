@@ -260,12 +260,25 @@ export class SpeechRailInputCore {
   }
 
   /**
+   * The language hint the next upload will carry, or null when none will.
+   *
+   * `auto` never sends one, and a language the snapshot in force refused to admit is withheld
+   * rather than guessed. This is the single source of truth for both the wire and the reported
+   * state, so no caller can be told about a hint that will not travel.
+   */
+  private effectiveLanguageHint(config: ResolvedConfig): SpeechRailLanguageMode | null {
+    if (config.language === 'auto') return null
+    return languageIsAdmitted(config.language, this.capabilities) ? config.language : null
+  }
+
+  /**
    * Snapshot everything the UI renders.
    * @returns the current status, including whether the credential is configured.
    */
   async status(): Promise<SpeechRailInputStatus> {
     const config = this.deps.config()
     const credential = await this.deps.resolveCredential(config.credentialRef)
+    const capabilities = this.capabilities
     return {
       baseUrl: config.baseUrl,
       endpointProblem: config.endpointRefusal === null ? null : describeRefusal(config.endpointRefusal),
@@ -273,12 +286,18 @@ export class SpeechRailInputCore {
       credentialRef: config.credentialRef,
       credentialConfigured: credential !== null,
       language: config.language,
-      languageOptions: languageOptionsFor(this.capabilities),
+      // One expression decides both this report and the wire, so the tool can never promise a hint
+      // the upload would withhold.
+      languageHint: this.effectiveLanguageHint(config) ?? '',
+      transcriptionSupported: capabilities === null
+        ? 'unknown'
+        : capabilities.transcriptionSupported ? 'supported' : 'unsupported',
+      languageOptions: languageOptionsFor(capabilities),
       requestTimeoutMs: config.requestTimeoutMs,
       limits: this.capabilities?.limits ?? DEFAULT_LIMITS,
       gate: this.gateState,
       pendingOperationId: this.pendingOperationId,
-      capabilities: this.capabilities,
+      capabilities,
       checkedAt: this.checkedAt,
       revision: this.deps.settingsRevision() ?? 0,
     }
@@ -473,9 +492,7 @@ export class SpeechRailInputCore {
     const credential = await this.deps.resolveCredential(config.credentialRef)
     if (credential === null) return await refuse('not-configured')
 
-    const language = config.language !== 'auto' && languageIsAdmitted(config.language, this.capabilities)
-      ? config.language
-      : null
+    const language = this.effectiveLanguageHint(config)
     const outcome = await this.deps.transcribe({
       baseUrl: config.baseUrl,
       model: config.model,

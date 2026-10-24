@@ -376,6 +376,12 @@ export function VoiceInput({
               : (
                 <>
                   <span>{phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')}</span>
+                  {phase === 'transcribing' && (view?.languageHint ?? '') !== '' && (
+                    // This hint is being sent with the request in flight, so this is the moment it
+                    // is worth saying which language is in force - the composer has no other place
+                    // for it, and the settings page is not on screen while dictating.
+                    <> · <span>{t('languageHintInline', { language: view?.languageHint ?? '' })}</span></>
+                  )}
                   {message !== '' && <> · <span>{message}</span></>}
                 </>
               )}

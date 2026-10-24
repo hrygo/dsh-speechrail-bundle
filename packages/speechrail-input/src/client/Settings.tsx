@@ -205,7 +205,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     }
   }
 
-  const capabilities = checked?.capabilities ?? view?.capabilities ?? null
+  // The checked result may be newer than the status projection, and the language labels beside it
+  // are derived from that projection's `languageOptions`. Preferring the projection here keeps one
+  // snapshot behind every label on the page instead of showing "sent as a hint" for a language the
+  // service enumerated, or hiding it for one it did not.
+  const capabilities = view?.capabilities ?? checked?.capabilities ?? null
   const limits = view?.limits
   // A probe that ran and produced no snapshot is not the same as one that never ran.
   // A check the host refused locally (no credential, unusable endpoint) never reached the

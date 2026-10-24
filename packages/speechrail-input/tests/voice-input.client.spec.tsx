@@ -23,6 +23,8 @@ const STATUS: SpeechRailInputStatus = {
   credentialRef: 'SPEECHRAIL_API_KEY',
   credentialConfigured: true,
   language: 'auto',
+  languageHint: '' as const,
+  transcriptionSupported: 'unknown' as const,
   languageOptions: ['auto'],
   requestTimeoutMs: 150_000,
   limits: { maxUploadBytes: 4_194_304, maxAudioSeconds: 120 },
@@ -69,6 +71,48 @@ describe('VoiceInput acknowledge', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
     await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: null }) })
+  })
+
+  /** Drive the control to the transcribing phase and return the release for the held request. */
+  async function driveToTranscribing(languageHint: string): Promise<() => void> {
+    let releaseTranscribe: (() => void) | undefined
+    const capture = {
+      start: async () => undefined,
+      stop: vi.fn(async () => new Uint8Array([1])),
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={async () => ({ ...STATUS, language: 'zh' as const, languageHint, languageOptions: ['auto', 'zh', 'en'] })}
+        createRecording={() => capture}
+        transcribe={async () => {
+          await new Promise<void>((resolve) => { releaseTranscribe = resolve })
+          return { ok: false, transcript: null, failure: null }
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(releaseTranscribe).toBeDefined() })
+    return () => { releaseTranscribe?.() }
+  }
+
+  it('names the language hint that is travelling with the request', async () => {
+    // The composer is where the user dictates and it has no settings page beside it, so the one
+    // moment the hint matters is while the request carrying it is in flight.
+    const release = await driveToTranscribing('zh')
+    expect(await screen.findByText('languageHintInline')).toBeTruthy()
+    release()
+  })
+
+  it('stays quiet while no language hint travels', async () => {
+    const release = await driveToTranscribing('')
+    expect(screen.getByText('transcribingShort')).toBeTruthy()
+    expect(screen.queryByText('languageHintInline')).toBeNull()
+    release()
   })
 
   it('refuses before opening the microphone when the snapshot cannot transcribe', async () => {

@@ -23,7 +23,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.4/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.5/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -55,7 +55,8 @@ speaks the same shape on loopback:
 | Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`. |
 | Transcript | A 200 whose JSON body carries a string `text`. The SpeechRail `usage: {type: "duration", seconds}` extension is optional; a `usage` that is present but malformed is still refused as `malformed-response`. |
 | Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404 or 405 the probe reports `capabilities-absent`: the service stays reachable and usable, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, every 5xx (including 501) stays `server-error` with its retryable hint, and an unreachable service stays `unreachable`. |
-| Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403, and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused or unconfigured endpoint). The `speechrail_input_status` tool returns the same three strings. |
+| Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused or unconfigured endpoint). The `speechrail_input_status` tool returns the same three strings. |
+| Agent report | The tool reports the language hint that will **actually travel** (not the configured mode), the endpoint's own statement about transcription (`supported` / `unsupported` / `unknown`), and the language modes the snapshot admits. A service that says it cannot transcribe is named as such instead of reading as usable. |
 
 What changes on a non-SpeechRail engine, and what does not:
 
