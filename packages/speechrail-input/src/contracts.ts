@@ -61,6 +61,8 @@ const FAILURE_CODE_TABLE: Record<import('./types.ts').SpeechRailFailureCode, tru
   'not-configured': true,
   'bad-request': true,
   'audio-invalid': true,
+  'audio-too-long': true,
+  'audio-too-large': true,
   unauthorized: true,
   'not-found': true,
   'capabilities-absent': true,

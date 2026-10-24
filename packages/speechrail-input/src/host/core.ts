@@ -95,7 +95,30 @@ export type ParseResult<T> =
 const OPERATION_ID = /^[A-Za-z0-9_-]{8,64}$/u
 
 /** Standard base64 with padding; no data-URL prefix, no whitespace, no base64url alphabet. */
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u
+const BASE64_ALPHABET = /^[A-Za-z0-9+/]$/u
+
+/**
+ * Whether the carrier holds standard base64 with padding.
+ *
+ * Written as a scan rather than as the obvious pattern
+ * `/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/`: that pattern makes V8's
+ * engine recurse, and it threw `RangeError: Maximum call stack size exceeded` on a ~5 MB take - an
+ * input the carrier limit admits - so a long recording crashed the parser instead of being refused
+ * with a reason. This scan is linear and cannot overflow, and it accepts exactly what the pattern
+ * accepted: a multiple of four, optional padding, the standard alphabet.
+ *
+ * @param text - candidate base64 text.
+ * @returns whether it is standard base64 with padding.
+ */
+function isBase64(text: string): boolean {
+  if (text.length === 0 || text.length % 4 !== 0) return false
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0
+  const body = text.length - padding
+  for (let index = 0; index < body; index += 1) {
+    if (!BASE64_ALPHABET.test(text[index] ?? '')) return false
+  }
+  return true
+}
 
 /**
  * Decode a bounded JSON carrier.
@@ -143,7 +166,7 @@ export function parseTranscribeRequest(text: string): ParseResult<SpeechRailTran
   const operationId = record.operationId
   const audioBase64 = record.audioBase64
   if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) return refuse('bad-request')
-  if (typeof audioBase64 !== 'string' || audioBase64 === '' || !BASE64.test(audioBase64)) return refuse('bad-request')
+  if (typeof audioBase64 !== 'string' || audioBase64 === '' || !isBase64(audioBase64)) return refuse('bad-request')
   return { ok: true, value: { operationId, audioBase64 } }
 }
 
@@ -190,7 +213,7 @@ export function parseAcknowledgeRequest(text: string): ParseResult<SpeechRailAck
  * @returns the decoded bytes, or null when the length is inconsistent.
  */
 export function decodeBase64Audio(value: string): Uint8Array | null {
-  if (!BASE64.test(value) || value.length % 4 !== 0) return null
+  if (!isBase64(value)) return null
   const bytes = Buffer.from(value, 'base64')
   return bytes.byteLength === 0 ? null : new Uint8Array(bytes)
 }
@@ -445,7 +468,16 @@ export class SpeechRailInputCore {
    * @returns the transcript, or a sanitized failure.
    */
   async transcribe(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
-    const parsed = parseTranscribeRequest(text)
+    // A parser that throws would surface as a Remote-level error the page cannot localize, and the
+    // one input large enough to do it is a long recording - which is exactly a case the user needs
+    // explained rather than a stack trace. The scan above removed the known cause; this keeps any
+    // future one inside the closed failure vocabulary.
+    let parsed: ParseResult<SpeechRailTranscribeRequest>
+    try {
+      parsed = parseTranscribeRequest(text)
+    } catch {
+      parsed = refuse('bad-request')
+    }
     if (!parsed.ok) return { ok: false, transcript: null, failure: parsed.failure }
     // A medium that could not be opened at boot may be available now. Without this
     // re-read a transient storage failure would disable every upload until the user
@@ -460,9 +492,11 @@ export class SpeechRailInputCore {
   /** Finish one claimed operation, from validation to settlement. */
   private async run(request: SpeechRailTranscribeRequest, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
     const config = this.deps.config()
-    const refuse = async (code: Parameters<typeof failure>[0], unproven = false): Promise<SpeechRailTranscriptionResult> => {
+    // No `unproven` flag: a refusal here settles the journal, so it must also be reported as settled.
+    // A flag would have let the gate and the message disagree.
+    const refuse = async (code: Parameters<typeof failure>[0]): Promise<SpeechRailTranscriptionResult> => {
       await this.settleKnown(request.operationId)
-      return { ok: false, transcript: null, failure: unproven ? unknownFailure(code) : failure(code) }
+      return { ok: false, transcript: null, failure: failure(code) }
     }
     if (config.endpointRefusal !== null) return await refuse('endpoint-invalid')
 
@@ -473,7 +507,13 @@ export class SpeechRailInputCore {
     if (this.capabilities !== null && !this.capabilities.transcriptionSupported) return await refuse('unsupported')
     const limits = this.capabilities?.limits ?? DEFAULT_LIMITS
     const validated = validateWave(audio, limits.maxAudioSeconds)
-    if (!validated.ok || validated.byteLength > limits.maxUploadBytes) return await refuse('audio-invalid')
+    // A recording the service would have refused for its length or size is not a malformed
+    // recording. Naming the real reason lets the user shorten the take instead of wondering about a
+    // format the browser produced correctly, and it is the honest report of a local ceiling that is
+    // deliberately stricter than the service's own (4 MiB / 120 s against an advertised 512 MiB /
+    // 3600 s, because a whole take travels as one base64 JSON carrier).
+    if (!validated.ok) return await refuse(validated.reason === 'too-long' ? 'audio-too-long' : 'audio-invalid')
+    if (validated.byteLength > limits.maxUploadBytes) return await refuse('audio-too-large')
 
     const state = await this.deps.journal.read()
     this.journalUnreadable = !state.available

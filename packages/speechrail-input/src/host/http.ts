@@ -31,6 +31,14 @@ export interface HttpSuccess {
   readonly status: number
   /** Response body, already byte-capped. */
   readonly body: Buffer
+  /**
+   * Whether the response announced its own length (Content-Length or chunked encoding).
+   *
+   * Without framing the body ends when the socket does, and a truncated body is indistinguishable
+   * from a complete one - so a 200 whose body cannot be used only proves the request ended when the
+   * service framed its reply.
+   */
+  readonly framed: boolean
 }
 
 /** One low-level failure. */
@@ -113,8 +121,9 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         // An arrived refusal outranks the transport code and the `wrote` bookkeeping: a service that
         // checks the authorization header answers 401 without waiting for a body it may still be
         // receiving, and reporting `unreachable` beside an answered status would be plainly false.
-        // (This branch is argued rather than measured: on loopback the body write always finished
-        // before a 401 arrived, in every attempt. The rule is what has to be right if it ever fires.)
+        // Reachable on loopback with a large enough body: a server that flushes a 401 head and drops
+        // the socket while several megabytes are still being written reproduces it, which is what
+        // `tests/http-transport.host.spec.ts` pins.
         failure: status !== null && provesNotProcessed(status)
           ? failureForStatus(status, null, null, null)
           : !wrote
@@ -204,7 +213,13 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         chunks.push(chunk)
       })
       response.on('end', () => {
-        finish({ ok: true, status: response.statusCode ?? 0, body: Buffer.concat(chunks) })
+        finish({
+          ok: true,
+          status: response.statusCode ?? 0,
+          body: Buffer.concat(chunks),
+          framed: response.headers['content-length'] !== undefined
+            || response.headers['transfer-encoding'] !== undefined,
+        })
       })
       response.on('error', () => { transportFailure('unreachable') })
     })
@@ -354,25 +369,19 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
       failure: provesNotProcessed(result.status) ? answered : { ...answered, outcome: 'unknown' },
     }
   }
+  // A 200 whose body cannot be used is settled only when the service framed its reply: framing
+  // proves the reply ended, so nothing is still in flight. Without it the body may have been cut
+  // mid-transcript, and the outcome stays unproven - the same reading the stalled-body path takes.
+  const unusable = result.framed
+    ? failure('malformed-response', { httpStatus: 200 })
+    : unknownFailure('malformed-response', { httpStatus: 200 })
   const payload = parseJson(result.body)
-  if (typeof payload !== 'object' || payload === null) {
-    return { ok: false, failure: failure('malformed-response', { httpStatus: 200 }) }
-  }
+  if (typeof payload !== 'object' || payload === null) return { ok: false, failure: unusable }
   const record = payload as Record<string, unknown>
-  const usage = record.usage
-  // `usage` is SpeechRail's own extension: an OpenAI-compatible engine answers with
-  // `{"text": ...}` alone, and no consumer reads the duration, so its absence is accepted
-  // and only its presence is held to the stricter shape. A `usage` that exists but is
-  // malformed stays a refused response: it is a claim the service made and got wrong.
-  const usageValid = usage === undefined || usage === null
-    || (typeof usage === 'object' && usage !== null
-      && (usage as Record<string, unknown>).type === 'duration'
-      && typeof (usage as Record<string, unknown>).seconds === 'number'
-      && Number.isFinite((usage as Record<string, unknown>).seconds as number)
-      && ((usage as Record<string, unknown>).seconds as number) >= 0)
-  if (typeof record.text !== 'string' || !usageValid) {
-    return { ok: false, failure: failure('malformed-response', { httpStatus: 200 }) }
-  }
+  // `usage` is SpeechRail's own extension and no consumer reads it, so only `text` decides whether
+  // the answer is usable. A malformed `usage` is ignored rather than allowed to discard a transcript
+  // the service really produced: strictness on an unread optional field is not worth the take.
+  if (typeof record.text !== 'string') return { ok: false, failure: unusable }
   return { ok: true, text: record.text, requestSeconds }
 }
 

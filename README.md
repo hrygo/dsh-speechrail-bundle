@@ -85,7 +85,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.9/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.3.0/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.
@@ -107,6 +107,11 @@ Then set the endpoint and credential reference on its settings page.
   listing its languages (SpeechRail answers this way) sends the mode you chose as an unverified hint —
   labelled on the settings page, named in the composer while the request is in flight, and reported
   as `languageHint` by the agent tool.
+- The ceilings this package enforces are its own, and deliberately stricter than SpeechRail's: a
+  live service advertises 512 MiB and 3600 s, this bundle enforces 4 MiB and 120 s, because a whole
+  take travels as one base64 JSON carrier through the Remote surface. A take over either ceiling is
+  refused by its real reason (`audio-too-long` / `audio-too-large`) rather than as a malformed
+  recording.
 - The request budget is bounded to 1000–180000 ms, by the settings schema and again on the Remote
   path, because the settings store validates shape rather than `min`/`max`.
 - Changing a non-volatile setting (endpoint, model, credential reference) restarts the bundle's

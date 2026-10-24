@@ -607,6 +607,37 @@ describe('single in-flight gate', () => {
     expect((await h.core.status()).gate).toBe('ready')
   })
 
+  it('names the real reason when a take is over a ceiling, and never blames the format', async () => {
+    // 121 seconds of canonical 16 kHz mono audio: a format the browser produced correctly, refused
+    // only because it is longer than the local ceiling. "The recording format was refused" would be a
+    // false report of a perfectly well-formed take.
+    const tooLong = harness()
+    const long = await tooLong.core.transcribe(
+      JSON.stringify({ operationId: 'op_llllllll', audioBase64: audio(16_000 * 121) }),
+    )
+    expect(long.failure?.code).toBe('audio-too-long')
+    expect(tooLong.sends).toHaveLength(0)
+
+    // The same distinction for size, with the ceiling coming from the service's own snapshot: a
+    // service that admits only 4 KiB makes every take too large, and the user is told that rather
+    // than that the format was wrong.
+    const tooLarge = harness()
+    tooLarge.probe = {
+      ok: true,
+      capabilities: {
+        schemaVersion: 'effective_capabilities_v1',
+        transcriptionSupported: true,
+        reason: null,
+        languages: { status: 'unknown', values: [] },
+        limits: { maxUploadBytes: 4_096, maxAudioSeconds: 120 },
+      },
+    }
+    await tooLarge.core.check()
+    const large = await tooLarge.core.transcribe(JSON.stringify({ operationId: 'op_kkkkkkkk', audioBase64: audio(3_200) }))
+    expect(large.failure?.code).toBe('audio-too-large')
+    expect(tooLarge.sends).toHaveLength(0)
+  })
+
   it('refuses non-canonical audio before recording anything', async () => {
     const h = harness()
     const result = await h.core.transcribe(JSON.stringify({ operationId: 'op_gggggggg', audioBase64: Buffer.from(new Uint8Array(500)).toString('base64') }))

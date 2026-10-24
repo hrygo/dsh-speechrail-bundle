@@ -10,7 +10,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
-import { failure } from '../src/host/failure.ts'
+import { failure, unknownFailure } from '../src/host/failure.ts'
 import type { Recording } from '../src/client/recording.ts'
 import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailInputStatus } from '../src/types.ts'
 
@@ -102,6 +102,36 @@ describe('VoiceInput acknowledge', () => {
     await waitFor(() => { expect(releaseTranscribe).toBeDefined() })
     return () => { releaseTranscribe?.() }
   }
+
+  it('says what the service answered, not only that it never confirmed', async () => {
+    // A 500 that arrives in full is an unproven outcome: the service answered, and it never said it
+    // finished. Reporting only the second half would hide the first, so the message carries both.
+    const cases = [
+      { failure: unknownFailure('server-error', { httpStatus: 500 }), detail: 'failure.server-error' },
+      { failure: unknownFailure('malformed-response', { httpStatus: 202 }), detail: 'failure.malformed-response' },
+      { failure: unknownFailure('timeout'), detail: 'failure.timeout' },
+    ]
+    for (const shape of cases) {
+      const capture = {
+        start: async () => undefined,
+        stop: async () => new Uint8Array([1]),
+        dispose: async () => undefined,
+      } as unknown as Recording
+      const { unmount } = render(
+        <VoiceInput
+          {...props({ gate: 'ready' }, async () => ({ ok: false, pendingOperationId: null, failure: null }))}
+          createRecording={() => capture}
+          transcribe={async () => ({ ok: false, transcript: null, failure: shape.failure })}
+        />,
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+      await waitFor(() => {
+        expect(screen.getByText(`unknownOutcomeLocal:{"detail":"${shape.detail}"}`)).toBeTruthy()
+      })
+      unmount()
+    }
+  })
 
   it('names the language hint that is travelling with the request', async () => {
     // The composer is where the user dictates and it has no settings page beside it, so the one

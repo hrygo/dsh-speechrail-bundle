@@ -11,7 +11,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createServer as createSocketServer, type Socket } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { probeCapabilities, transcribe, unbracketHostname } from '../src/host/http.ts'
+import { performRequest, probeCapabilities, transcribe, unbracketHostname } from '../src/host/http.ts'
 import { encodeWave } from '../src/protocol/wave.ts'
 import { TRANSCRIPTION_RESPONSE_MAX_BYTES } from '../src/contracts.ts'
 
@@ -167,18 +167,19 @@ describe('transcription transport', () => {
     expect(outcome.failure.code).toBe('malformed-response')
   })
 
-  it('rejects a present but malformed usage instead of ignoring it', async () => {
-    // Absence is accepted (an engine may not implement the extension); a `usage` that is
-    // there is a claim the service made, and a wrong claim is a refused response.
+  it('ignores a malformed usage instead of discarding a transcript the service produced', async () => {
+    // `usage` is SpeechRail's own extension and no consumer reads it, so only `text` decides whether
+    // an answer is usable. Refusing the whole response over a field nobody reads threw away a real
+    // take and made the user dictate again; the malformed value is simply not read.
     const bodies = [
-      '{"text":"x","usage":{"type":"duration","seconds":-1}}',
-      '{"text":"x","usage":{}}',
-      '{"text":"x","usage":{"type":"duration"}}',
-      '{"text":"x","usage":{"type":"duration","seconds":"1"}}',
-      '{"text":"x","usage":{"type":"duration","seconds":1e999}}',
-      '{"text":"x","usage":{"type":"tokens","seconds":1}}',
-      '{"text":"x","usage":[]}',
-      '{"text":"x","usage":"duration"}',
+      '{"text":"kept","usage":{"type":"duration","seconds":-1}}',
+      '{"text":"kept","usage":{}}',
+      '{"text":"kept","usage":{"type":"duration"}}',
+      '{"text":"kept","usage":{"type":"duration","seconds":"1"}}',
+      '{"text":"kept","usage":{"type":"duration","seconds":1e999}}',
+      '{"text":"kept","usage":{"type":"tokens","seconds":1}}',
+      '{"text":"kept","usage":[]}',
+      '{"text":"kept","usage":"duration"}',
     ]
     for (const body of bodies) {
       const server = await start((_request, response) => {
@@ -186,9 +187,9 @@ describe('transcription transport', () => {
         response.end(body)
       })
       const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
-      expect(outcome.ok, body).toBe(false)
-      if (outcome.ok) throw new Error('unreachable')
-      expect(outcome.failure.code, body).toBe('malformed-response')
+      expect(outcome.ok, body).toBe(true)
+      if (!outcome.ok) throw new Error('unreachable')
+      expect(outcome.text, body).toBe('kept')
     }
   })
 
@@ -361,6 +362,74 @@ describe('capability probe', () => {
       expect(outcome.failure.code, shape).toBe('unauthorized')
       expect(outcome.failure.outcome, shape).toBe('failed')
       expect(outcome.failure.httpStatus, shape).toBe(401)
+    }
+  })
+
+  it('keeps an unusable body on a 200 whose reply was never framed', async () => {
+    // No Content-Length and no chunked encoding: the body ends when the socket does, so a reply cut
+    // mid-transcript is indistinguishable from a complete one. The same unusable body on a framed
+    // reply settles (the service proved it had finished); this one must not.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      socket.end('HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\r\n{"text":"hel')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('malformed-response')
+      expect(outcome.failure.outcome).toBe('unknown')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
+  it('reports the refusal a service sent while the body was still being written', async () => {
+    // A service may check the authorization header and answer without waiting for a body it is still
+    // receiving, then drop the connection. The status arrived, so `unreachable` would be false here:
+    // a large enough body reproduces it on loopback, which is why the rule is tested rather than
+    // argued. The probe judges the same server as a refused credential, so the two faces must agree.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      // Destroy only after the head reached the kernel, or the client never sees the status and the
+      // case under test (a status that arrived while the body was still being written) is not built.
+      // FIN rather than RST: a reset can discard the head before the client parses it, and then the
+      // case under test (a status that arrived while the body was still being written) is not built.
+      socket.end('HTTP/1.1 401 Unauthorized\r\ncontent-length: 64\r\n\r\n')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await performRequest({
+        url: `http://127.0.0.1:${port}/v1/audio/transcriptions`,
+        method: 'POST',
+        headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'audio/wav' },
+        body: Buffer.alloc(4 * 1024 * 1024, 0x41),
+        timeoutMs: 5_000,
+        maxResponseBytes: 262_144,
+      })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('unauthorized')
+      expect(outcome.failure.httpStatus).toBe(401)
+
+      const probe = await probeCapabilities({ baseUrl: `http://127.0.0.1:${port}/v1`, credential: SECRET, timeoutMs: 5_000 })
+      expect(probe.ok).toBe(false)
+      if (probe.ok) throw new Error('unreachable')
+      expect(probe.authenticated).toBe('refused')
+      expect(probe.reachable).toBe(true)
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     }
   })
 

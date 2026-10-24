@@ -202,7 +202,13 @@ export function VoiceInput({
           // "Check the service record" is only true of a service that keeps one. With no capability
           // snapshot in force the local journal is what recorded the attempt, so say that instead
           // of sending the user to look for a record that may not exist.
-          feedback(t(refreshed?.capabilities == null ? 'unknownOutcomeLocal' : 'unknownOutcome'))
+          //
+          // An unproven outcome after the service answered is two facts, not one: what it said (a
+          // 500, a 504, a 202, a redirect) and that it never confirmed finishing. Reporting only the
+          // second would hide the first, so the failure text travels with the message.
+          feedback(t(refreshed?.capabilities == null ? 'unknownOutcomeLocal' : 'unknownOutcome', {
+            detail: failureText(failure),
+          }))
           return
         }
         feedback(failure === null ? t('failure.internal') : failureText(failure))

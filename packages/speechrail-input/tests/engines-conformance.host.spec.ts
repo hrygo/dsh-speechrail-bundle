@@ -430,15 +430,22 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     // so many words that the work continues. A 200 whose body cannot be used is the deliberate
     // contrast - the service did finish the request, so nothing is in flight and the operation
     // settles as failed, with no acknowledgement demanded for work that provably ended.
-    const answered: readonly { readonly status: number, readonly settles: boolean, readonly body?: string }[] = [
-      { status: 400, settles: true, body: '{"error":"bad"}' },
-      { status: 401, settles: true, body: '{"error":"no"}' },
-      { status: 500, settles: false, body: '{"error":"boom"}' },
-      { status: 504, settles: false, body: '{"error":"slow"}' },
-      { status: 302, settles: false, body: '' },
-      { status: 201, settles: false, body: '{"id":"job_1"}' },
-      { status: 202, settles: false, body: '{"id":"job_1"}' },
-      { status: 204, settles: false, body: '' },
+    const answered: readonly {
+      readonly status: number
+      readonly settles: boolean
+      readonly code: string
+      readonly body?: string
+    }[] = [
+      { status: 400, settles: true, code: 'bad-request', body: '{"error":"bad"}' },
+      { status: 401, settles: true, code: 'unauthorized', body: '{"error":"no"}' },
+      { status: 500, settles: false, code: 'server-error', body: '{"error":"boom"}' },
+      { status: 504, settles: false, code: 'timeout', body: '{"error":"slow"}' },
+      { status: 302, settles: false, code: 'redirected', body: '' },
+      // A 2xx that is not 200 is not an internal fault: 202 says the work continues, 201/204 say
+      // nothing usable arrived, and none of them proves the request was refused.
+      { status: 201, settles: false, code: 'malformed-response', body: '{"id":"job_1"}' },
+      { status: 202, settles: false, code: 'malformed-response', body: '{"id":"job_1"}' },
+      { status: 204, settles: false, code: 'malformed-response', body: '' },
     ]
     for (const shape of answered) {
       const service = await engine({
@@ -454,6 +461,8 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
 
       const result = await core.transcribe(payload(operationId))
       expect(result.failure?.outcome, `answered ${shape.status}`).toBe(shape.settles ? 'failed' : 'unknown')
+      expect(result.failure?.code, `answered ${shape.status}`).toBe(shape.code)
+      expect(result.failure?.httpStatus, `answered ${shape.status}`).toBe(shape.status)
       const view = await core.status()
       expect(view.gate, `answered ${shape.status}`).toBe(shape.settles ? 'ready' : 'unknown')
       expect(view.pendingOperationId, `answered ${shape.status}`).toBe(shape.settles ? null : operationId)

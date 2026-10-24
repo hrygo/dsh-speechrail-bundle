@@ -22,6 +22,8 @@ export type SpeechRailFailureCode =
   | 'not-configured'
   | 'bad-request'
   | 'audio-invalid'
+  | 'audio-too-long'
+  | 'audio-too-large'
   | 'unauthorized'
   | 'not-found'
   | 'capabilities-absent'

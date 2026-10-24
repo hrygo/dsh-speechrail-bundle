@@ -67,7 +67,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.9/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.3.0/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。
@@ -84,6 +84,9 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
   该语言则写明"未生效"，绝不静默改选；服务能转写但没列举语言（SpeechRail 自己就是这种）时按你选的语言作为
   未验证提示发送——设置页标注、composer 在请求进行中显示、agent 工具报为 `languageHint`。只有当检测真的
   到达服务时，设置页才会写"服务未给出"；宿主本地拒绝的检测（无凭据、端点不合规）显示为"尚未检测"。
+- 生效的限额是**本包自己的**，且刻意严于 SpeechRail：线上服务声明 512 MiB / 3600 s，本 bundle 强制
+  4 MiB / 120 s，因为整段录音要作为一个 base64 JSON 载体通过 Remote 面传输。超过任一上限时按真实原因拒绝
+  （`audio-too-long` / `audio-too-large`），而不是报成"录音格式不对"。
 - 请求预算被限制在 1000–180000 毫秒：设置 schema 限制一次，Remote 写入路径再校验一次，因为设置存储
   只校验形状而不校验 `min`/`max`。
 - 修改非易失设置（端点、模型、凭据引用）会重启 bundle 条目：释放 journal 存储单元后立即重新打开。释放
