@@ -146,7 +146,7 @@ requestSeconds 用 Host monotonic clock 测量出站请求开始至响应正文�
 
 读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、只开放 auto，不把语言域 unknown 偷换成整个 ASR 不可用。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible；supported 以外显示 unavailable。能力服务自身故障不能推断 ASR 模型已坏。
 
-这些嵌套字段来自 [SpeechRail 当前 builder](</Users/hrygo/Documents/SpeechRail/src/speechrail/application/capability_snapshot.py#L328-L376>)，OpenAPI 对 operations 为开放对象；因此必须有专用投影测试，不声称机器契约已完整枚举。
+这些嵌套字段来自本机 SpeechRail 参考实现的 `capability_snapshot.py`（未随本仓库分发），OpenAPI 对 operations 为开放对象；因此必须有专用投影测试，不声称机器契约已完整枚举。
 
 有效录音上限取 `min(4194304, max_upload_bytes)` 与 `min(120, max_audio_seconds, (有效字节上限-44)/32000)`，按完整PCM帧向下取整。不能容纳至少一个PCM帧则 unavailable。将两项有效上限随 status 发给 Client，计时器/编码截断与 Host 校验共用；服务限额更小不静默超限。
 

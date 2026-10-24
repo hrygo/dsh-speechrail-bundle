@@ -57,7 +57,7 @@ describe('projectCapabilities', () => {
     const view = projectCapabilities(snapshot({
       ...SUPPORTED,
       status: 'unsupported',
-      reason: 'ASR failed: /Users/hrygo/models is missing',
+      reason: 'ASR failed: /opt/models is missing',
     }))
     expect(view?.reason).toBeNull()
   })
