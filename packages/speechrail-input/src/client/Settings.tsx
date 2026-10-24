@@ -71,6 +71,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
    *
    * Every other note carries something the user still needs - the conflict note says to
    * reload before saving again - so an edit must not erase it.
+   *
+   * This compares the rendered text, which is safe only because a locale switch remounts the
+   * page: if in-place switching is ever added, store which note is shown rather than its text.
    */
   const clearSavedNote = (): void => { setNote((current) => (current === t('settings.saved') ? '' : current)) }
 
