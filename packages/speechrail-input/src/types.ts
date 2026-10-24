@@ -139,14 +139,17 @@ export interface SpeechRailInputStatus {
   /** Operation id blocking the gate, when one is recorded. */
   readonly pendingOperationId: string | null
   /**
-   * The most recent upload's failure, or null when the last one succeeded.
+   * The failure that left an upload's outcome unproven, or null while the gate is open or nothing is
+   * unaccounted for.
    *
-   * An unconfirmed attempt leaves the gate closed and the journal holding it, and the gate alone
-   * cannot say why: a report that names the cause ("the service answered 502 and never confirmed
-   * finishing") is what keeps a reader from guessing. Kept in memory only, so a host restart forgets
-   * the cause while the journal record it describes survives.
+   * This is the one thing the gate cannot say about itself: the journal holds an operation id, and a
+   * reader who is told "an earlier attempt is unconfirmed" cannot tell whether the service answered
+   * badly, never answered, or was cancelled mid-upload. Only an unproven outcome is recorded here - a
+   * refusal that settled, or one the host refused locally, is not why the gate is closed - and it is
+   * kept until the gate opens again. In memory only: a host restart forgets the cause while the
+   * journal record it describes survives.
    */
-  readonly lastFailure: SpeechRailFailure | null
+  readonly unprovenFailure: SpeechRailFailure | null
   /** Last capability snapshot, or null before the first successful check. */
   readonly capabilities: SpeechRailCapabilitiesView | null
   /** When the cached snapshot was taken, as an ISO string, or null. */

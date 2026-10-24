@@ -250,7 +250,7 @@ function decodeValidatedBase64(value: string): Uint8Array | null {
 
 /** The engine that owns the gate, the cache and the operation lifecycle. */
 export class SpeechRailInputCore {
-  private lastFailure: SpeechRailFailure | null = null
+  private unprovenFailure: SpeechRailFailure | null = null
   private gateState: SpeechRailGateState = 'ready'
   private pendingOperationId: string | null = null
   private capabilities: SpeechRailCapabilitiesView | null = null
@@ -351,7 +351,9 @@ export class SpeechRailInputCore {
       limits: this.capabilities?.limits ?? DEFAULT_LIMITS,
       gate: this.gateState,
       pendingOperationId: this.pendingOperationId,
-      lastFailure: this.lastFailure,
+      // Derived from the gate rather than stored beside it, so an open gate can never report a cause
+      // that no longer applies, however it was opened.
+      unprovenFailure: this.gateState === 'unknown' ? this.unprovenFailure : null,
       capabilities,
       checkedAt: this.checkedAt,
       revision: this.deps.settingsRevision() ?? 0,
@@ -500,22 +502,6 @@ export class SpeechRailInputCore {
    * @returns the transcript, or a sanitized failure.
    */
   async transcribe(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
-    const result = await this.attempt(text, signal)
-    // One place records the outcome of every upload, including the refusals that never reach the
-    // wire, so a report can name the cause of the gate the next status call shows.
-    this.lastFailure = result.ok ? null : result.failure
-    return result
-  }
-
-  /**
-   * Run one upload attempt without recording its outcome.
-   *
-   * Split from {@link transcribe} so the recording happens exactly once, whatever this returns.
-   * @param text - JSON carrier text of a {@link SpeechRailTranscribeRequest}.
-   * @param signal - caller cancellation.
-   * @returns the transcript, or a sanitized failure.
-   */
-  private async attempt(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
     // A parser that throws would surface as a Remote-level error the page cannot localize, and the
     // one input large enough to do it is a long recording - which is exactly a case the user needs
     // explained rather than a stack trace. The scan above removed the known cause; this keeps any
@@ -534,7 +520,14 @@ export class SpeechRailInputCore {
     if (this.gateState === 'unknown' && this.journalUnreadable) await this.reopenJournal()
     const claim = this.claim(parsed.value.operationId)
     if (!claim.ok) return { ok: false, transcript: null, failure: claim.failure }
-    return await this.run(parsed.value, signal)
+    const result = await this.run(parsed.value, signal)
+    // Record only what the gate cannot explain about itself: an attempt that claimed the gate and then
+    // left its outcome unproven. A settled refusal is not why the gate is closed, and the refusal a
+    // *closed* gate hands back ("an earlier attempt is unconfirmed") is its consequence, not its cause.
+    const failure = result.failure
+    if (result.ok) this.unprovenFailure = null
+    else if (failure !== null && failure.outcome === 'unknown') this.unprovenFailure = failure
+    return result
   }
 
   /** Finish one claimed operation, from validation to settlement. */

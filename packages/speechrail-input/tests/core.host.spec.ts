@@ -797,37 +797,31 @@ describe('unproven outcomes', () => {
     expect((await h.core.transcribe(payload('op_nnnnnnnn'))).ok).toBe(true)
   })
 
-  it('keeps the cause of the closed gate it reports', async () => {
-    // The journal keeps the operation id and nothing else, so a report of a closed gate cannot say why
-    // it is closed unless the last outcome is kept. A success clears it; a refusal that never reached
-    // the wire sets it too, because that is equally the reason the next attempt is blocked.
+  it('keeps the failure that left the gate closed, and only that one', async () => {
+    // The journal keeps an operation id and nothing else, so a report of a closed gate cannot say why
+    // unless the unproven outcome is kept. The trap this pins: the next attempt is refused *because*
+    // the gate is closed, and recording that consequence would replace the cause with "you are
+    // blocked". A locally refused take is not the cause either.
     const h = harness()
-    expect((await h.core.status()).lastFailure).toBe(null)
+    expect((await h.core.status()).unprovenFailure).toBe(null)
 
     h.fail = { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' }
     await h.core.transcribe(payload('op_llllllll'))
     const closed = await h.core.status()
     expect(closed.gate).toBe('unknown')
-    expect(closed.lastFailure?.code).toBe('server-error')
-    expect(closed.lastFailure?.httpStatus).toBe(502)
-    expect(closed.lastFailure?.outcome).toBe('unknown')
+    expect(closed.unprovenFailure?.code).toBe('server-error')
+    expect(closed.unprovenFailure?.httpStatus).toBe(502)
+
+    const blocked = await h.core.transcribe(payload('op_mmmmmmmm'))
+    expect(blocked.failure?.code).toBe('unknown-outcome')
+    expect((await h.core.status()).unprovenFailure?.code).toBe('server-error')
+
+    const oversized = `{"operationId":"op_12345678","audioBase64":"${'A'.repeat(TRANSCRIBE_PAYLOAD_MAX_BYTES)}"}`
+    expect((await h.core.transcribe(oversized)).failure?.code).toBe('audio-too-large')
+    expect((await h.core.status()).unprovenFailure?.code).toBe('server-error')
 
     await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_llllllll' }))
-    h.fail = null
-    expect((await h.core.transcribe(payload('op_nnnnnnnn'))).ok).toBe(true)
-    expect((await h.core.status()).lastFailure).toBe(null)
-  })
-
-  it('reports the cause of a refusal that never left the host', async () => {
-    // A locally refused take (here: one over the snapshot's byte limit) also closes nothing and sends
-    // nothing, and the report still names it rather than leaving the last upload unexplained.
-    const h = harness()
-    const oversized = `{"operationId":"op_12345678","audioBase64":"${'A'.repeat(TRANSCRIBE_PAYLOAD_MAX_BYTES)}"}`
-    await h.core.transcribe(oversized)
-    const status = await h.core.status()
-    expect(status.lastFailure?.code).toBe('audio-too-large')
-    expect(status.gate).toBe('ready')
-    expect(h.sends).toHaveLength(0)
+    expect((await h.core.status()).unprovenFailure).toBe(null)
   })
 
   it('keeps the gate closed when the acknowledgement cannot be persisted', async () => {

@@ -26,7 +26,7 @@ const STATUS: SpeechRailInputStatus = {
   limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
   gate: 'ready',
   pendingOperationId: null,
-    lastFailure: null,
+    unprovenFailure: null,
   capabilities: null,
   checkedAt: null,
   revision: 4,
@@ -130,8 +130,8 @@ describe('speechrail_input_status', () => {
       reachable: false,
       authenticated: 'unverified',
       failureCode: '',
-      lastFailureCode: '',
-      lastFailureHttpStatus: 0,
+      unprovenFailureCode: '',
+      unprovenFailureHttpStatus: 0,
     })
   })
 
@@ -243,8 +243,8 @@ describe('speechrail_input_status', () => {
       reachable: false,
       authenticated: 'unverified',
       failureCode: 'unreachable',
-      lastFailureCode: '',
-      lastFailureHttpStatus: 0,
+      unprovenFailureCode: '',
+      unprovenFailureHttpStatus: 0,
     }
     expect(describeStatus(base)).toContain('service unreachable')
     expect(describeStatus({ ...base, probed: false })).toContain('service not probed')
@@ -270,12 +270,12 @@ describe('speechrail_input_status', () => {
       reachable: false,
       authenticated: 'unverified',
       failureCode: '',
-      lastFailureCode: 'server-error',
-      lastFailureHttpStatus: 502,
+      unprovenFailureCode: 'server-error',
+      unprovenFailureHttpStatus: 502,
     }
     expect(describeStatus(base)).toContain('that attempt failed with server-error (HTTP 502)')
     // A failure that never got an answer says so instead of inventing a status.
-    expect(describeStatus({ ...base, lastFailureCode: 'timeout', lastFailureHttpStatus: 0 }))
+    expect(describeStatus({ ...base, unprovenFailureCode: 'timeout', unprovenFailureHttpStatus: 0 }))
       .toContain('that attempt failed with timeout before a response arrived')
     // An open gate has nothing to explain, even when an earlier attempt failed.
     expect(describeStatus({ ...base, gate: 'ready', pendingOperationId: '' }))
@@ -302,8 +302,8 @@ describe('speechrail_input_status', () => {
       reachable: true,
       authenticated: 'refused',
       failureCode: 'unauthorized',
-      lastFailureCode: '',
-      lastFailureHttpStatus: 0,
+      unprovenFailureCode: '',
+      unprovenFailureHttpStatus: 0,
     }
     expect(describeStatus(base)).toContain('rejecting the credential')
     const failed = describeStatus({ ...base, authenticated: 'unverified', failureCode: 'server-error' })
