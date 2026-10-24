@@ -61,14 +61,40 @@ function versionOf(directoryName) {
   return directoryName.slice('@deepseek-ai+dsh-tools@'.length).split('_')[0]
 }
 
-/** Compare two dotted version strings numerically, ignoring any suffix. */
+/**
+ * Compare two version strings, prerelease included.
+ *
+ * The numeric part alone is not enough: two copies can differ only by their prerelease (`0.2.1-rc.2`
+ * against `0.2.1-rc.3`), which is exactly the case while a harness update leaves both in the store. A
+ * release outranks its own prereleases, prerelease identifiers are compared piecewise, and a numeric
+ * identifier ranks below an alphanumeric one.
+ */
 function compareVersions(left, right) {
-  const parts = (value) => value.split('-')[0].split('.').map((part) => Number.parseInt(part, 10) || 0)
-  const a = parts(left)
-  const b = parts(right)
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0)
+  const split = (value) => {
+    const [core = '', prerelease = ''] = value.split('-', 2)
+    return { core: core.split('.').map((part) => Number.parseInt(part, 10) || 0), prerelease: prerelease === '' ? [] : prerelease.split('.') }
+  }
+  const a = split(left)
+  const b = split(right)
+  for (let index = 0; index < Math.max(a.core.length, b.core.length); index += 1) {
+    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0)
     if (difference !== 0) return difference
+  }
+  if (a.prerelease.length === 0 && b.prerelease.length === 0) return 0
+  if (a.prerelease.length === 0) return 1
+  if (b.prerelease.length === 0) return -1
+  for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index += 1) {
+    const one = a.prerelease[index]
+    const other = b.prerelease[index]
+    if (one === undefined) return -1
+    if (other === undefined) return 1
+    if (one === other) continue
+    const oneNumeric = /^\d+$/u.test(one)
+    const otherNumeric = /^\d+$/u.test(other)
+    if (oneNumeric && otherNumeric) return Number(one) - Number(other)
+    if (oneNumeric) return -1
+    if (otherNumeric) return 1
+    return one < other ? -1 : 1
   }
   return 0
 }
