@@ -14,10 +14,11 @@ import type {
   SpeechRailConfigureResult,
   SpeechRailFailure,
   SpeechRailInputStatus,
+  SpeechRailLimits,
   SpeechRailTranscribeRequest,
   SpeechRailTranscriptionResult,
 } from '../contracts.ts'
-import { NS, type SpeechRailKey } from './locales.ts'
+import { NS } from './locales.ts'
 import { RecordingError, audioBase64, type Recording } from './recording.ts'
 import { Waveform } from './Waveform.tsx'
 
@@ -51,6 +52,8 @@ interface Active {
   readonly abort: AbortController
   readonly span: TokenSpan
   readonly operationId: string
+  /** Limits admitted when this recording started; never read from a later render. */
+  readonly limits: SpeechRailLimits
   phase: 'requesting' | 'recording' | 'transcribing'
   timer?: ReturnType<typeof setTimeout> | undefined
 }
@@ -159,12 +162,12 @@ export function VoiceInput({
   const feedback = (text: string): void => { setMessage(text); setPhase('feedback') }
 
   const failureText = (failure: SpeechRailFailure): string => {
-    const text = t(`failure.${failure.code}` as SpeechRailKey)
+    const text = t(`failure.${failure.code}`)
     return failure.requestId === null ? text : `${text} (${failure.requestId})`
   }
 
   const captureText = (error: unknown): string => {
-    if (error instanceof RecordingError) return t(`capture.${error.kind}` as SpeechRailKey)
+    if (error instanceof RecordingError) return t(`capture.${error.kind}`)
     return t('failure.internal')
   }
 
@@ -175,7 +178,7 @@ export function VoiceInput({
     const run = generation.current
     clearTimeout(active.timer)
     setPhase('transcribing')
-    const limits = view?.limits ?? { maxUploadBytes: 0, maxAudioSeconds: 0 }
+    const limits = active.limits
     try {
       const wave = await active.capture.stop(limits.maxAudioSeconds, limits.maxUploadBytes)
       if (run !== generation.current) return
@@ -219,7 +222,7 @@ export function VoiceInput({
     const capture = createRecording()
     const active: Active = {
       capture, abort: new AbortController(), span: inputActions.captureInsertion(),
-      operationId: crypto.randomUUID(), phase: 'requesting',
+      operationId: crypto.randomUUID(), phase: 'requesting', limits: snapshot.limits,
     }
     current.current = active
     setPhase('requesting')
@@ -247,6 +250,12 @@ export function VoiceInput({
     // only as the user's explicit assertion that nothing of theirs is outstanding.
     try {
       const result = await acknowledge({ operationId: view.pendingOperationId })
+      if (result.ok && result.pendingOperationId !== null) {
+        // The host accepted the request but something else still holds the gate.
+        await refresh()
+        feedback(t('gateBusy'))
+        return
+      }
       if (!result.ok) {
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
@@ -306,7 +315,7 @@ export function VoiceInput({
         ? <Waveform recording={current.current?.capture} label={t('recording')} />
         : (
           <span role="status" style={messageStyle} title={pending === '' ? message : pending}>
-            {phase === 'feedback' ? message : t(phase === 'requesting' ? 'requesting' : phase === 'transcribing' ? 'transcribingShort' : 'transcribing')}
+            {phase === 'feedback' ? message : t(phase === 'transcribing' ? 'transcribingShort' : 'requesting')}
           </span>
         )}
       {phase === 'recording' && (
@@ -315,7 +324,7 @@ export function VoiceInput({
       {phase === 'feedback' && (pending !== ''
         ? (
           <button type="button" style={inlineStyle} onClick={() => {
-            if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setPhase('idle') }
+            if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setMessage(''); setPhase('idle') }
           }}>{t('insert')}</button>
         )
         : (

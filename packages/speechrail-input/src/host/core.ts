@@ -196,6 +196,12 @@ export class SpeechRailInputCore {
   private checkedAt: string | null = null
   /** The single probe in flight, if any; see `check()`. */
   private checkInFlight: Promise<SpeechRailCheckResult> | null = null
+  /**
+   * Whether the last journal read failed. It distinguishes "this host could not read
+   * its medium" from "an upload's outcome is genuinely unproven", which must not be
+   * reported as the same thing.
+   */
+  private journalUnreadable = false
 
   constructor(private readonly deps: CoreDependencies) {}
 
@@ -207,6 +213,7 @@ export class SpeechRailInputCore {
    */
   async restore(): Promise<void> {
     const state = await this.deps.journal.read()
+    this.journalUnreadable = !state.available
     if (!state.available) {
       this.gateState = 'unknown'
       this.pendingOperationId = null
@@ -332,7 +339,9 @@ export class SpeechRailInputCore {
    */
   private claim(operationId: string): { readonly ok: true } | { readonly ok: false; readonly failure: SpeechRailFailure } {
     if (this.gateState === 'busy') return { ok: false, failure: failure('busy') }
-    if (this.gateState === 'unknown') return { ok: false, failure: unknownFailure('unknown-outcome') }
+    if (this.gateState === 'unknown') {
+      return { ok: false, failure: unknownFailure(this.journalUnreadable ? 'journal-unavailable' : 'unknown-outcome') }
+    }
     this.gateState = 'busy'
     this.pendingOperationId = operationId
     return { ok: true }
@@ -405,6 +414,7 @@ export class SpeechRailInputCore {
     if (!validated.ok || validated.byteLength > limits.maxUploadBytes) return await refuse('audio-invalid')
 
     const state = await this.deps.journal.read()
+    this.journalUnreadable = !state.available
     if (!state.available) return await refuse('journal-unavailable')
     if (state.pending !== null) {
       await this.adoptUnknown(state.pending.operationId)

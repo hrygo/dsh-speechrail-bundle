@@ -10,7 +10,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { probeCapabilities, transcribe } from '../src/host/http.ts'
+import { probeCapabilities, transcribe, unbracketHostname } from '../src/host/http.ts'
 import { encodeWave } from '../src/protocol/wave.ts'
 import { TRANSCRIPTION_RESPONSE_MAX_BYTES } from '../src/contracts.ts'
 
@@ -241,6 +241,25 @@ describe('capability probe', () => {
     expect(outcome.capabilities?.schemaVersion).toBe('effective_capabilities_v1')
     expect(outcome.capabilities?.limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
     expect(outcome.capabilities?.languages).toEqual({ status: 'supported', values: ['zh', 'en'] })
+  })
+
+  it('unbrackets an IPv6 literal so a loopback request stays on loopback', () => {
+    // `new URL('http://[::1]:1/').hostname` is '[::1]', which Node resolves as a name.
+    expect(unbracketHostname('[::1]')).toBe('::1')
+    expect(unbracketHostname('127.0.0.1')).toBe('127.0.0.1')
+    expect(unbracketHostname('localhost')).toBe('localhost')
+  })
+
+  it('reports a response that arrived as reachable even when its body is refused', async () => {
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end('x'.repeat(300_000))
+    })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 5_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.failure?.code).toBe('malformed-response')
+    expect(outcome.reachable).toBe(true)
   })
 
   it('reports a service that declares transcription unsupported as unusable', async () => {

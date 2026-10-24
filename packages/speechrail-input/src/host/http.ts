@@ -68,6 +68,18 @@ export interface HttpRequestOptions {
  * @param options - request description.
  * @returns the capped response, or a sanitized failure plus whether bytes were written.
  */
+/**
+ * Strip the brackets `new URL` keeps around an IPv6 literal.
+ *
+ * Node treats `'[::1]'` as a name to resolve rather than as an address, so passing it
+ * through would send a loopback-only request to whatever DNS answers — or fail.
+ * @param hostname - `URL.hostname`, possibly bracketed.
+ * @returns the bare address, suitable for `http.request`.
+ */
+export function unbracketHostname(hostname: string): string {
+  return hostname.replace(/^\[|\]$/gu, '')
+}
+
 export function performRequest(options: HttpRequestOptions): Promise<HttpResult> {
   return new Promise<HttpResult>((resolve) => {
     let settled = false
@@ -95,7 +107,14 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
       const target = new URL(options.url)
       request = httpRequest({
         protocol: target.protocol,
-        hostname: target.hostname,
+        // `new URL('http://[::1]:1/').hostname` keeps the brackets, and Node would then
+        // treat the literal as a name to resolve: the request could leave loopback and
+        // fail. Strip them so ::1 stays ::1.
+        hostname: unbracketHostname(target.hostname),
+        // A loopback-only endpoint has no legitimate proxy, and Node's env-proxy opt-in
+        // (NODE_USE_ENV_PROXY / --use-env-proxy) would otherwise send the bearer
+        // credential and the audio to HTTP_PROXY.
+        agent: false,
         port: target.port,
         path: `${target.pathname}${target.search}`,
         method: options.method,
@@ -345,7 +364,11 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
     maxResponseBytes: TRANSCRIPTION_RESPONSE_MAX_BYTES,
     signal: options.signal,
   })
-  if (!result.ok) return { ok: false, reachable: false, authenticated: false, failure: result.failure }
+  if (!result.ok) {
+    // A response can arrive and still fail (a body over the cap, a stall after the
+    // headers); `httpStatus` records that it did, so report reachability honestly.
+    return { ok: false, reachable: result.failure.httpStatus !== null, authenticated: false, failure: result.failure }
+  }
   if (result.status !== 200) {
     return {
       ok: false,

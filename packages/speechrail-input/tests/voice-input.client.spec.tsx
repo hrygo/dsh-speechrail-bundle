@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
 import { failure } from '../src/host/failure.ts'
+import type { Recording } from '../src/client/recording.ts'
 import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailInputStatus } from '../src/types.ts'
 
 afterEach(() => { cleanup() })
@@ -68,6 +69,32 @@ describe('VoiceInput acknowledge', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
     await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: null }) })
+  })
+
+  it('stops a recording at the limits admitted when it started', async () => {
+    // The duration timer closes over the render that scheduled it. Reading the limits
+    // from that stale `view` (undefined, for a click before the first status resolves)
+    // made stop() see 0 bytes and discard up to the full recording as "too large".
+    const stop = vi.fn(async () => new Uint8Array([1, 2, 3]))
+    const capture = { start: async () => undefined, stop, dispose: async () => undefined } as unknown as Recording
+    const status = vi.fn(async () => ({ ...STATUS, limits: { maxUploadBytes: 1_000, maxAudioSeconds: 0.001 } }))
+    const base = props({}, vi.fn(async () => { throw new Error('unused') }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => ({ ok: false, transcript: null, failure: failure('audio-invalid') })}
+      />,
+    )
+
+    // Click before the mount effect's status resolves: that is the render whose `finish`
+    // closure the timer captures, and its `view` is still undefined.
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    // The limit timer fires 1 ms after the recording starts.
+    await waitFor(() => { expect(stop).toHaveBeenCalled() }, { timeout: 2_000 })
+    expect(stop).toHaveBeenCalledWith(0.001, 1_000)
   })
 
   it('refreshes after a refusal so the next attempt carries the discovered id', async () => {

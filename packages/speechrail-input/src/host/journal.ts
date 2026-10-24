@@ -46,8 +46,15 @@ export interface PendingJournal {
   reset(): Promise<boolean>
 }
 
-/** Unit name of the single-ledger journal. */
-export const JOURNAL_UNIT = 'speechrail-input-pending'
+/**
+ * Unit name of the single-ledger journal.
+ *
+ * The storage backend validates unit names against `/^[a-z][a-z0-9_]*$/`, so a hyphen
+ * makes `kv.open()` reject the descriptor: every journal call would then report the
+ * medium as unavailable, the gate would open as unproven, and no upload could ever be
+ * sent. `tools/check-journal-unit.mjs` asserts this against the real rule.
+ */
+export const JOURNAL_UNIT = 'speechrail_input_pending'
 
 /** Unit format version; a mismatch on disk reads as unusable rather than as empty. */
 export const JOURNAL_VERSION = 1

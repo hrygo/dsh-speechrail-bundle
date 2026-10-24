@@ -3,7 +3,7 @@
 ## DeepSeek Harness voice input baseline
 
 - Copyright: Copyright (c) 2026 DeepSeek.
-- License: MIT; full notice retained at [LICENSE](LICENSE) and [upstream LICENSE](upstream/deepseek-harness/LICENSE).
+- License: MIT; full notice retained at [LICENSE](LICENSE) and [upstream LICENSE](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/LICENSE).
 - Source: https://github.com/deepseek-ai/deepseek-harness
 - Ref: `dsh-v0.2.1-rc.2`.
 - Commit: `687f282e8625c6b8d11ff58211a90524be2e4317`.

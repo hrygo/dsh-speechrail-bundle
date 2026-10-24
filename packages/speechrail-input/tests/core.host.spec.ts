@@ -6,7 +6,7 @@ import {
 } from '../src/contracts.ts'
 import { SpeechRailInputCore, type CoreDependencies, type ResolvedConfig } from '../src/host/core.ts'
 import { failure, unknownFailure } from '../src/host/failure.ts'
-import { journalFromUnit, memoryJournal, type JournalRecord, type JournalState, type PendingJournal } from '../src/host/journal.ts'
+import { JOURNAL_UNIT, JOURNAL_VERSION, journalFromUnit, memoryJournal, type JournalRecord, type JournalState, type PendingJournal } from '../src/host/journal.ts'
 import type { ProbeOutcome, TranscribeOutcome } from '../src/host/http.ts'
 import { encodeWave } from '../src/protocol/wave.ts'
 
@@ -142,6 +142,16 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
 function payload(operationId: string, samples = 16_000): string {
   return JSON.stringify({ operationId, audioBase64: audio(samples) })
 }
+
+describe('journal descriptor', () => {
+  it('uses a unit name the storage backend accepts', () => {
+    // The backend rule is /^[a-z][a-z0-9_]*$/: a hyphen makes kv.open() reject the
+    // descriptor, which made every upload impossible. `pnpm check:journal` runs the same
+    // assertion against the real rule; this keeps the failure local and fast.
+    expect(JOURNAL_UNIT).toMatch(/^[a-z][a-z0-9_]*$/)
+    expect(JOURNAL_VERSION).toBeGreaterThanOrEqual(1)
+  })
+})
 
 describe('payload strictness', () => {
   it('refuses unknown keys instead of silently dropping them', async () => {
@@ -365,6 +375,18 @@ describe('unproven outcomes', () => {
     const refused = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
     expect(refused.failure?.code).toBe('journal-unavailable')
     expect((await h.core.status()).gate).toBe('unknown')
+  })
+
+  it('reports an unreadable medium instead of inventing an unproven upload', async () => {
+    // Without the distinction this refusal claimed unknown-outcome, i.e. it presented a
+    // storage failure as "an earlier upload may have happened".
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    const result = await h.core.transcribe(payload('op_vvvvvvvv'))
+    expect(result.ok).toBe(false)
+    expect(result.failure?.code).toBe('journal-unavailable')
+    expect(h.sends).toHaveLength(0)
   })
 
   it('does not erase a readable record when the earlier read failed transiently', async () => {

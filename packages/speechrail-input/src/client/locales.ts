@@ -34,6 +34,7 @@ export const zh = {
   'capture.permission': '麦克风权限被拒绝，请在浏览器与系统设置中允许。',
   'capture.unavailable': '当前浏览器无法录音。',
   'capture.deviceMissing': '找不到可用的麦克风。',
+  'capture.cancelled': '录音已取消。',
   'capture.interrupted': '录音被设备中断。',
   'capture.empty': '没有录到音频。',
   'capture.tooLarge': '录音超过上传上限，请缩短时长。',
@@ -89,6 +90,7 @@ export const zh = {
   'settings.pendingOperation': '待确认操作：{id}',
   'settings.transcriptionStatus': '转写能力：{state}',
   'settings.supported': '可用',
+  'settings.available': '可用',
   'settings.unsupported': '不可用',
   'settings.languages': '服务端声明语言：{values}',
 } as const
@@ -122,6 +124,7 @@ export const en: Record<SpeechRailKey, string> = {
   'capture.permission': 'Microphone access was refused. Allow it in the browser and system settings.',
   'capture.unavailable': 'This browser cannot record audio.',
   'capture.deviceMissing': 'No usable microphone was found.',
+  'capture.cancelled': 'The recording was cancelled.',
   'capture.interrupted': 'The device interrupted the recording.',
   'capture.empty': 'No audio was captured.',
   'capture.tooLarge': 'The recording exceeds the upload limit. Shorten it.',
@@ -177,6 +180,7 @@ export const en: Record<SpeechRailKey, string> = {
   'settings.pendingOperation': 'Pending operation: {id}',
   'settings.transcriptionStatus': 'Transcription capability: {state}',
   'settings.supported': 'supported',
+  'settings.available': 'available',
   'settings.unsupported': 'unsupported',
   'settings.languages': 'Service languages: {values}',
 }

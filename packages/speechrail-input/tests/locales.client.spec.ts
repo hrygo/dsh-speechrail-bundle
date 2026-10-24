@@ -22,7 +22,7 @@ describe('client dictionaries', () => {
   })
 
   it('has copy for every capture refusal', () => {
-    for (const kind of ['permission', 'unavailable', 'deviceMissing', 'interrupted', 'empty', 'tooLarge']) {
+    for (const kind of ['permission', 'unavailable', 'deviceMissing', 'cancelled', 'interrupted', 'empty', 'tooLarge']) {
       expect(zh).toHaveProperty(`capture.${kind}`)
       expect(en).toHaveProperty(`capture.${kind}`)
     }

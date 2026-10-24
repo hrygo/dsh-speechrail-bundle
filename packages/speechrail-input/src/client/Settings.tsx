@@ -200,7 +200,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         )}
       </div>
       <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.models')}</span>
+        <span style={labelStyle}>{t('settings.transcriptionStatus', { state: view?.capabilities?.transcriptionSupported === true ? t('settings.available') : t('settings.unsupported') })}</span>
         <span style={valueStyle}>
           {capabilities === null || capabilities === undefined
             ? t('settings.never')
