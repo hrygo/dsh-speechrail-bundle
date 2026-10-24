@@ -247,6 +247,36 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
   })
 
+  it('keeps an edit made while the save was in flight, and keeps it unsaved', async () => {
+    // `adopt` clears the dirty marks, so an edit typed during the save used to be shown and
+    // then silently treated as saved: the next refresh replaced it with the server's value.
+    let release: (() => void) | undefined
+    const configure = vi.fn(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return { ok: true, revision: 2, failure: null }
+    })
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, requestTimeoutMs: 150_000, revision: 1 })
+      .mockResolvedValue({ ...STATUS, requestTimeoutMs: 90_000, revision: 2 })
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} status={status} />)
+
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('150000') })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+    await waitFor(() => { expect(configure).toHaveBeenCalled() })
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '5000' } })
+
+    release?.()
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+
+    // Still unsaved, so a later refresh must leave it alone.
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(3) })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
 

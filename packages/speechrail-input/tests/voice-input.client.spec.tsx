@@ -185,6 +185,42 @@ describe('VoiceInput acknowledge', () => {
     expect(await screen.findByText('acknowledged')).toBeTruthy()
   })
 
+  it('shows a result that arrives while the recording is being transcribed', async () => {
+    // Only the recording phase renders a stop control, so a live capture that has moved on to
+    // transcription must be reported through feedback: setting a message there renders the
+    // phase label instead and the outcome is never seen.
+    let releaseAck: ((status: SpeechRailInputStatus) => void) | undefined
+    let releaseTranscribe: (() => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_jjjjjjjj' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { releaseAck = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_jjjjjjjj' }, async () => ({ ok: false, pendingOperationId: null, failure: failure('conflict') }))
+    const capture = { start: async () => undefined, stop: vi.fn(async () => new Uint8Array([1])), dispose: async () => undefined } as unknown as Recording
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => {
+          await new Promise<void>((resolve) => { releaseTranscribe = resolve })
+          return { ok: false, transcript: null, failure: null }
+        }}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(releaseTranscribe).toBeDefined() })
+
+    releaseAck?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    expect(await screen.findByText('failure.conflict')).toBeTruthy()
+    releaseTranscribe?.()
+  })
+
   it('refuses before opening the microphone when no credential is configured', async () => {
     // Without a credential every upload is refused, so the refusal must arrive before a
     // whole dictation is recorded and thrown away.

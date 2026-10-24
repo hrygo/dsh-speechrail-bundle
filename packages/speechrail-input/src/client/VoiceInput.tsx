@@ -104,9 +104,19 @@ export function VoiceInput({
     return () => { onActiveChange(false) }
   }, [expanded, onActiveChange])
 
+  const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
+  const statusSeq = useRef(0)
+
   const refresh = async (): Promise<SpeechRailInputStatus | undefined> => {
+    const seq = ++statusSeq.current
     try {
       const next = await status()
+      // A read issued before one that already landed must not overwrite the newer view.
+      // This does not cover a newer request that the host answers with an older snapshot:
+      // `revision` tracks settings, not the gate, so the client cannot order two responses by
+      // content. See "Known limitations" in README.md.
+      if (seq < statusSeq.current) return viewRef.current
+      viewRef.current = next
       setView(next)
       return next
     } catch {
@@ -198,6 +208,7 @@ export function VoiceInput({
         feedback(t('conflict'))
         return
       }
+      setMessage('')
       setPhase('idle')
       void refresh()
     } catch (failure) {
@@ -254,8 +265,10 @@ export function VoiceInput({
     // A result may arrive after the user has started recording again; reporting it must not
     // collapse the row then, or the stop button of a live microphone disappears with it.
     const report = (text: string): void => {
-      if (current.current === undefined) feedback(text)
-      else setMessage(text)
+      // Only `phase === 'recording'` renders a stop control, so a live capture in any other
+      // phase is reported through feedback without hiding anything.
+      if (current.current?.phase === 'recording') setMessage(text)
+      else feedback(text)
     }
     // A null id means the stored record could not be read at all; the Host accepts it
     // only as the user's explicit assertion that nothing of theirs is outstanding.

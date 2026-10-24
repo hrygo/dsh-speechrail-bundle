@@ -58,10 +58,24 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.5/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.6/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.
+
+## Known limitations
+
+- Two status reads can be in flight at once (a check and a recording start, for example). The client
+  ignores one that lands after a newer read has already been applied, but it cannot order two
+  responses by their content: `revision` tracks settings writes, not the gate, so a response the
+  service produced from an older snapshot can still be shown until the next read corrects it.
+- A capability the service does not state is treated as unsupported rather than assumed. The settings
+  page only says "not stated by the service" when a check actually reached the service; a check the
+  host refused locally (no credential, unusable endpoint) reads as "not checked yet".
+- The request budget is bounded to 1000–180000 ms, by the settings schema and again on the Remote
+  path, because the settings store validates shape rather than `min`/`max`.
+- The bundle never reads or stores the credential itself: it resolves the configured reference name
+  through the Harness credential store on each request.
 
 ## Verify
 

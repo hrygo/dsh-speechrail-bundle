@@ -59,6 +59,12 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   // was in flight would still be overwritten.
   const languageDirty = useRef(false)
   const budgetDirty = useRef(false)
+  // Counters, not booleans: a field edited while a request is in flight was not part of that
+  // request, so it has to stay dirty after the request adopts the server's answer.
+  const languageEdits = useRef(0)
+  const budgetEdits = useRef(0)
+
+  const editEpoch = (): { language: number, budget: number } => ({ language: languageEdits.current, budget: budgetEdits.current })
 
   /** Show fresh values, keeping anything the user has edited and not saved. */
   const applyStatus = (next: SpeechRailInputStatus): void => {
@@ -67,10 +73,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     if (!budgetDirty.current) setBudgetText(String(next.requestTimeoutMs))
   }
 
-  const adopt = (next: SpeechRailInputStatus): void => {
+  const adopt = (next: SpeechRailInputStatus, epoch: { language: number, budget: number }): void => {
     applyStatus(next)
-    languageDirty.current = false
-    budgetDirty.current = false
+    languageDirty.current = languageEdits.current !== epoch.language
+    budgetDirty.current = budgetEdits.current !== epoch.budget
   }
 
   const failureText = (failure: SpeechRailFailure): string => {
@@ -81,7 +87,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   useEffect(() => {
     void (async () => {
       try {
-        adopt(await status())
+        adopt(await status(), editEpoch())
       } catch {
         setNote(t('failure.internal'))
       }
@@ -113,9 +119,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     try {
       const timeout = clampBudget(budgetText)
       setBudgetText(String(timeout))
+      const epoch = editEpoch()
       const result = await configure({ language, requestTimeoutMs: timeout, expectedRevision: view.revision })
       if (result.ok) {
-        adopt(await status())
+        adopt(await status(), epoch)
         setNote(t('settings.saved'))
         return
       }
@@ -216,7 +223,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 name="speechrail-language"
                 checked={language === mode}
                 disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode); languageDirty.current = true }}
+                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1 }}
               />
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
@@ -231,7 +238,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
           value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true }}
+          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1 }}
           onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />
