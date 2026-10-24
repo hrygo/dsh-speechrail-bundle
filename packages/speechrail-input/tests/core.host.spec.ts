@@ -47,6 +47,8 @@ interface Harness {
   /** When set, `read()` queues its resolution for the test to release. */
   deferReads: boolean
   pendingReads: Array<(state: JournalState) => void>
+  /** When set, the transcribe seam waits for it, holding an upload in flight. */
+  transcribeHold: Promise<void> | null
   /** Readable medium holding a malformed record: unreadable, but writable. */
   corrupt: boolean
   config: ResolvedConfig
@@ -71,6 +73,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     readFails: false,
     deferReads: false,
     pendingReads: [],
+    transcribeHold: null,
     corrupt: false,
     config: CONFIG,
     credential: 'secret-key',
@@ -117,6 +120,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     resolveCredential: async () => state.credential,
     journal,
     transcribe: async (request): Promise<TranscribeOutcome> => {
+      if (state.transcribeHold !== null) await state.transcribeHold
       const pendingAtSend = stored
       state.sends.push({
         baseUrl: request.baseUrl,
@@ -237,6 +241,48 @@ describe('unreadable medium recovery', () => {
     await older
     expect((await h.core.status()).pendingOperationId).toBe('op_cccccccc')
     expect((await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_cccccccc' }))).ok).toBe(true)
+  })
+
+  it('does not reopen a gate an upload has just claimed', async () => {
+    // The null-id acknowledgement decides before awaiting its read. An upload can heal the
+    // gate, claim it and record its operation in that window; reporting an open gate then
+    // would prompt a second recording that the host refuses as an unknown outcome, and the
+    // erase would destroy the live operation's only record.
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingReads).toHaveLength(1)
+
+    let releaseUpload: (() => void) | undefined
+    h.transcribeHold = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const upload = h.core.transcribe(payload('op_aaaaaaaa'))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingReads).toHaveLength(2)
+    h.pendingReads.pop()?.({ available: true, pending: null })
+    h.deferReads = false
+    await Promise.resolve()
+    await Promise.resolve()
+    expect((await h.core.status()).gate).toBe('busy')
+
+    // The acknowledgement's read now reports the medium as unreadable.
+    h.pendingReads.shift()?.({ available: false })
+    const result = await ack
+    expect(result.pendingOperationId).toBe('op_aaaaaaaa')
+    const after = await h.core.status()
+    expect(after.gate).toBe('busy')
+    expect(after.pendingOperationId).toBe('op_aaaaaaaa')
+    const journalState = await h.journal.read()
+    expect(journalState.available && journalState.pending?.operationId).toBe('op_aaaaaaaa')
+
+    releaseUpload?.()
+    await upload
   })
 
   it('accepts both inclusive budget bounds and refuses just outside them', async () => {

@@ -74,6 +74,11 @@ Then set the endpoint and credential reference on its settings page.
   host refused locally (no credential, unusable endpoint) reads as "not checked yet".
 - The request budget is bounded to 1000–180000 ms, by the settings schema and again on the Remote
   path, because the settings store validates shape rather than `min`/`max`.
+- Changing a non-volatile setting (endpoint, model, credential reference) restarts the bundle's
+  entry, which releases the journal storage unit and immediately opens it again. The release is
+  fire-and-forget, and the backend rejects a second handle for a unit that is still open, so the new
+  instance can transiently read the journal as unavailable (an unproven gate with a spurious
+  acknowledgement prompt). A retry heals it; awaiting the release would remove the window.
 - The bundle never reads or stores the credential itself: it resolves the configured reference name
   through the Harness credential store on each request.
 

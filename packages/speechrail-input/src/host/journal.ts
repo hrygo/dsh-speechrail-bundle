@@ -40,8 +40,9 @@ export interface PendingJournal {
    * Clear the slot without matching an id.
    *
    * Only an explicit user acknowledgement of an *unreadable* record may call this:
-   * the user is asserting that no upload of theirs is outstanding. It still fails
-   * when the medium cannot be written.
+   * the user is asserting that no upload of theirs is outstanding. It refuses while the
+   * slot holds a readable record, because an upload may have written one after the caller
+   * decided, and it still fails when the medium cannot be written.
    */
   reset(): Promise<boolean>
 }
@@ -133,6 +134,16 @@ export function journalFromUnit(unit: JournalUnit): PendingJournal {
       }
     },
     async reset(): Promise<boolean> {
+      let stored: unknown
+      try {
+        stored = await unit.readGlobal()
+      } catch {
+        return false
+      }
+      // A readable record belongs to a live upload: erasing it would destroy the only
+      // evidence that an operation is outstanding. Unreadable bytes are still erased, which
+      // is the case this exists for.
+      if (parseJournalRecord(stored) !== null) return false
       try {
         await unit.writeGlobal(null)
         return true

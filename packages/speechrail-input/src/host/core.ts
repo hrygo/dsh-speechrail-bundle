@@ -527,6 +527,12 @@ export class SpeechRailInputCore {
       // transiently. Re-read before erasing: reset() only writes, so without this
       // check a momentary failure would destroy a record that is readable now.
       const reread = await this.deps.journal.read()
+      // The read is asynchronous: an upload may have healed the gate, claimed it and
+      // recorded its operation while it was in flight. Deciding on the state read before it
+      // would report an open gate and erase that operation's only record.
+      if (this.gateState !== 'unknown' || this.pendingOperationId !== null) {
+        return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
+      }
       if (reread.available && reread.pending !== null) {
         this.pendingOperationId = reread.pending.operationId
         return { ok: false, pendingOperationId: reread.pending.operationId, failure: failure('conflict') }
@@ -534,6 +540,11 @@ export class SpeechRailInputCore {
       const reset = await this.deps.journal.reset()
       if (!reset) {
         return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('journal-unavailable') }
+      }
+      // `reset` refuses while a readable record exists, so reaching here means the slot was
+      // empty or unreadable; the gate is only opened if nothing else took it meanwhile.
+      if (this.gateState !== 'unknown' || this.pendingOperationId !== null) {
+        return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
       }
       this.gateState = 'ready'
       this.pendingOperationId = null
