@@ -283,6 +283,10 @@ describe('capability probe', () => {
   it('settles when the service upgrades the connection instead of answering', async () => {
     // A 101 is neither `information` nor `response`, and after it destroy() settles nothing:
     // the probe used to hang past its deadline and hold the gate busy forever.
+    //
+    // The raw socket is deliberately held open (that is the stall under test), so the peer
+    // sits in CLOSE_WAIT until the cleanup below destroys it; fd counts return to baseline
+    // there, which is why this pattern leaves nothing behind in the suite.
     const sockets = new Set<Socket>()
     const server = createSocketServer((socket) => {
       sockets.add(socket)
@@ -307,7 +311,8 @@ describe('capability probe', () => {
 
   it('counts an informational response as an answer too', async () => {
     // Node reports 1xx on its own event; a 103 followed by a stall still proves the
-    // service is there.
+    // service is there. As above, the stall is the point and the socket is destroyed in
+    // the cleanup rather than by the server.
     const sockets = new Set<Socket>()
     const server = createSocketServer((socket) => {
       sockets.add(socket)
