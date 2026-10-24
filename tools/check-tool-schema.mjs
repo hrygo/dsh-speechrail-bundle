@@ -56,14 +56,32 @@ if (!existsSync(built)) {
 // inside `pnpm verify` (which must pass on a machine that never installed the Harness) while the
 // machines that do have the package - the release machine - still check the real registry.
 const optional = process.argv.includes('--optional')
+/** The version part of a store directory name, or an empty string when it has none. */
+function versionOf(directoryName) {
+  return directoryName.slice('@deepseek-ai+dsh-tools@'.length).split('_')[0]
+}
+
+/** Compare two dotted version strings numerically, ignoring any suffix. */
+function compareVersions(left, right) {
+  const parts = (value) => value.split('-')[0].split('.').map((part) => Number.parseInt(part, 10) || 0)
+  const a = parts(left)
+  const b = parts(right)
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
 /** Copies of the package that sit in this workspace's store without being importable by name. */
 function storedCopies() {
   const store = join(root, 'node_modules/.pnpm')
   if (!existsSync(store)) return []
   return readdirSync(store)
     .filter((entry) => entry.startsWith('@deepseek-ai+dsh-tools@'))
-    .sort()
-    .reverse()
+    // Newest first, by number rather than by string: '0.9.0' sorts above '0.10.0' lexically, which
+    // would quietly check the wrong copy.
+    .sort((left, right) => compareVersions(versionOf(right), versionOf(left)))
     .map((entry) => join(store, entry, 'node_modules/@deepseek-ai/dsh-tools/lib/index.js'))
     .filter((candidate) => existsSync(candidate))
 }
@@ -94,7 +112,8 @@ for (const specifier of candidates) {
 }
 if (loadError !== null) {
   if (optional) {
-    console.log(`check-tool-schema: skipped (no @deepseek-ai/dsh-tools resolvable: ${loadError.message})`)
+    // Upper case so a clean CI runner cannot look like a check that ran and passed.
+    console.log(`check-tool-schema: SKIPPED - no @deepseek-ai/dsh-tools resolvable (${loadError.message})`)
     process.exit(0)
   }
   console.error(`check-tool-schema: cannot load @deepseek-ai/dsh-tools (${loadError.message}); see the header of this file`)

@@ -29,5 +29,10 @@ jobs:
       # verify:ci checks the frozen snapshot hashes only: the pinned upstream commit's
       # git objects are not in this repository (the local `pnpm verify` also compares
       # them, from the upstream remote this runner does not have).
+      # Its registry schema check resolves @deepseek-ai/dsh-tools from the workspace, which a
+      # clean runner does not have, and the package must not become a dependency: it pulls
+      # @deepseek-ai/dsh-llm into the Typert program and breaks generation. So it prints
+      # "check-tool-schema: SKIPPED" here by design; the release machine, where the package is
+      # present, runs the real check and reports the version it checked.
       - name: Verify baseline, generate, typecheck, build, test
         run: pnpm verify:ci

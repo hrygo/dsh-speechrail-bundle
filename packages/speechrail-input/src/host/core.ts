@@ -466,6 +466,10 @@ export class SpeechRailInputCore {
     if (this.gateState === 'unknown') {
       return { ok: false, failure: unknownFailure(this.journalUnreadable ? 'journal-unavailable' : 'unknown-outcome') }
     }
+    // A new operation owns the gate from here, and the previous holder's cause is not attributable to
+    // it - even when a client reuses the same operation id. Clearing on refusal would be wrong: a
+    // refusal happens *because* the gate is still held, and that cause is exactly what a report needs.
+    this.unprovenFailure = null
     this.gateState = 'busy'
     this.pendingOperationId = operationId
     return { ok: true }

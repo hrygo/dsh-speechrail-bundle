@@ -284,6 +284,38 @@ describe('speechrail_input_status', () => {
       .not.toContain('that attempt failed')
   })
 
+  it('never shows a cause beside an open gate, and names local storage when it is the cause', () => {
+    // Both are renderer-level guards: the status already reports a cause only for the operation holding
+    // the gate, and a hand-built value must not be able to contradict that.
+    const base: StatusToolValue = {
+      credentialConfigured: true,
+      endpoint: 'http://127.0.0.1:8201/v1',
+      endpointProblem: '',
+      model: '',
+      language: 'auto',
+      languageHint: '',
+      languageOptions: [],
+      transcriptionSupport: 'unknown',
+      gate: 'ready',
+      pendingOperationId: '',
+      maxUploadBytes: 4_194_304,
+      maxAudioSeconds: 120,
+      probed: false,
+      reachable: false,
+      authenticated: 'unverified',
+      failureCode: '',
+      unprovenFailureCode: 'timeout',
+      unprovenFailureHttpStatus: 0,
+    }
+    expect(describeStatus(base)).not.toContain('that attempt failed')
+
+    // A closed gate with no operation is what an unreadable journal produces.
+    const unreadable = { ...base, gate: 'unknown' as const, unprovenFailureCode: '', unprovenFailureHttpStatus: 0 }
+    expect(describeStatus(unreadable)).toContain('the local journal could not be read')
+    expect(describeStatus({ ...unreadable, pendingOperationId: 'op_aaaaaaaa' }))
+      .not.toContain('the local journal could not be read')
+  })
+
   it('does not call a live upload an awaited acknowledgement', () => {
     // A busy gate holds an operation id too. Calling it "awaiting acknowledgement" would tell the
     // reader to clear an upload that is still in flight.

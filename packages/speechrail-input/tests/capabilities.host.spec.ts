@@ -112,14 +112,18 @@ describe('projectCapabilities', () => {
     // The token shape admits any number of subtags, so it cannot bound the token on its own: without a
     // length cap a service could put a huge string into a selector entry and into the tool's report.
     const long = `zh${'-ab'.repeat(20)}`
-    const at23 = `zh${'-ab'.repeat(7)}`
+    // Exactly the cap, and exactly one character past it: 3 + 7*3 = 24 and 3 + 6*3 + 4 = 25.
+    const at24 = `abc${'-de'.repeat(7)}`
+    const at25 = `abc${'-de'.repeat(6)}-def`
+    expect(at24).toHaveLength(24)
+    expect(at25).toHaveLength(25)
     const view = projectCapabilities(snapshot({
       ...SUPPORTED,
-      languages: { status: 'supported', values: ['zh-Hans-CN', 'sr-Latn-RS', 'pt-BR', at23, long] },
+      languages: { status: 'supported', values: ['zh-Hans-CN', 'sr-Latn-RS', 'pt-BR', at24, at25, long] },
     }))
     expect(view?.languages).toEqual({
       status: 'supported',
-      values: ['zh-hans-cn', 'sr-latn-rs', 'pt-br', at23],
+      values: ['zh-hans-cn', 'sr-latn-rs', 'pt-br', at24],
     })
   })
 

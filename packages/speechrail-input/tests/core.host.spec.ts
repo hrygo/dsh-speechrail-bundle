@@ -854,6 +854,29 @@ describe('unproven outcomes', () => {
     expect(reopened.unprovenFailure).toBe(null)
   })
 
+  it('drops the cause when a client reuses an acknowledged operation id', async () => {
+    // Operation ids come from the client, so nothing stops it from reusing one. Keying the cause by id
+    // alone is not enough: after acknowledgement the old cause is still in memory, and reusing the id
+    // for a locally refused attempt would attribute the old failure to a new one.
+    const h = harness()
+    h.fail = { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' }
+    await h.core.transcribe(payload('op_llllllll'))
+    expect((await h.core.status()).unprovenFailure?.code).toBe('server-error')
+
+    await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_llllllll' }))
+
+    h.fail = null
+    h.config = { ...CONFIG, endpointRefusal: 'not-loopback' }
+    h.clearFails = true
+    const reused = await h.core.transcribe(payload('op_llllllll'))
+    expect(reused.failure?.code).toBe('endpoint-invalid')
+
+    const reopened = await h.core.status()
+    expect(reopened.gate).toBe('unknown')
+    expect(reopened.pendingOperationId).toBe('op_llllllll')
+    expect(reopened.unprovenFailure).toBe(null)
+  })
+
   it('carries no cause when the restored gate holds no operation id', async () => {
     // A record that cannot be read closes the gate without an id: there is no attempt to attribute a
     // cause to, so a report must not carry one (the tool renders the cause alone when it is present).

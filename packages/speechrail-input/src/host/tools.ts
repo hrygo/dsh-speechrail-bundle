@@ -285,10 +285,15 @@ export function describeStatus(value: StatusToolValue): string {
   if (value.gate === 'unknown' && value.pendingOperationId !== '') {
     parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)
   }
+  // A closed gate with no operation is the shape a journal that cannot be read produces, and that is
+  // the one state where storage rather than the service is the cause.
+  if (value.gate === 'unknown' && value.pendingOperationId === '') {
+    parts.push('the local journal could not be read, so an unaccounted upload cannot be named')
+  }
   // The cause, not only the action: a closed gate says an upload is unaccounted for, and without this
-  // the reader has to guess what the service did. The status only reports a cause that belongs to the
-  // operation holding the gate, so this needs no second condition.
-  if (value.unprovenFailureCode !== '') {
+  // the reader has to guess what the service did. Guarded by the gate as well as the code, so a
+  // hand-built value can never show a cause beside an open gate.
+  if (value.gate === 'unknown' && value.unprovenFailureCode !== '') {
     parts.push(value.unprovenFailureHttpStatus === 0
       ? `that attempt failed with ${value.unprovenFailureCode} before a response arrived`
       : `that attempt failed with ${value.unprovenFailureCode} (HTTP ${String(value.unprovenFailureHttpStatus)})`)

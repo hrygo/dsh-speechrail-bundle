@@ -93,10 +93,12 @@ export function unbracketHostname(hostname: string): string {
  * values trimmed while it decides framing on the raw bytes, so a legal `Transfer-Encoding: chunked\t`
  * (HTAB is optional whitespace) is close-delimited here yet reported as exactly `chunked` - the same
  * string a genuinely chunked reply reports, with `rawHeaders` trimmed too. There is therefore no value
- * test that separates the two, and believing a merely *stated* framing is the dangerous direction: a
- * truncated or unusable body would settle, clearing the journal and opening the gate for an outcome
- * the service never confirmed. The price is that a complete chunked reply whose body is unusable stays
- * unproven and needs an acknowledgement; measured, and recorded as a deliberate trade-off.
+ * test that separates the two, and believing a merely *stated* framing is the dangerous direction: an
+ * unusable body would settle, clearing the journal and opening the gate for an outcome the service
+ * never confirmed. That covers unusable bodies only - a reply cut at a JSON boundary can still parse
+ * and settle as a success under either rule, which is why this is consulted only where the body could
+ * not be used at all. The price is that a complete chunked reply whose body is unusable stays unproven
+ * and needs an acknowledgement; measured, and recorded as a deliberate trade-off.
  * @param response - the response whose body was received.
  * @returns true only when the transport stated the body's length.
  */
