@@ -529,9 +529,46 @@ describe('payload strictness', () => {
   })
 
   it('refuses a payload larger than the carrier bound', async () => {
+    // A carrier that does not fit the transport is a take that is too large, not a malformed request:
+    // this assertion used to demand `bad-request`, which is what sent the user to check their
+    // configuration about a recording that had simply run too long.
     const h = harness()
     const oversized = `{"operationId":"op_12345678","audioBase64":"${'A'.repeat(TRANSCRIBE_PAYLOAD_MAX_BYTES)}"}`
-    expect((await h.core.transcribe(oversized)).failure?.code).toBe('bad-request')
+    expect((await h.core.transcribe(oversized)).failure?.code).toBe('audio-too-large')
+  })
+
+  it('accepts and rejects exactly the base64 the alphabet and padding rules describe', async () => {
+    // The scan replaced a regexp that made V8 recurse, so its boundary behaviour is the interesting
+    // part: a false accept reaches Buffer.from, which silently DROPS characters outside the alphabet
+    // and would transcribe whatever is left as if it were the recording.
+    const h = harness()
+    const rejected = ['', 'AAA', 'AAAAA', 'AAAAAA', '====', 'A===', 'AB==CD==', 'AA-A', 'AA_A', 'AAAA\n', 'AAAA ', 'éAAA']
+    for (const candidate of rejected) {
+      const result = await h.core.transcribe(JSON.stringify({ operationId: 'op_12345678', audioBase64: candidate }))
+      expect(result.failure?.code, `rejected ${JSON.stringify(candidate)}`).toBe('bad-request')
+    }
+    // Accepted by the alphabet rule, then refused as audio: proves the four-character forms below got
+    // past the scan rather than being rejected as malformed base64.
+    for (const candidate of ['AAAA', 'AAA=', 'AA==', 'AAAAAA==']) {
+      const result = await h.core.transcribe(JSON.stringify({ operationId: 'op_12345678', audioBase64: candidate }))
+      expect(result.failure?.code, `accepted ${candidate}`).toBe('audio-invalid')
+    }
+    // Why the base64url rejection matters: Buffer would have dropped the dash and decoded the rest.
+    expect(Buffer.from('AA-A', 'base64').byteLength).toBeGreaterThan(0)
+    expect(Buffer.from('AA_A', 'base64').byteLength).toBeGreaterThan(0)
+  })
+
+  it('names an over-large carrier as too large rather than as a bad request', async () => {
+    // The carrier admits roughly 147 s of canonical audio; past that the take is what is wrong, and
+    // reporting a bad request sent the user to check their configuration. No upload leaves the host,
+    // and the gate stays open because nothing was ever sent.
+    const h = harness()
+    const audioBase64 = 'A'.repeat(TRANSCRIBE_PAYLOAD_MAX_BYTES)
+    const result = await h.core.transcribe(JSON.stringify({ operationId: 'op_12345678', audioBase64 }))
+    expect(result.failure?.code).toBe('audio-too-large')
+    expect(result.failure?.outcome).toBe('failed')
+    expect(h.sends).toHaveLength(0)
+    expect((await h.core.status()).gate).toBe('ready')
   })
 
   it('refuses malformed operation ids, non-base64 audio and non-JSON carriers', async () => {

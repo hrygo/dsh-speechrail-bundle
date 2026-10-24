@@ -95,17 +95,22 @@ export type ParseResult<T> =
 const OPERATION_ID = /^[A-Za-z0-9_-]{8,64}$/u
 
 /** Standard base64 with padding; no data-URL prefix, no whitespace, no base64url alphabet. */
-const BASE64_ALPHABET = /^[A-Za-z0-9+/]$/u
+/** Code unit bounds of the standard base64 alphabet, compared as numbers rather than matched. */
+const BASE64_DIGIT_LOW = 0x30
+const BASE64_DIGIT_HIGH = 0x39
+const BASE64_UPPER_LOW = 0x41
+const BASE64_UPPER_HIGH = 0x5a
+const BASE64_LOWER_LOW = 0x61
+const BASE64_LOWER_HIGH = 0x7a
+const BASE64_PLUS = 0x2b
+const BASE64_SLASH = 0x2f
 
 /**
- * Whether the carrier holds standard base64 with padding.
+ * Whether the text is standard base64 with padding.
  *
- * Written as a scan rather than as the obvious pattern
- * `/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/`: that pattern makes V8's
- * engine recurse, and it threw `RangeError: Maximum call stack size exceeded` on a ~5 MB take - an
- * input the carrier limit admits - so a long recording crashed the parser instead of being refused
- * with a reason. This scan is linear and cannot overflow, and it accepts exactly what the pattern
- * accepted: a multiple of four, optional padding, the standard alphabet.
+ * Equivalent to the pattern this replaced for every non-empty string (fuzzed, and enumerated over
+ * small alphabets); it differs only for the empty string, which the pattern accepted and this
+ * rejects - and which the caller rejected anyway.
  *
  * @param text - candidate base64 text.
  * @returns whether it is standard base64 with padding.
@@ -115,7 +120,14 @@ function isBase64(text: string): boolean {
   const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0
   const body = text.length - padding
   for (let index = 0; index < body; index += 1) {
-    if (!BASE64_ALPHABET.test(text[index] ?? '')) return false
+    const unit = text.charCodeAt(index)
+    // A per-character regexp here cost about 65 ms for a near-ceiling take and ran twice per upload;
+    // comparing code units costs about 12 ms and cannot backtrack.
+    if (unit === BASE64_PLUS || unit === BASE64_SLASH) continue
+    if (unit >= BASE64_DIGIT_LOW && unit <= BASE64_DIGIT_HIGH) continue
+    if (unit >= BASE64_UPPER_LOW && unit <= BASE64_UPPER_HIGH) continue
+    if (unit >= BASE64_LOWER_LOW && unit <= BASE64_LOWER_HIGH) continue
+    return false
   }
   return true
 }
@@ -161,6 +173,12 @@ function refuse<T>(code: Parameters<typeof failure>[0]): ParseResult<T> {
  * @returns the validated request, or a refusal.
  */
 export function parseTranscribeRequest(text: string): ParseResult<SpeechRailTranscribeRequest> {
+  // A carrier that does not fit the transport is a size refusal, not a malformed request: the take is
+  // what is too large, and "check the configuration" sends the user to the wrong place. Measured: the
+  // carrier admits about 147 s of canonical audio, so without this the largest takes - the ones whose
+  // whole point is that they were too long to send - were reported as a bad request.
+  if (typeof text !== 'string') return refuse('bad-request')
+  if (Buffer.byteLength(text, 'utf8') > TRANSCRIBE_PAYLOAD_MAX_BYTES) return refuse('audio-too-large')
   const record = strictRecord(decodeCarrier(text, TRANSCRIBE_PAYLOAD_MAX_BYTES), ['operationId', 'audioBase64'])
   if (record === null) return refuse('bad-request')
   const operationId = record.operationId
@@ -213,7 +231,19 @@ export function parseAcknowledgeRequest(text: string): ParseResult<SpeechRailAck
  * @returns the decoded bytes, or null when the length is inconsistent.
  */
 export function decodeBase64Audio(value: string): Uint8Array | null {
-  if (!isBase64(value)) return null
+  return isBase64(value) ? decodeValidatedBase64(value) : null
+}
+
+/**
+ * Decode base64 that a caller has already validated.
+ *
+ * Scanning a near-ceiling take twice costs another ~12 ms of blocked event loop for nothing, and the
+ * only in-repo caller passes the parser's own output.
+ *
+ * @param value - base64 text the caller has validated.
+ * @returns the decoded bytes, or null when nothing decoded.
+ */
+function decodeValidatedBase64(value: string): Uint8Array | null {
   const bytes = Buffer.from(value, 'base64')
   return bytes.byteLength === 0 ? null : new Uint8Array(bytes)
 }
@@ -500,7 +530,7 @@ export class SpeechRailInputCore {
     }
     if (config.endpointRefusal !== null) return await refuse('endpoint-invalid')
 
-    const audio = decodeBase64Audio(request.audioBase64)
+    const audio = decodeValidatedBase64(request.audioBase64)
     if (audio === null) return await refuse('audio-invalid')
     // The service stated that it cannot transcribe: refuse before uploading anything.
     // A null snapshot states nothing, so it is not treated as a refusal.

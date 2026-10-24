@@ -217,8 +217,11 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
           ok: true,
           status: response.statusCode ?? 0,
           body: Buffer.concat(chunks),
+          // Framing means the reply says where its body ends. A length does; chunked encoding
+          // does; any other transfer-encoding token (identity, gzip) leaves the body delimited by
+          // the close, where a reply cut mid-transcript cannot be told from a complete one.
           framed: response.headers['content-length'] !== undefined
-            || response.headers['transfer-encoding'] !== undefined,
+            || /chunked/iu.test(String(response.headers['transfer-encoding'] ?? '')),
         })
       })
       response.on('error', () => { transportFailure('unreachable') })

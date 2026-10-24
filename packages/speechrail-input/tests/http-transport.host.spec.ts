@@ -433,9 +433,11 @@ describe('capability probe', () => {
     }
   })
 
-  it('keeps an unusable body on a 200 unproven', async () => {
-    // The contrast that makes the rule above meaningful: a 200 head says the service accepted the
-    // request, so a body that then broke proves nothing either way.
+  it('keeps a body that overran the response cap unproven', async () => {
+    // This reply is framed, but it is larger than any answer this client will read, so it is refused
+    // on size before its shape is judged: over the cap nothing proves the service finished, and the
+    // body is never silently truncated into a partial transcript. (The framing rule itself is pinned
+    // by the two tests above.)
     const server = await start((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(`{"text":"${'a'.repeat(300_000)}"}`)
@@ -444,6 +446,70 @@ describe('capability probe', () => {
     expect(outcome.ok).toBe(false)
     if (outcome.ok) throw new Error('unreachable')
     expect(outcome.failure.outcome).toBe('unknown')
+  })
+
+  it('settles a framed 200 whose body is unusable', async () => {
+    // The other half of the framing rule, and the reason it needs a length: a reply that says where
+    // its body ends proves the service finished, so an unusable body is a failed transcription rather
+    // than an unknown one. Node frames this reply with chunked encoding.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end('{"detail":"nope"}')
+    })
+    const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 2_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.failure.code).toBe('malformed-response')
+    expect(outcome.failure.outcome).toBe('failed')
+  })
+
+  it('settles a framed 200 whose length is explicit', async () => {
+    // Coverage for the Content-Length half of the framing test: dropping that clause used to leave
+    // the whole host suite green.
+    const body = '{"detail":"nope"}'
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      socket.end(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${String(Buffer.byteLength(body))}\r\n\r\n${body}`)
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('malformed-response')
+      expect(outcome.failure.outcome).toBe('failed')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
+  it('keeps a transfer-encoding that is not chunked unframed', async () => {
+    // `identity` is a transfer-encoding token but not framing: Node does not de-chunk it, so the body
+    // still ends at the close and truncation stays indistinguishable from completion.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      socket.end('HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: identity\r\n\r\n{"detail":"nope"}')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('malformed-response')
+      expect(outcome.failure.outcome).toBe('unknown')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
   })
 
   it('reports a server that never answered as unverified', async () => {

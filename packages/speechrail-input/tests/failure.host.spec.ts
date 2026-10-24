@@ -22,8 +22,9 @@ describe('failureForStatus', () => {
     const throttled = failureForStatus(429, null, null, null)
     expect(throttled.code).toBe('rate-limited')
     expect(throttled.retryable).toBe(true)
-    // 413 is declared by the same endpoint and stays an audio refusal.
-    expect(failureForStatus(413, null, null, null).code).toBe('audio-invalid')
+    // 413 is declared by the same endpoint, and payload-too-large is about the take's size.
+    expect(failureForStatus(413, null, null, null).code).toBe('audio-too-large')
+    expect(failureForStatus(415, null, null, null).code).toBe('audio-invalid')
   })
 })
 
@@ -77,7 +78,7 @@ describe('failureForStatus', () => {
   })
 
   it('treats an oversized or unsupported upload as invalid audio', () => {
-    expect(failureForStatus(413, null, null, null).code).toBe('audio-invalid')
+    expect(failureForStatus(413, null, null, null).code).toBe('audio-too-large')
     expect(failureForStatus(415, null, null, null).code).toBe('audio-invalid')
   })
 

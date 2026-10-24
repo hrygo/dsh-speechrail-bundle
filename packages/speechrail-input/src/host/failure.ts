@@ -142,8 +142,11 @@ export function failureForStatus(
       ? 'not-found'
       : status === 408 || status === 504
         ? 'timeout'
-        : status === 413 || status === 415
-          ? 'audio-invalid'
+        : status === 413
+          // Payload too large: the take, not its format.
+          ? 'audio-too-large'
+          : status === 415
+            ? 'audio-invalid'
           : status === 400 && declaredCode === 'model_not_found'
             ? 'model-not-found'
             : status >= 500
