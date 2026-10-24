@@ -177,35 +177,37 @@ describe('VoiceInput acknowledge', () => {
     })
   })
 
-  it('says nothing after a cancellation that never reached the wire', async () => {
-    // The other half of the rule: a take cancelled before the upload starts leaves the gate ready, so
-    // the page must not claim an unproven attempt.
-    let release: (() => void) | undefined
+  it('says nothing when the cancellation happened before anything was uploaded', async () => {
+    // The true "never reached the wire" case: the take is still being encoded, so no upload exists to
+    // reconcile. Reported as silence, and the upload is never even attempted.
+    let releaseStop: (() => void) | undefined
     const capture = {
       start: async () => undefined,
-      stop: async () => new Uint8Array([1]),
+      stop: async () => {
+        await new Promise<void>((resolve) => { releaseStop = resolve })
+        return new Uint8Array([1])
+      },
       dispose: async () => undefined,
     } as unknown as Recording
     const status = vi.fn(async () => ({ ...STATUS, gate: 'ready' as const, capabilities: null }))
+    const transcribe = vi.fn(async () => ({ ok: false, transcript: null, failure: failure('cancelled') }))
     const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
     render(
       <VoiceInput
         {...base}
         status={status}
         createRecording={() => capture}
-        transcribe={async () => {
-          await new Promise<void>((resolve) => { release = resolve })
-          return { ok: false, transcript: null, failure: failure('cancelled') }
-        }}
+        transcribe={transcribe}
       />,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'start' }))
     fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
-    await waitFor(() => { expect(release).toBeDefined() })
+    await waitFor(() => { expect(releaseStop).toBeDefined() })
 
     fireEvent.click(screen.getByRole('button', { name: 'cancel' }))
-    release?.()
+    releaseStop?.()
     await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(transcribe).not.toHaveBeenCalled()
     expect(screen.queryByText(/^unknownOutcome/)).toBeNull()
   })
 

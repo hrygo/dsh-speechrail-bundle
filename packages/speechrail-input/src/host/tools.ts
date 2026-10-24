@@ -193,7 +193,7 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
   return {
     name: STATUS_TOOL_NAME,
     description:
-      'Report whether local SpeechRail voice input is usable right now: the effective loopback endpoint, whether it is accepted, whether the configured credential resolves, whether the service answers and accepts that credential, whether the endpoint states it can transcribe at all, the language hint that will actually be sent and the upload limits in force, and whether an earlier recording is still awaiting acknowledgement.',
+      'Report whether local SpeechRail voice input is usable right now: the effective loopback endpoint, whether it is accepted, whether the configured credential resolves, whether the service answers and accepts that credential, whether the endpoint states it can transcribe at all, the language hint that will actually be sent and the upload limits in force, whether an earlier recording is still awaiting acknowledgement — and, when one is, the failure that left it unconfirmed.',
     parameters: {
       type: 'object',
       properties: {

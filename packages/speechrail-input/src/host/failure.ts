@@ -27,6 +27,14 @@ const DECLARED_CODES: Readonly<Record<string, SpeechRailFailureCode>> = {
 }
 
 /**
+ * Status a declared code was observed on, and the only one it may override.
+ *
+ * The code names the condition, but the status still decides settlement, authentication and routing:
+ * a 401 that happens to carry an audio code is a refusal of the credential, not a bad recording.
+ */
+const DECLARED_CODE_STATUS = 422
+
+/**
  * Build one sanitized failure.
  * @param code - closed failure code.
  * @param options - HTTP status, server request id and outcome override.
@@ -135,7 +143,14 @@ export function failureForStatus(
   requestId: string | null,
   declaredRetryable: boolean | null,
 ): SpeechRailFailure {
-  const declared = declaredCode === null ? undefined : DECLARED_CODES[declaredCode]
+  // `Object.hasOwn`, not a bare lookup: the declared-code filter admits the inherited names
+  // `constructor` and `__proto__`, and a bare lookup would return a function or a prototype where a
+  // failure code belongs - which then fails the Remote codec's own validation instead of reporting a
+  // refusal.
+  const declared = status !== DECLARED_CODE_STATUS || declaredCode === null
+    || !Object.hasOwn(DECLARED_CODES, declaredCode)
+    ? undefined
+    : DECLARED_CODES[declaredCode]
   const code: SpeechRailFailureCode = declared ?? (status === 401 || status === 403
     ? 'unauthorized'
     : status === 404

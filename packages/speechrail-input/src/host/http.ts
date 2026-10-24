@@ -87,6 +87,19 @@ export function unbracketHostname(hostname: string): string {
   return hostname.replace(/^\[|\]$/gu, '')
 }
 
+/**
+ * Read the final transfer coding of a response.
+ *
+ * Only `chunked` frames a body: any other final coding (`identity`, `gzip`) leaves the body delimited
+ * by the close, and a substring test would let `notchunked` or `chunked-fake` claim a framing the
+ * transport never provided.
+ * @param value - raw header value, or undefined.
+ * @returns the final coding, lowercased, or an empty string.
+ */
+function finalCoding(value: unknown): string {
+  return String(value ?? '').split(',').pop()?.trim().toLowerCase() ?? ''
+}
+
 export function performRequest(options: HttpRequestOptions): Promise<HttpResult> {
   return new Promise<HttpResult>((resolve) => {
     let settled = false
@@ -221,7 +234,7 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
           // does; any other transfer-encoding token (identity, gzip) leaves the body delimited by
           // the close, where a reply cut mid-transcript cannot be told from a complete one.
           framed: response.headers['content-length'] !== undefined
-            || /chunked/iu.test(String(response.headers['transfer-encoding'] ?? '')),
+            || finalCoding(response.headers['transfer-encoding']) === 'chunked',
         })
       })
       response.on('error', () => { transportFailure('unreachable') })

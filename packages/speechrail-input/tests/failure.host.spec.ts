@@ -16,6 +16,29 @@ describe('failureForStatus', () => {
     expect(failureForStatus(422, 'some_new_code', null, null).code).toBe('bad-request')
   })
 
+  it('keeps the vocabulary closed when a service declares an inherited property name', () => {
+    // The declared-code filter admits exactly two inherited names, `constructor` and `__proto__`, and
+    // a bare object lookup returns a function or a prototype for them. That value would then fail the
+    // Remote codec's own validation, turning a plain refusal into a boundary error.
+    for (const hostile of ['constructor', '__proto__', 'hasOwnProperty', 'toString']) {
+      const declared = failureForStatus(422, hostile, null, null)
+      expect(typeof declared.code, hostile).toBe('string')
+      expect(declared.code, hostile).toBe('bad-request')
+      expect(JSON.parse(JSON.stringify(declared)).code, hostile).toBe('bad-request')
+    }
+  })
+
+  it('uses a declared code only on the status it was observed on', () => {
+    // The measured case is a 422. Everywhere else the status still names the condition, and letting a
+    // code override it would report a refused credential or a missing route as a bad recording.
+    expect(failureForStatus(401, 'audio_decode_failed', null, null).code).toBe('unauthorized')
+    expect(failureForStatus(403, 'audio_decode_failed', null, null).code).toBe('unauthorized')
+    expect(failureForStatus(404, 'audio_decode_failed', null, null).code).toBe('not-found')
+    expect(failureForStatus(503, 'audio_decode_failed', null, null).code).toBe('server-error')
+    expect(failureForStatus(302, 'audio_decode_failed', null, null).code).toBe('redirected')
+    expect(failureForStatus(422, 'audio_decode_failed', null, null).code).toBe('audio-invalid')
+  })
+
   it('reads the throttling the endpoint declares as retryable', () => {
     // The endpoint declares 429. Reporting it as a non-retryable bad request told the user to check
     // their configuration when the service was asking them to come back shortly.

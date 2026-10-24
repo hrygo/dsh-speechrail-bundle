@@ -542,7 +542,11 @@ describe('payload strictness', () => {
     // part: a false accept reaches Buffer.from, which silently DROPS characters outside the alphabet
     // and would transcribe whatever is left as if it were the recording.
     const h = harness()
-    const rejected = ['', 'AAA', 'AAAAA', 'AAAAAA', '====', 'A===', 'AB==CD==', 'AA-A', 'AA_A', 'AAAA\n', 'AAAA ', 'éAAA']
+    // The empty carrier is refused by the parser's own empty check before the scan ever runs, so it is
+    // asserted separately rather than counted as evidence about the alphabet rules.
+    const empty = await h.core.transcribe(JSON.stringify({ operationId: 'op_12345678', audioBase64: '' }))
+    expect(empty.failure?.code).toBe('bad-request')
+    const rejected = ['AAA', 'AAAAA', 'AAAAAA', '====', 'A===', 'AB==CD==', 'AA-A', 'AA_A', 'AAAA\n', 'AAAA ', 'éAAA']
     for (const candidate of rejected) {
       const result = await h.core.transcribe(JSON.stringify({ operationId: 'op_12345678', audioBase64: candidate }))
       expect(result.failure?.code, `rejected ${JSON.stringify(candidate)}`).toBe('bad-request')

@@ -390,6 +390,56 @@ describe('capability probe', () => {
     }
   })
 
+  it('does not let a transfer-encoding that merely contains "chunked" claim framing', async () => {
+    // `notchunked`, `xchunked` and `chunked-fake` are not chunked: Node does not de-chunk them, so the
+    // body still ends at the close. A substring test would settle an outcome the service never
+    // confirmed.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      socket.end('HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: notchunked\r\n\r\n{"detail":"nope"}')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('malformed-response')
+      expect(outcome.failure.outcome).toBe('unknown')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
+  it('settles a decorated chunked reply whose final coding is chunked', async () => {
+    // `gzip, chunked` is chunked-framed: the final coding decides, and the body really does carry a
+    // chunked terminator here.
+    const body = '{"detail":"nope"}'
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.on('data', () => { /* swallow the upload */ })
+      socket.end(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: gzip, chunked\r\n\r\n${body.length.toString(16)}\r\n${body}\r\n0\r\n\r\n`)
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code).toBe('malformed-response')
+      expect(outcome.failure.outcome).toBe('failed')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
   it('reports the refusal a service sent while the body was still being written', async () => {
     // A service may check the authorization header and answer without waiting for a body it is still
     // receiving, then drop the connection. The status arrived, so `unreachable` would be false here:

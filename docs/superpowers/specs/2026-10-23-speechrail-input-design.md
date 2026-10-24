@@ -341,7 +341,14 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
 
-## 2026-10-24 决定记录（0.5.0：关着的门要说得出为什么）
+## 2026-10-24 决定记录（0.5.0 续：v0.4.0 审查的三项发现）
+
+- **HIGH（我自己上一轮引入的真缺陷）：未受信的"声明码"能逃出封闭词表。** `DECLARED_CODES[declaredCode]` 是对对象字面量的**原型链查询**，而 `readErrorEnvelope` 的过滤 `/^[a-z0-9_]{1,64}$/` 恰好放行两个继承名：`constructor` 与 `__proto__`。审查实测：`failureForStatus(422, 'constructor')` 返回的 `code` 是一个**函数**，`'__proto__'` 返回一个原型对象；`JSON.stringify` 会把它们丢掉（`code` 消失），而生成的 Remote 结果编解码器会**拒绝**这个值（`invalid_union`）——于是一次普通拒绝变成页面上的"内部插件错误"。改为 `Object.hasOwn(DECLARED_CODES, declaredCode)` 守卫，并补测试：四个继承名逐一断言 `typeof code === 'string'`、落到 `bad-request`、且 `JSON.parse(JSON.stringify(...))` 仍成立。
+- **MEDIUM：`/chunked/` 子串匹配让"未分帧"的回复冒充分帧。** `notchunked`、`xchunked`、`chunked-fake` 都含 `chunked`，Node 并不会去分块，正文仍以 close 结束；子串判断会把一次未证明的结局**结算**掉（开门）。改为取 `Transfer-Encoding` 的**最后一个编码**并要求它恰为 `chunked`（`gzip, chunked` 因此仍然分帧，测试里用真实的分块终止符验证）。
+- **LOW-MEDIUM：声明码凌驾于所有状态。** 实测的映射只在 422 上观察到，但原先任何状态都会被它覆盖：`401 + audio_decode_failed` 被报成"录音有问题"而不是"凭据被拒"。现在声明码**只在 `DECLARED_CODE_STATUS = 422` 上生效**，其余状态（401/403/404/408/3xx/5xx/200）照旧由状态决定；结算始终只由 `provesNotProcessed` 决定，不受影响。
+- **两处"通过理由不对"的测试（审查指出，均已改正）**：`core.host.spec.ts` 的 base64 边界表里 `''` 是被解析器自己的空值检查拒掉的、早于扫描，故从表中移出单独断言（不再冒充字母表规则的证据）；`voice-input.client.spec.tsx` 原"从未上线"用例其实上传已在线（它在等被挂起的 `transcribe`），只证明了"门开着时保持安静"——真正的场景是**编码阶段取消**（`capture.stop()` 挂起、`transcribe` 根本不会被调用），已按此重写并断言上传从未发生。
+
+关着的门要说得出为什么）
 
 - **agent 侧缺口（客户端已经会说、工具却说不出）。** 门因"未证明"关闭时，客户端会连同失败细节一起告知（0.3.0 修的那处），而 `speechrail_input_status` 只能报 `gate unknown; awaiting acknowledgement of op_x`——**动作有了、原因没有**，模型只能让用户去猜服务做了什么。journal 按设计只存不敏感的 operation id，所以原因无处可读：现在宿主在内存里保留**最近一次上传的失败**（`SpeechRailInputStatus.lastFailure`），工具以两个平铺字段（`lastFailureCode` / `lastFailureHttpStatus`）过界，仅当门确实关着时渲染成 "that attempt failed with server-error (HTTP 502)"，没有响应到达时则说 "before a response arrived"，不编造状态码。成功会清空它；**本机拒绝**（如超载体）同样记录，因为那也正是下一次被挡的原因。内存态：宿主重启会忘记原因，而它描述的 journal 记录仍在——这是取舍，写在类型注释里。
 - 新增 `lastFailure` 是**加性契约变化**（状态 +1 字段、工具 +2 字段），故记 0.5.0；边界 schema 由 Typert 构建期生成，`pnpm verify` 会重新生成（只跑单测会看到旧的 16 字段，这是我这轮踩到的坑）。
