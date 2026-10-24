@@ -78,6 +78,30 @@ describe('speechrail_input_status', () => {
       // `node tools/check-tool-schema.mjs`.
       expect(property, name).not.toHaveProperty('required')
     }
+    // The credential field carries the three-value vocabulary, not a boolean.
+    expect(schema.properties.authenticated).toMatchObject({
+      type: 'string',
+      enum: ['accepted', 'refused', 'unverified'],
+    })
+  })
+
+  it('calls a service without capabilities a plain transcription endpoint', async () => {
+    const { stub } = source()
+    const withoutCapabilities: StatusToolSource = {
+      ...stub,
+      check: async () => ({
+        ...CHECK,
+        reachable: true,
+        authenticated: 'unverified',
+        capabilities: null,
+        failure: failure('capabilities-absent', { httpStatus: 404 }),
+      }),
+    }
+    const value = await createStatusTool(withoutCapabilities).execute({ probe: true }) as StatusToolValue
+    expect(value.failureCode).toBe('capabilities-absent')
+    const text = describeStatus(value)
+    expect(text).toContain('plain transcription endpoint')
+    expect(text).not.toContain('not accepting the request')
   })
 
   it('reports the cached state without touching the network by default', async () => {

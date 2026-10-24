@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import contribution from '../lib/typert.remote-client.js'
 import { parseAcknowledgeRequest, parseConfigureRequest, parseTranscribeRequest } from '../src/host/core.ts'
 import { REMOTE_NAMESPACE } from '../src/contracts.ts'
+import type { SpeechRailAuthentication, SpeechRailCheckResult } from '../src/types.ts'
 
 /** Method ids the generated contribution must declare. */
 const METHODS = [
@@ -59,6 +60,17 @@ describe('generated Remote contribution', () => {
       const symbol = contribution.methods[id].result.typeSymbol
       expect(symbol.startsWith('@hrygo/dsh-speechrail-bundle/types#')).toBe(true)
     }
+  })
+
+  it('carries the credential verdict as one of three strings, never a boolean', () => {
+    // The published type is the contract other packages read; a boolean here would let a
+    // consumer keep conflating "refused" with "nothing judged it".
+    const verdicts: SpeechRailAuthentication[] = ['accepted', 'refused', 'unverified']
+    const result: SpeechRailCheckResult = {
+      reachable: true, authenticated: verdicts[1] ?? 'unverified', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z',
+    }
+    expect(verdicts).toHaveLength(3)
+    expect(result.authenticated).toBe('refused')
   })
 
   it('refuses a carrier with an unknown field instead of dropping it', () => {

@@ -348,6 +348,26 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect(screen.getByText('settings.conflict')).toBeTruthy()
   })
 
+  it('says a saved language is not in effect when the service never admitted it', async () => {
+    // The radio is checked and disabled at once; without this hint the control implies the
+    // hint is being applied while the upload actually sends no language at all.
+    const check = checkWith({ reachable: true, authenticated: 'accepted' })
+    const status = vi.fn().mockResolvedValue({ ...STATUS, language: 'zh' as const, languageOptions: ['auto'] })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} status={status} />)
+
+    await waitFor(() => { expect((screen.getByLabelText('settings.languageZh') as HTMLInputElement).disabled).toBe(true) })
+    expect((screen.getByLabelText('settings.languageZh') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByText('settings.languageNotInEffect')).toBeTruthy()
+  })
+
+  it('marks the limits as a package default while no snapshot is in force', async () => {
+    const check = checkWith({ reachable: true, authenticated: 'unverified', failure: failure('capabilities-absent', { httpStatus: 404 }) })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(screen.getByText((content) => content.includes('settings.limitsDefault'))).toBeTruthy() })
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: 'accepted' }) as never })} />)
 

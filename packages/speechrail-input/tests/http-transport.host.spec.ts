@@ -147,6 +147,10 @@ describe('transcription transport', () => {
     })
     const outcome = await transcribe({ baseUrl: origin.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
     expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    // Refusing a redirect is this bundle's own rule, so it must not read as an internal fault.
+    expect(outcome.failure.code).toBe('redirected')
+    expect(outcome.failure.httpStatus).toBe(302)
     // The redirect target must never see the request, and therefore never the bearer.
     expect(target.requests).toHaveLength(0)
     expect(origin.requests).toHaveLength(1)
@@ -163,15 +167,54 @@ describe('transcription transport', () => {
     expect(outcome.failure.code).toBe('malformed-response')
   })
 
-  it('rejects a body that is not a transcript', async () => {
+  it('rejects a present but malformed usage instead of ignoring it', async () => {
+    // Absence is accepted (an engine may not implement the extension); a `usage` that is
+    // there is a claim the service made, and a wrong claim is a refused response.
+    const bodies = [
+      '{"text":"x","usage":{"type":"duration","seconds":-1}}',
+      '{"text":"x","usage":{}}',
+      '{"text":"x","usage":{"type":"duration"}}',
+      '{"text":"x","usage":{"type":"duration","seconds":"1"}}',
+      '{"text":"x","usage":{"type":"duration","seconds":1e999}}',
+      '{"text":"x","usage":{"type":"tokens","seconds":1}}',
+      '{"text":"x","usage":[]}',
+      '{"text":"x","usage":"duration"}',
+    ]
+    for (const body of bodies) {
+      const server = await start((_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(body)
+      })
+      const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok, body).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code, body).toBe('malformed-response')
+    }
+  })
+
+  it('accepts a null usage exactly like an absent one', async () => {
+    // `{"usage": null}` is what a JSON producer emits for "no value"; refusing it while
+    // accepting an absent key would make the compatibility rule depend on the encoder.
     const server = await start((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end('{"text":"x","usage":{"type":"duration","seconds":-1}}')
+      response.end('{"text":"ok","usage":null}')
     })
     const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
-    expect(outcome.ok).toBe(false)
-    if (outcome.ok) throw new Error('unreachable')
-    expect(outcome.failure.code).toBe('malformed-response')
+    expect(outcome.ok).toBe(true)
+  })
+
+  it('refuses a 200 that is not a JSON object carrying text', async () => {
+    const bodies = ['<html>not json</html>', '[]', '"text"', '{"text":42}', '{"text":null}', '{}']
+    for (const body of bodies) {
+      const server = await start((_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(body)
+      })
+      const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+      expect(outcome.ok, body).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure.code, body).toBe('malformed-response')
+    }
   })
 
   it('reports a deadline after the upload as an unproven outcome', async () => {
@@ -245,14 +288,40 @@ describe('capability probe', () => {
     expect(outcome.failure?.httpStatus).toBe(404)
   })
 
-  it('treats 405 and 501 on the capability endpoint the same way', async () => {
-    for (const status of [405, 501]) {
+  it('treats 405 on the capability endpoint as absent and keeps 501 a server error', async () => {
+    // 501 is a 5xx: a gateway that cannot serve the route is not the same statement as an
+    // engine that does not implement it, and it keeps its retryable hint.
+    const gateway = await start((_request, response) => { response.writeHead(501); response.end() })
+    const refused = await probeCapabilities({ baseUrl: gateway.baseUrl, credential: SECRET, timeoutMs: 2_000 })
+    expect(refused.ok).toBe(false)
+    if (refused.ok) throw new Error('unreachable')
+    expect(refused.failure?.code).toBe('server-error')
+    expect(refused.failure?.retryable).toBe(true)
+    expect(refused.authenticated).toBe('unverified')
+
+    for (const status of [405]) {
       const server = await start((_request, response) => { response.writeHead(status); response.end() })
       const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 2_000 })
       expect(outcome.ok).toBe(false)
       if (outcome.ok) throw new Error('unreachable')
       expect(outcome.failure?.code).toBe('capabilities-absent')
     }
+  })
+
+  it('classifies an absent capability endpoint from the status, not from its body', async () => {
+    // A 404 whose body is over the cap (or stalls) still proves the endpoint is not there;
+    // keying on the body's failure would report a missing endpoint as a malformed answer.
+    const server = await start((_request, response) => {
+      response.writeHead(404, { 'content-type': 'application/json' })
+      response.end(`{"error":"${'a'.repeat(300_000)}"}`)
+    })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 5_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.reachable).toBe(true)
+    expect(outcome.failure?.code).toBe('capabilities-absent')
+    expect(outcome.failure?.httpStatus).toBe(404)
+    expect(outcome.authenticated).toBe('unverified')
   })
 
   it('reports a server that never answered as unverified', async () => {

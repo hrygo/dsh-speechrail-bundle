@@ -61,7 +61,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.1/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.
@@ -72,9 +72,11 @@ Then set the endpoint and credential reference on its settings page.
   ignores one that lands after a newer read has already been applied, but it cannot order two
   responses by their content: `revision` tracks settings writes, not the gate, so a response the
   service produced from an older snapshot can still be shown until the next read corrects it.
-- A capability the service does not state is treated as unsupported rather than assumed. The settings
-  page only says "not stated by the service" when a check actually reached the service; a check the
-  host refused locally (no credential, unusable endpoint) reads as "not checked yet".
+- A capability the service does not state is treated as unsupported rather than assumed, and a
+  service that does not implement the capability endpoint keeps the last snapshot it ever
+  advertised: the enforced limits are then the package defaults, shown as such on the settings page.
+  Language is only sent when the service admitted it, so a saved `zh`/`en` that is no longer
+  admitted is reported as not in effect instead of being switched silently.
 - The request budget is bounded to 1000–180000 ms, by the settings schema and again on the Remote
   path, because the settings store validates shape rather than `min`/`max`.
 - Changing a non-volatile setting (endpoint, model, credential reference) restarts the bundle's

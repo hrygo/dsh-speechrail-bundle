@@ -28,7 +28,10 @@
 ### 非目标与反目标
 
 - 不支持 Realtime/WS、流式字幕、TTS、分人、时间戳、唤醒词、常开麦克风或自动发送。
-- 不提供任意 OpenAI 云后端、自动 fallback、多 provider registry 或模型目录。
+- 不提供任意 OpenAI 云后端、多 provider registry 或模型目录。
+- **2026-10-24 修订（0.2.0）**：接受"同机回环上的其他 OpenAI 形状引擎"。这不是云端 fallback：地址仍限
+  127.0.0.1/::1 与精确 `/v1`，只是不再要求响应携带 SpeechRail 的 `usage` 扩展、也不再把缺失的能力端点当作
+  故障（见下方 107/141-147 的修订）。
 - 不下载、加载、卸载模型；不管理 SpeechRail 服务、profile、worker 或版本。
 - 不自动读取 SpeechRail 私有配置或复制密钥；不更改 DSH 全局 credentials provider。
 - 不承诺 HTTP 取消立即停止后端；不把 readyz、状态检查成功或测试通过当成识别质量证明。
@@ -104,7 +107,9 @@ Authorization = Bearer <仅 Host 内存中解析>
 
 初版 model 固定上述 canonical ID。语言候选为 `auto/zh/en`，但 `auto` 始终只表示省略 language；只有能力快照明确公布 supported 且 values 包含精确 hint 时才开放 zh/en。语言域 unknown 时只开放 auto；若已保存 zh/en 而后来不再有证据，拒绝开始并提示用户改选，绝不静默切换。当前源码语言枚举为 unknown，不阻断默认 auto 的文件转写。不镜像模型目录，也不透传 `zh-CN`。
 
-成功响应必须验证 text:string 和 usage:{type:"duration",seconds:有限非负数}。允许空字符串作为无识别正文；不 trim 或重写非空正文。audioSeconds 以已经验证的 WAV 帧数为准；不请求时间戳，不以缺字段的其他服务响应冒充已验证 SpeechRail。
+成功响应必须验证 text:string；`usage` 为可选扩展（**2026-10-24 修订，0.2.0**：早先要求它存在，
+  目的是"不以缺字段的其他服务响应冒充已验证 SpeechRail"；该保证已按用户要求有意放弃，换取同机其他引擎可用。
+  `usage` 存在时必须合法，否则仍以 `malformed-response` 拒绝；`null` 与缺省同义）。允许空字符串作为无识别正文；不 trim 或重写非空正文。audioSeconds 以已经验证的 WAV 帧数为准；不请求时间戳，不以缺字段的其他服务响应冒充已验证 SpeechRail。
 
 ### 插件自己的结果契约
 
@@ -144,7 +149,8 @@ requestSeconds 用 Host monotonic clock 测量出站请求开始至响应正文�
 
 有效快照必须满足：schema_version 精确为 `effective_capabilities_v1`；`operations.transcription.status === 'supported'`；`operations.transcription.output.formats` 含 json；`operations.transcription.input.max_upload_bytes`、`.max_audio_seconds` 是有限正数。没有 `.available` 或 `.ready` 公开字段，不能猜字段。
 
-读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、只开放 auto，不把语言域 unknown 偷换成整个 ASR 不可用。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible；supported 以外显示 unavailable。能力服务自身故障不能推断 ASR 模型已坏。
+读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、只开放 auto，不把语言域 unknown 偷换成整个 ASR 不可用。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible（**2026-10-24 修订，0.2.0**：能力端点答 404/405 时不再算
+  失败，而是稳定的 `capabilities-absent`，服务按纯转写端点继续可用；501 仍按 5xx 处理）；supported 以外显示 unavailable。能力服务自身故障不能推断 ASR 模型已坏。
 
 这些嵌套字段来自本机 SpeechRail 参考实现的 `capability_snapshot.py`（未随本仓库分发），OpenAPI 对 operations 为开放对象；因此必须有专用投影测试，不声称机器契约已完整枚举。
 
@@ -334,3 +340,16 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N2（低，两处防御缺口）** (a) `projectLanguages` 原先只看 `languages.status`，于是服务声明 `transcription.status: 'unsupported'` 时仍会放开语言选择器；现改为仅在 `transcription.status === 'supported'` 时采纳语言。(b) `run()` 原先不看 `transcriptionSupported`，服务已声明不支持转写时仍会先上传；现于上传前以新增稳定错误码 `unsupported` 拒绝（错误码表、类型联合、中英文本均已补齐），且不占用门禁——因为并未发出请求。若快照为 `null`（未声明），则不视为拒绝。该链路已有端到端测试：真实回环服务返回 `status: 'unsupported'` 的 200 → 投影得到 `transcriptionSupported: false` 且语言为空 → 运行路径据此在上传前拒绝。
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
+
+## 2026-10-24 决定记录（0.2.0：同机其他引擎）
+
+- 目标收窄为：**同机回环、OpenAI 形状**的转写引擎可用；不涉及局域网、云端、多 provider 或模型目录。
+- `usage` 由必填改为可选：它曾是"响应来自 SpeechRail"的证明，现在只作形状校验；缺省与 `null` 都接受，存在但
+  畸形仍拒绝。放弃来源证明是有意选择，代价是 200 的空壳响应不再与真实解码可区分。
+- 能力端点缺失单列为 `capabilities-absent`（404/405），不再是故障，也不再借 `ok:true, capabilities:null`
+  表达——那样会让探针把 404 报成"鉴权通过"。5xx（含 501）保持故障与可重试。
+- 鉴权从布尔改为三态 `accepted/refused/unverified`：只有 200 证明通过、401/403 证明被拒，其余一律"未验证"。
+- 语言仍未在"未声明"时静默应用：界面显式标注"未生效"，上传不发送 language。
+- `agent: false` 对 `NODE_USE_ENV_PROXY`/`--use-env-proxy` 的阻断在 Node 26.11.1 上实测确认（默认 agent 会走
+  代理，本调用直连）。
+- 3xx 从 `internal` 改为稳定码 `redirected`：不跟随重定向是本包自己的规则，不是内部错误。

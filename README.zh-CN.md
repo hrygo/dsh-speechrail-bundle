@@ -47,7 +47,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.1/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。
@@ -57,7 +57,9 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 - 可能同时存在两次状态读取（例如"检测服务"与开始录音）。客户端会忽略比已应用结果更晚到达的**旧**
   读取，但无法按内容排序两次响应：`revision` 跟踪的是设置写入，不是门禁；因此服务用更旧快照生成的
   响应仍可能被短暂显示，直到下一次读取纠正。
-- 服务未声明某项能力时按"不支持"处理，而不是假定可用。只有当检测真的到达服务时，设置页才会写
+- 服务未声明某项能力时按"不支持"处理，而不是假定可用；未实现能力端点的服务沿用最后一次声明过的快照，
+  此时生效的限额是包内默认值，设置页会标注这一点。语言只在服务公布支持时才发送，因此已保存的
+  `zh`/`en` 若不再被支持，界面会写明"未生效"，而不是静默改选。只有当检测真的到达服务时，设置页才会写
   "服务未给出"；宿主本地拒绝的检测（无凭据、端点不合规）显示为"尚未检测"。
 - 请求预算被限制在 1000–180000 毫秒：设置 schema 限制一次，Remote 写入路径再校验一次，因为设置存储
   只校验形状而不校验 `min`/`max`。

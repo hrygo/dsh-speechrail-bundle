@@ -23,7 +23,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.1/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -54,20 +54,37 @@ speaks the same shape on loopback:
 | --- | --- |
 | Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`. |
 | Transcript | A 200 whose JSON body carries a string `text`. The SpeechRail `usage: {type: "duration", seconds}` extension is optional; a `usage` that is present but malformed is still refused as `malformed-response`. |
-| Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404, 405 or 501 the probe reports `capabilities-absent`: the service stays reachable and usable, the language selector stays on `auto`, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, 5xx stays `server-error`, and an unreachable service stays `unreachable`. |
+| Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404 or 405 the probe reports `capabilities-absent`: the service stays reachable and usable, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, every 5xx (including 501) stays `server-error` with its retryable hint, and an unreachable service stays `unreachable`. |
 | Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403, and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused or unconfigured endpoint). The `speechrail_input_status` tool returns the same three strings. |
 
-What a non-SpeechRail engine does not get: it never issues an operation id, so the gate never
-enters `unknown`, the acknowledgement control never appears, and an outcome that cannot be proven
-(cancel or deadline after the body was written) has no server-side record to reconcile against —
-the local journal still records the attempt and still forbids replay until you acknowledge it.
-Language selection stays `auto` because nothing stated which languages exist.
+What changes on a non-SpeechRail engine, and what does not:
+
+- The journal, the single in-flight gate and the acknowledgement control all still apply. They are
+  driven by locally generated operation ids, not by anything the service returns: an upload that is
+  accepted and never answered still ends as an unproven outcome, still holds the gate and still
+  needs the acknowledgement before another recording may start.
+- The capability snapshot is the only thing that disappears. With none in force the language
+  selector offers `auto` alone, the enforced limits are the package defaults (4 MiB / 120 s) rather
+  than anything the service stated, and the settings page labels them as such. A saved `zh`/`en` is
+  then **not** silently applied — the upload sends no language, and the settings page says so beside
+  the disabled option.
+- Discovery is fixed: only `/v1/speechrail/capabilities` is consulted, never `/v1/models`, so an
+  engine without that endpoint is permanently "unstated" by construction. `usage` is likewise no
+  longer evidence that the response came from SpeechRail — its absence is accepted on purpose.
+- `model` is sent only when configured. Configure the engine's own model id (or leave it empty for
+  engines that ignore the field); a SpeechRail model id sent to another engine surfaces as
+  `bad-request`.
+- A snapshot that already said `transcriptionSupported: false` stays in force through a
+  `capabilities-absent` probe (a snapshot never expires), so an endpoint that used to advertise an
+  unsupported operation keeps refusing uploads until a later probe replaces it.
+- `unknownOutcome` asks the user to check the service's own record. On an engine with no operation
+  ids there is no such record; the local journal is what recorded the attempt.
 
 ## Security boundaries
 
 | Boundary | Behaviour |
 | --- | --- |
-| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. Never proxied: the request pins `agent: false`, so Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy` cannot route the credential or the audio anywhere. |
+| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path, and no DNS. Never proxied: the request pins `agent: false`, so Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy` cannot route the credential or the audio anywhere (measured on Node 26.11.1: the same call through the default agent did reach the proxy). A redirect answer is refused with the stable `redirected` code and the target never sees the request. |
 | Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. |
 | Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
 | Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |

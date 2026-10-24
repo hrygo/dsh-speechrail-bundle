@@ -25,6 +25,7 @@ export type SpeechRailFailureCode =
   | 'unauthorized'
   | 'not-found'
   | 'capabilities-absent'
+  | 'redirected'
   | 'unsupported'
   | 'model-not-found'
   | 'server-error'
@@ -133,7 +134,11 @@ export interface SpeechRailCheckResult {
   readonly reachable: boolean
   /** What the probe proved about the credential. */
   readonly authenticated: SpeechRailAuthentication
-  /** Fresh or cached capability facts, or null when the probe failed. */
+  /**
+   * Fresh or cached capability facts, or null when none is in force: a probe that failed,
+   * a 200 whose body was not a snapshot, or a service that reports no capabilities at all
+   * (`capabilities-absent`) are all reported as null.
+   */
   readonly capabilities: SpeechRailCapabilitiesView | null
   /** Failure of the probe itself, or null when it succeeded. */
   readonly failure: SpeechRailFailure | null

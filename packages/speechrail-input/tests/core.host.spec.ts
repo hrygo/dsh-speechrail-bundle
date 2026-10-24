@@ -858,6 +858,26 @@ describe('unproven outcomes', () => {
     expect((await h.core.status()).gate).toBe('ready')
   })
 
+  it('does not clear an unproven gate when the service reports no capabilities', async () => {
+    // The compatibility probe says nothing about an upload whose outcome is unproven, so it
+    // must not be able to release the gate; only the acknowledgement can.
+    const h = harness({ pending: { operationId: 'op_cap00002', phase: 'unknown', createdAt: '2026-10-23T15:00:00.000Z' } })
+    await h.core.restore()
+    expect((await h.core.status()).gate).toBe('unknown')
+
+    h.probe = { ok: false, reachable: true, authenticated: 'unverified', failure: failure('capabilities-absent', { httpStatus: 404 }) }
+    const check = await h.core.check()
+    expect(check.failure?.code).toBe('capabilities-absent')
+
+    const after = await h.core.status()
+    expect(after.gate).toBe('unknown')
+    expect(after.pendingOperationId).toBe('op_cap00002')
+    // And the gate still refuses a new upload until it is acknowledged.
+    const refused = await h.core.transcribe(payload('op_cap00003'))
+    expect(refused.failure?.code).toBe('unknown-outcome')
+    expect(h.sends).toHaveLength(0)
+  })
+
   it('never widens the enforced limits when a probe answers without a snapshot', async () => {
     const h = harness()
     h.probe = {

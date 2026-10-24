@@ -217,7 +217,11 @@ export function describeStatus(value: StatusToolValue): string {
         ? 'service reachable and authorized'
         : value.authenticated === 'refused'
           ? 'service reachable but rejecting the credential'
-          : 'service reachable but not accepting the request'
+          : value.failureCode === 'capabilities-absent'
+            // A transcription-only engine answers the upload perfectly well; the probe
+            // only missed a capability snapshot, so this must not read as a refusal.
+            ? 'service reachable; it reports no capabilities and is used as a plain transcription endpoint'
+            : 'service reachable but not accepting the request'
       : 'service unreachable')
   }
   else parts.push('service not probed')

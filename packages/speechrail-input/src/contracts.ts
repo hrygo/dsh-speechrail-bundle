@@ -64,6 +64,7 @@ const FAILURE_CODE_TABLE: Record<import('./types.ts').SpeechRailFailureCode, tru
   unauthorized: true,
   'not-found': true,
   'capabilities-absent': true,
+  redirected: true,
   unsupported: true,
   'model-not-found': true,
   'server-error': true,

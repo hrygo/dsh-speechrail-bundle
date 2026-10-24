@@ -118,7 +118,11 @@ export function failureForStatus(
               ? 'server-error'
               : status >= 400
                 ? 'bad-request'
-                : 'internal'
+                : status >= 300
+                  // This bundle never follows a redirect, so a 3xx is a deliberate refusal
+                  // by the server and not an internal fault.
+                  ? 'redirected'
+                  : 'internal'
   const base = failure(code, { httpStatus: status, requestId })
   return declaredRetryable === null ? base : { ...base, retryable: declaredRetryable && base.retryable }
 }

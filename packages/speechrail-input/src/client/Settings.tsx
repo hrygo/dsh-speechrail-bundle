@@ -267,6 +267,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
           ))}
+          {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
+            // A saved language the service never admitted is not silently applied, so say so
+            // instead of leaving a checked-but-disabled control to imply that it is.
+            <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
+          )}
         </span>
       </div>
       <div style={rowStyle}>
@@ -294,6 +299,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
             {t('settings.limitUpload', { mb: Math.round(limits.maxUploadBytes / 1024 / 1024) })}
             {' · '}
             {t('settings.limitDuration', { seconds: limits.maxAudioSeconds })}
+            {capabilities === null || capabilities === undefined
+              ? ` ${t('settings.limitsDefault')}`
+              : ''}
           </span>
         )}
       </div>

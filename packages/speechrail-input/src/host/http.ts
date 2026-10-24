@@ -3,9 +3,10 @@
  *
  * Every request is issued through `node:http` with an explicit loopback host and
  * port. Redirects are never followed, responses are byte-capped, and one deadline
- * covers the whole exchange. Limits of this approach: Node's opt-in environment
- * proxy support (`NODE_USE_ENV_PROXY` / `--use-env-proxy`, Node >= 24.5) would apply
- * to this call, so the no-proxy guarantee holds for a host started without it.
+ * covers the whole exchange. `agent: false` is what keeps a host that enabled Node's
+ * opt-in environment proxy (`NODE_USE_ENV_PROXY` / `--use-env-proxy`, Node >= 24.5) from
+ * routing this request: measured on Node 26.11.1, a request through the default agent
+ * reached the proxy while this shape connected to its target directly.
  * @module @hrygo/dsh-speechrail-bundle/host/http
  */
 
@@ -330,7 +331,7 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
   // `{"text": ...}` alone, and no consumer reads the duration, so its absence is accepted
   // and only its presence is held to the stricter shape. A `usage` that exists but is
   // malformed stays a refused response: it is a claim the service made and got wrong.
-  const usageValid = usage === undefined
+  const usageValid = usage === undefined || usage === null
     || (typeof usage === 'object' && usage !== null
       && (usage as Record<string, unknown>).type === 'duration'
       && typeof (usage as Record<string, unknown>).seconds === 'number'
@@ -395,9 +396,17 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
   })
   if (!result.ok) {
     // A response can arrive and still fail (a body over the cap, a stall after the
-    // headers); `httpStatus` records that it did, so report reachability honestly.
-    // No response at all judged nothing, so this is `unverified` rather than `refused`.
-    return { ok: false, reachable: result.failure.httpStatus !== null, authenticated: 'unverified', failure: result.failure }
+    // headers); `httpStatus` records that it did, so report reachability honestly. A
+    // 404/405 that arrived with an unusable body still proves the endpoint is absent, so
+    // that is classified from the status rather than from the failure the body produced.
+    const status = result.failure.httpStatus
+    const absent = status === 404 || status === 405
+    return {
+      ok: false,
+      reachable: status !== null,
+      authenticated: 'unverified',
+      failure: absent ? failure('capabilities-absent', { httpStatus: status }) : result.failure,
+    }
   }
   if (result.status !== 200) {
     // Only 401/403 judge the credential. A 500/404/413 says nothing about it, so it must
@@ -407,7 +416,8 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
     // An engine that only transcribes answers 404/405/501 here. That is a usable service
     // that states no capabilities, not a broken one, so it gets its own code; the caller
     // then keeps `capabilities: null` instead of reporting a missing endpoint as a failure.
-    const capabilitiesAbsent = result.status === 404 || result.status === 405 || result.status === 501
+    // 404 and 405 only: 501 is a 5xx and stays a server error, retryable as before.
+    const capabilitiesAbsent = result.status === 404 || result.status === 405
     return {
       ok: false,
       reachable: true,
