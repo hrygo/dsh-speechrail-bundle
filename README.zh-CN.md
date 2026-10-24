@@ -1,11 +1,14 @@
 # dsh-speechrail-bundle
 
 独立的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 语音输入 bundle：浏览器录音，
-经**本机** SpeechRail 服务按 OpenAI-compatible 文件转写协议转写。无需启用官方语音 bundle，且只连接回环地址。
+经**本机**服务按 OpenAI-compatible 文件转写协议转写——SpeechRail 参考实现，或其他同形状的本机引擎。
+无需启用官方语音 bundle，且只连接回环地址。
 
 [English](README.md) · [包说明](packages/speechrail-input/README.md) · [设计与审查记录](docs/superpowers/specs/2026-10-23-speechrail-input-design.md)
 
-**状态：实现已完成并通过验证；未安装、未在任何 profile 启用。**
+**状态：实现已完成并通过验证，且已在本机 `desktop` profile 中运行。** 每个版本都由 `pnpm verify`
+（基线校验 → Typert 生成 → 双面类型检查 → 构建 → 测试）产出，并通过插件管理器从该版本自己的 GitHub
+Release 资产安装，安装后再与仓库构建逐字节比对。
 
 ## 提供什么
 
@@ -13,7 +16,21 @@
 |---|---|
 | Host | 严格 Typert Remote 面上的 SpeechRail 服务：仅回环上传、凭据**按引用**解析、单在途 gate、非敏感未结案 journal、稳定错误码。 |
 | Client | 输入框麦克风控件（波形、草稿插入保护）与设置页；中英文本地化；门禁被阻塞时两处都能确认清除。 |
-| Agent | 一个只读工具 `speechrail_input_status`，模型无需打开设置页即可解释语音输入为何不可用。 |
+| Agent | 一个只读工具 `speechrail_input_status`，模型无需打开设置页即可解释语音输入为何不可用：端点、凭据三态结论、服务是否声明能转写、**实际会发送**的语言提示、生效限额与门禁。 |
+
+## 两种引擎档位，一套契约
+
+| | SpeechRail（参考实现） | 其他回环 OpenAI 形状引擎 |
+|---|---|---|
+| 能力快照 | 读取 `GET /v1/speechrail/capabilities`，其声明的限额与语言持续生效 | 无该端点：报 `capabilities-absent`，改用包内默认限额并在设置页标注为默认值 |
+| 转写响应 | `{"text": ...}`；`usage` 时长扩展可选、会校验、且**不**冒充推理耗时 | `{"text": ...}`，有无 `usage` 均可 |
+| 凭据 | 三态、从不猜测：只有 200 才 `accepted`，401/403 判 `refused`（只看状态行），其余 `unverified` | 相同 |
+| 语言 | 快照枚举了就发送枚举值；能转写但没列举语言的服务，按你的选择作为未验证提示发送 | 相同 |
+| journal / 单在途门禁 / 确认 | 生效 | 同样生效——操作 id 由客户端生成，守卫不依赖服务 |
+| 生效限额 | 服务的数值，再按本包自身的上限收紧 | 包内默认值（4 MiB / 120 s） |
+
+两档都由 `tests/engines-conformance.host.spec.ts` 钉住：用真实 Host core 打真实回环套接字，并断言两者
+各自被告知了什么。
 
 ## 安全属性
 
@@ -47,7 +64,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.6/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.7/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。
@@ -58,10 +75,12 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
   读取，但无法按内容排序两次响应：`revision` 跟踪的是设置写入，不是门禁；因此服务用更旧快照生成的
   响应仍可能被短暂显示，直到下一次读取纠正。
 - 服务未声明某项能力时按"不支持"处理，而不是假定可用；未实现能力端点的服务沿用最后一次声明过的快照，
-  此时生效的限额是包内默认值，设置页会标注这一点。语言按服务的实际能力处理：服务枚举了语言就只开放
-  这些；服务能转写但没列出语言（含 SpeechRail 自己的 `languages.status: unknown`）时按你选的语言作为
-  未验证提示发送；服务声明不支持该语言则写明"未生效"，绝不静默改选。只有当检测真的到达服务时，设置页才会写
-  "服务未给出"；宿主本地拒绝的检测（无凭据、端点不合规）显示为"尚未检测"。
+  此时生效的限额是包内默认值，设置页会标注这一点。快照**不会过期**：唯一的重新探测是显式"检测连接"，
+  而"每次上传前重检"被否决——那会在用户已经说完话之后才插入一次往返。
+- 语言是上述规则唯一的有意例外，且按服务**能做什么**处理：服务枚举了语言就只开放这些；服务声明不支持
+  该语言则写明"未生效"，绝不静默改选；服务能转写但没列举语言（SpeechRail 自己就是这种）时按你选的语言作为
+  未验证提示发送——设置页标注、composer 在请求进行中显示、agent 工具报为 `languageHint`。只有当检测真的
+  到达服务时，设置页才会写"服务未给出"；宿主本地拒绝的检测（无凭据、端点不合规）显示为"尚未检测"。
 - 请求预算被限制在 1000–180000 毫秒：设置 schema 限制一次，Remote 写入路径再校验一次，因为设置存储
   只校验形状而不校验 `min`/`max`。
 - 修改非易失设置（端点、模型、凭据引用）会重启 bundle 条目：释放 journal 存储单元后立即重新打开。释放
@@ -89,7 +108,7 @@ pnpm test       # host 与 client 单元测试（全部 mock 或合成音频）
 - [packages/typert-protocol](packages/typert-protocol/)：私有类型垫片，让 Typert 生成器看到本包的 Remote 声明；永不发布、运行时从不 import。
 - [upstream](upstream/)：冻结的官方只读基线（5 个语音包，MIT）与逐文件来源清单；是来源证据，不是运行入口。
 - [tools](tools/)：基线完整性与工具 schema 校验脚本。
-- [docs](docs/)：设计、实施计划，以及四轮独立审查与处置记录。
+- [docs](docs/)：设计、实施计划，以及各轮独立审查与其处置记录。
 
 ## 来源与许可
 

@@ -1,7 +1,7 @@
 {
   "name": "@hrygo/dsh-speechrail-bundle",
-  "description": "Independent voice input bundle that transcribes browser recordings with a local SpeechRail service",
-  "version": "0.2.6",
+  "description": "Independent DeepSeek Harness voice-input bundle: browser recording transcribed by a local SpeechRail service or any other loopback OpenAI-compatible engine, with a capability-snapshot aware Host, a Strict Remote surface and an agent-facing status tool",
+  "version": "0.2.7",
   "icon": "./icon.svg",
   "type": "module",
   "main": "lib/index.js",
@@ -58,18 +58,21 @@
     "url": "https://github.com/hrygo/dsh-speechrail-bundle/issues"
   },
   "keywords": [
+    "asr",
+    "cordis",
     "deepseek",
     "deepseek-harness",
+    "dictation",
+    "dictation-ui",
     "dsh",
     "dsh-plugin",
-    "cordis",
+    "local",
+    "local-first",
+    "openai-compatible",
     "speech-to-text",
+    "speechrail",
     "transcription",
     "voice-input",
-    "dictation",
-    "openai-compatible",
-    "speechrail",
-    "local-first",
     "whisper"
   ],
   "engines": {

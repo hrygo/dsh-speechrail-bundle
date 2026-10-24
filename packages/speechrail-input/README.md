@@ -1,7 +1,8 @@
 # @hrygo/dsh-speechrail-bundle
 
-Voice input for DeepSeek Harness, backed by a local [SpeechRail](https://127.0.0.1) service
-over its OpenAI-compatible `/v1/audio/transcriptions` endpoint.
+Voice input for DeepSeek Harness, backed by a local service over its OpenAI-compatible
+`/v1/audio/transcriptions` endpoint: [SpeechRail](https://github.com/hrygo/speechrail) as the
+reference implementation, or any other loopback engine with the same shape.
 
 The bundle is independent: it reuses no `dsh-experimental-*` speech package at runtime and
 talks to one loopback service with one credential. It owns the Host service, the
@@ -23,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.6/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.7/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
