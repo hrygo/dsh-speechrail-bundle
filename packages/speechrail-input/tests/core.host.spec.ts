@@ -49,6 +49,9 @@ interface Harness {
   pendingReads: Array<(state: JournalState) => void>
   /** When set, the transcribe seam waits for it, holding an upload in flight. */
   transcribeHold: Promise<void> | null
+  /** When set, the erase waits for a resolver, holding it in flight. */
+  deferReset: boolean
+  pendingResets: Array<(ok: boolean) => void>
   /** Readable medium holding a malformed record: unreadable, but writable. */
   corrupt: boolean
   config: ResolvedConfig
@@ -74,6 +77,8 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     deferReads: false,
     pendingReads: [],
     transcribeHold: null,
+    deferReset: false,
+    pendingResets: [],
     corrupt: false,
     config: CONFIG,
     credential: 'secret-key',
@@ -103,9 +108,11 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
       return true
     },
     async reset(): Promise<boolean> {
-      // Faithful to journalFromUnit.reset(): it only writes, so a read failure is
-      // irrelevant and the write outcome is what decides.
-      if (state.recordFails) return false
+      // Faithful to journalFromUnit.reset(): it reads first, so an unopenable medium and a
+      // slot holding a readable record both refuse, while unreadable bytes are overwritten.
+      if (state.deferReset) return await new Promise<boolean>((resolve) => { state.pendingResets.push(resolve) })
+      if (state.readFails || state.recordFails) return false
+      if (stored !== null) return false
       // Overwriting the slot replaces whatever unreadable bytes were there, which is
       // what makes the reset an actual recovery rather than a one-time unblock.
       stored = null
@@ -280,6 +287,70 @@ describe('unreadable medium recovery', () => {
     expect(after.pendingOperationId).toBe('op_aaaaaaaa')
     const journalState = await h.journal.read()
     expect(journalState.available && journalState.pending?.operationId).toBe('op_aaaaaaaa')
+
+    releaseUpload?.()
+    await upload
+  })
+
+  it('adopts a record when the erase is refused because it appeared late', async () => {
+    // A refusal and a failure are different: the medium failing to open for this request
+    // does not mean it stays unreadable, and the record it could not read may be readable
+    // now. Reporting an unavailable medium would leave the user nothing to match.
+    const h = harness({ pending: { operationId: 'op_rrrrrrrr', phase: 'unknown', createdAt: '2026-10-23T13:00:00.000Z' } })
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingReads.shift()?.({ available: false })
+    h.deferReads = false
+
+    const refused = await ack
+    expect(refused.ok).toBe(false)
+    expect(refused.failure?.code).toBe('conflict')
+    expect(refused.pendingOperationId).toBe('op_rrrrrrrr')
+  })
+
+  it('leaves a gate alone when something claims it while the erase is in flight', async () => {
+    // The erase is asynchronous too. An upload can heal, claim and record between the
+    // pre-erase check and the erase landing; opening the gate then would report a free
+    // composer over a live upload.
+    const h = harness()
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+    h.deferReset = true
+
+    const ack = h.core.acknowledgeUnknown(JSON.stringify({ operationId: null }))
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingReads.shift()?.({ available: false })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingResets).toHaveLength(1)
+
+    let releaseUpload: (() => void) | undefined
+    h.transcribeHold = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const upload = h.core.transcribe(payload('op_bbbbbbbb'))
+    await Promise.resolve()
+    await Promise.resolve()
+    h.pendingReads.shift()?.({ available: true, pending: null })
+    h.deferReads = false
+    await Promise.resolve()
+    await Promise.resolve()
+    expect((await h.core.status()).gate).toBe('busy')
+
+    h.pendingResets.shift()?.(true)
+    const result = await ack
+    expect(result.ok).toBe(true)
+    expect(result.pendingOperationId).toBe('op_bbbbbbbb')
+    const after = await h.core.status()
+    expect(after.gate).toBe('busy')
+    expect(after.pendingOperationId).toBe('op_bbbbbbbb')
 
     releaseUpload?.()
     await upload

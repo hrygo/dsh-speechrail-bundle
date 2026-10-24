@@ -524,8 +524,8 @@ export class SpeechRailInputCore {
         return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('conflict') }
       }
       // The record looked unreadable at restore, but that read may have failed
-      // transiently. Re-read before erasing: reset() only writes, so without this
-      // check a momentary failure would destroy a record that is readable now.
+      // transiently. Re-read before erasing: without this check a momentary failure
+      // would destroy a record that is readable now.
       const reread = await this.deps.journal.read()
       // The read is asynchronous: an upload may have healed the gate, claimed it and
       // recorded its operation while it was in flight. Deciding on the state read before it
@@ -539,6 +539,18 @@ export class SpeechRailInputCore {
       }
       const reset = await this.deps.journal.reset()
       if (!reset) {
+        // A refusal is not the same as a failure: the slot may hold a readable record that
+        // appeared after this request's read failed (the medium failing to open once does
+        // not mean it is unreadable now). Adopting that id is the honest answer, and it is
+        // the only one that lets the user complete the acknowledgement in one action.
+        const settled = await this.deps.journal.read()
+        if (this.gateState !== 'unknown' || this.pendingOperationId !== null) {
+          return { ok: true, pendingOperationId: this.pendingOperationId, failure: null }
+        }
+        if (settled.available && settled.pending !== null) {
+          this.pendingOperationId = settled.pending.operationId
+          return { ok: false, pendingOperationId: settled.pending.operationId, failure: failure('conflict') }
+        }
         return { ok: false, pendingOperationId: this.pendingOperationId, failure: failure('journal-unavailable') }
       }
       // `reset` refuses while a readable record exists, so reaching here means the slot was

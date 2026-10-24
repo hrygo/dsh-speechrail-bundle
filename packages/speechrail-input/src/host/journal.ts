@@ -40,9 +40,10 @@ export interface PendingJournal {
    * Clear the slot without matching an id.
    *
    * Only an explicit user acknowledgement of an *unreadable* record may call this:
-   * the user is asserting that no upload of theirs is outstanding. It refuses while the
-   * slot holds a readable record, because an upload may have written one after the caller
-   * decided, and it still fails when the medium cannot be written.
+   * the user is asserting that no upload of theirs is outstanding. It reads first, so it
+   * refuses both when the slot holds a readable record - an upload may have written one
+   * after the caller decided - and when the medium cannot be read; unreadable bytes are
+   * still overwritten, which is the recovery this exists for.
    */
   reset(): Promise<boolean>
 }
