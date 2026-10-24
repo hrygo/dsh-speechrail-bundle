@@ -10,14 +10,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SpeechRailSettings, type SpeechRailSettingsProps } from '../src/client/Settings.tsx'
 import { MIN_REQUEST_TIMEOUT_MS } from '../src/contracts.ts'
+import { languageIsAdmitted, languageOptionsFor } from '../src/host/capabilities.ts'
 import { failure } from '../src/host/failure.ts'
-import type {
-  SpeechRailAcknowledgeRequest,
-  SpeechRailAcknowledgeResult,
-  SpeechRailCheckResult,
-  SpeechRailConfigureRequest,
-  SpeechRailInputStatus,
-} from '../src/types.ts'
+import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailCapabilitiesView, SpeechRailCheckResult, SpeechRailConfigureRequest, SpeechRailInputStatus } from '../src/types.ts'
 
 afterEach(() => { cleanup() })
 
@@ -369,6 +364,50 @@ describe('SpeechRailSettings check row verdicts', () => {
 
     await waitFor(() => { expect(screen.getByText('settings.languageUnverified')).toBeTruthy() })
     expect(screen.queryByText('settings.languageNotInEffect')).toBeNull()
+  })
+
+  it('labels every snapshot shape exactly as the host would act on it', async () => {
+    // The table is literal data, deliberately not derived from the functions under test: `options`
+    // and `sent` are what the shipped host produces for that snapshot (pinned from the host side by
+    // capabilities.host.spec.ts and the conformance matrix), while the labels below are what the
+    // page must render for it. A change to either side breaks exactly one of the two assertions, so
+    // neither half can pass by agreeing with itself.
+    const shapes: readonly {
+      readonly what: string
+      readonly view: SpeechRailCapabilitiesView | null
+      readonly options: readonly string[]
+      readonly sent: boolean
+    }[] = [
+      { what: 'no snapshot', view: null, options: ['auto', 'zh', 'en'], sent: true },
+      { what: 'cannot transcribe', view: { schemaVersion: 'effective_capabilities_v1', transcriptionSupported: false, reason: 'asr_not_ready', languages: { status: 'unknown', values: [] }, limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 } }, options: ['auto'], sent: false },
+      { what: 'languages refused', view: { schemaVersion: 'effective_capabilities_v1', transcriptionSupported: true, reason: null, languages: { status: 'unsupported', values: [] }, limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 } }, options: ['auto'], sent: false },
+      { what: 'languages unstated', view: { schemaVersion: 'effective_capabilities_v1', transcriptionSupported: true, reason: null, languages: { status: 'unknown', values: [] }, limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 } }, options: ['auto', 'zh', 'en'], sent: true },
+      { what: 'zh enumerated', view: { schemaVersion: 'effective_capabilities_v1', transcriptionSupported: true, reason: null, languages: { status: 'supported', values: ['zh', 'en'] }, limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 } }, options: ['auto', 'zh', 'en'], sent: true },
+      { what: 'only en enumerated', view: { schemaVersion: 'effective_capabilities_v1', transcriptionSupported: true, reason: null, languages: { status: 'supported', values: ['en'] }, limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 } }, options: ['auto', 'en'], sent: false },
+    ]
+
+    for (const shape of shapes) {
+      // Host half: the literal expectation has to match the host's own rules.
+      expect(languageOptionsFor(shape.view), `${shape.what}: options`).toEqual(shape.options)
+      expect(languageIsAdmitted('zh', shape.view), `${shape.what}: admitted`).toBe(shape.sent)
+
+      // Page half: the labels have to match those literal facts.
+      const status = vi.fn().mockResolvedValue({
+        ...STATUS,
+        language: 'zh' as const,
+        languageHint: shape.sent ? 'zh' : '',
+        languageOptions: shape.options,
+        capabilities: shape.view,
+      })
+      const check = checkWith({ reachable: true, authenticated: 'accepted', capabilities: shape.view })
+      const { unmount } = render(<SpeechRailSettings {...props({}, { check: check as never })} status={status} />)
+
+      await waitFor(() => { expect(screen.getByText('settings.limitUpload', { exact: false })).toBeTruthy() })
+      expect(screen.queryByText('settings.languageNotInEffect') !== null, `${shape.what}: not in effect`).toBe(!shape.sent)
+      expect(screen.queryByText('settings.languageUnverified') !== null, `${shape.what}: sent as a hint`)
+        .toBe(shape.sent && shape.view?.languages.status !== 'supported')
+      unmount()
+    }
   })
 
   it('marks the limits as a package default while no snapshot is in force', async () => {

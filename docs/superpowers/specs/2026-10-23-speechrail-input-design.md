@@ -345,6 +345,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 - 0.2.5 给 status 加的三态字段原名 `transcriptionSupported`，与 `SpeechRailCapabilitiesView.transcriptionSupported`（服务自己的布尔声明）**同名不同型**，而两者恰好同处一条 Remote 边界。已改名 `transcriptionSupport`：视图上的布尔是"服务怎么说"，status 上的三态是"插件知道什么"。
 - 新增边界守卫测试：直接对**生成产物**的 JSON Schema 断言 status 携带三态字段、capability 视图保留布尔、且二者不同名。该守卫立即生效——改名后未重新生成时，schema 里仍是旧字段名，测试会失败。
+- 语言标注另加一道**双钉**等价测试：一张字面量表（每种快照形状下的可选语言与被发送与否）分别断言 ①host 规则与字面量一致、②页面标注与字面量一致。首版曾用同一个被测函数同时生成 fixture 与期望值，变异检验证明它白过，故重写为两侧独立。
 
 ## 2026-10-24 决定记录（0.2.5：把"报什么"和"做什么"对齐）
 
