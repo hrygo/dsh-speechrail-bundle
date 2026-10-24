@@ -58,7 +58,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.10/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.11/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.
@@ -91,7 +91,7 @@ Then set the endpoint and credential reference on its settings page.
 ```bash
 pnpm install
 pnpm verify     # baseline check -> Typert generation -> both type checks -> bundles -> tests
-pnpm test       # host and client unit tests (167; all mock or synthetic audio)
+pnpm test       # host and client unit tests (169; all mock or synthetic audio)
 ```
 
 `pnpm verify` also re-checks the frozen upstream snapshot against

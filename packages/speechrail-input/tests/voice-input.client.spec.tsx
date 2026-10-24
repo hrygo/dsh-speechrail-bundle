@@ -186,9 +186,9 @@ describe('VoiceInput acknowledge', () => {
   })
 
   it('shows a result that arrives while the recording is being transcribed', async () => {
-    // Only the recording phase renders a stop control, so a live capture that has moved on to
-    // transcription must be reported through feedback: setting a message there renders the
-    // phase label instead and the outcome is never seen.
+    // A live capture keeps its phase, and the reply is rendered beside the phase label; the
+    // retry that reporting through feedback used to offer would be inert, because the capture
+    // still owns the operation.
     let releaseAck: ((status: SpeechRailInputStatus) => void) | undefined
     let releaseTranscribe: (() => void) | undefined
     const status = vi.fn()

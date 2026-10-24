@@ -66,6 +66,14 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
 
   const editEpoch = (): { language: number, budget: number } => ({ language: languageEdits.current, budget: budgetEdits.current })
 
+  /**
+   * Drop a "saved" note once the user edits again.
+   *
+   * Every other note carries something the user still needs - the conflict note says to
+   * reload before saving again - so an edit must not erase it.
+   */
+  const clearSavedNote = (): void => { setNote((current) => (current === t('settings.saved') ? '' : current)) }
+
   const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
   const statusSeq = useRef(0)
 
@@ -173,13 +181,14 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
         const next = await readStatus()
-      if (next !== undefined) applyStatus(next)
+        if (next !== undefined) applyStatus(next)
         setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
         return
       }
-      const fresh = await status()
-      applyStatus(fresh)
-      if (result.pendingOperationId !== null || fresh.pendingOperationId !== null) {
+      const fresh = await readStatus()
+      const now = fresh ?? viewRef.current
+      if (fresh !== undefined) applyStatus(fresh)
+      if (result.pendingOperationId !== null || (now?.pendingOperationId ?? null) !== null) {
         // The Host accepted the request but something still holds the gate (now, or as the
         // refreshed status reports), so claiming success here would be false.
         setNote(t('gateBusy'))
@@ -249,7 +258,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 name="speechrail-language"
                 checked={language === mode}
                 disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1; setNote('') }}
+                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1; clearSavedNote() }}
               />
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
@@ -264,7 +273,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
           value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; setNote('') }}
+          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; clearSavedNote() }}
           onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />

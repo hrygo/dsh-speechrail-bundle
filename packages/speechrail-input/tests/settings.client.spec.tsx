@@ -322,6 +322,19 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect(configure.mock.calls[0]?.[0]).toMatchObject({ expectedRevision: 2 })
   })
 
+  it('keeps the conflict instruction when the user edits', async () => {
+    // The note is shared, so clearing it on every edit also erased the one note that says what
+    // to do next: reload before saving, because the revision this page holds is stale.
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: false, revision: 1, failure: failure('conflict') }))
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} />)
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('150000') })
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+    await waitFor(() => { expect(screen.getByText('settings.conflict')).toBeTruthy() })
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '60000' } })
+    expect(screen.getByText('settings.conflict')).toBeTruthy()
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
 
