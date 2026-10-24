@@ -97,6 +97,21 @@ describe('VoiceInput acknowledge', () => {
     expect(stop).toHaveBeenCalledWith(0.001, 1_000)
   })
 
+  it('submits one acknowledgement when the control is clicked twice', async () => {
+    let release: (() => void) | undefined
+    const acknowledge = vi.fn(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return { ok: true, pendingOperationId: null, failure: null }
+    })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: 'op_eeeeeeee' }, acknowledge)} />)
+
+    const button = await screen.findByRole('button', { name: 'acknowledge' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    release?.()
+    await waitFor(() => { expect(acknowledge).toHaveBeenCalledTimes(1) })
+  })
+
   it('refuses before opening the microphone when no credential is configured', async () => {
     // Without a credential every upload is refused, so the refusal must arrive before a
     // whole dictation is recorded and thrown away.

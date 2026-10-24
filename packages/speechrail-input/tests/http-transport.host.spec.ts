@@ -8,6 +8,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer as createSocketServer, type Socket } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { probeCapabilities, transcribe, unbracketHostname } from '../src/host/http.ts'
@@ -262,6 +263,29 @@ describe('capability probe', () => {
     if (outcome.ok) throw new Error('unreachable')
     expect(outcome.failure?.code).toBe('timeout')
     expect(outcome.reachable).toBe(true)
+  })
+
+  it('counts an informational response as an answer too', async () => {
+    // Node reports 1xx on its own event; a 103 followed by a stall still proves the
+    // service is there.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.write('HTTP/1.1 103 Early Hints\r\n\r\n')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const outcome = await probeCapabilities({ baseUrl: `http://127.0.0.1:${String(port)}/v1`, credential: SECRET, timeoutMs: 300 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure?.code).toBe('timeout')
+      expect(outcome.reachable).toBe(true)
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
   })
 
   it('reports a response that arrived as reachable even when its body is refused', async () => {

@@ -153,6 +153,12 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
 
     request.on('error', () => { transportFailure(aborted ? 'cancelled' : timedOut ? 'timeout' : 'unreachable') })
 
+    // Informational responses arrive on their own event, and one still proves the service
+    // answered; without this a 103-then-stall would be reported as unreachable.
+    request.on('information', (info: { readonly statusCode?: number | undefined }) => {
+      responded ??= info.statusCode ?? null
+    })
+
     request.on('response', (response: IncomingMessage) => {
       responded = response.statusCode ?? null
       const chunks: Buffer[] = []

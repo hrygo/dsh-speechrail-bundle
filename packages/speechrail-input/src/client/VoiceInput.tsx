@@ -92,6 +92,7 @@ export function VoiceInput({
   status, acknowledge, transcribe, createRecording,
 }: VoiceInputProps) {
   const [phase, setPhase] = useState<Phase>('idle')
+  const [ackBusy, setAckBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState('')
   const [view, setView] = useState<SpeechRailInputStatus | undefined>(undefined)
@@ -248,7 +249,8 @@ export function VoiceInput({
   }
 
   const acknowledgeUnknown = async (): Promise<void> => {
-    if (view === undefined) return
+    if (view === undefined || ackBusy) return
+    setAckBusy(true)
     // A null id means the stored record could not be read at all; the Host accepts it
     // only as the user's explicit assertion that nothing of theirs is outstanding.
     try {
@@ -272,6 +274,8 @@ export function VoiceInput({
       setPhase('idle')
     } catch {
       feedback(t('failure.internal'))
+    } finally {
+      setAckBusy(false)
     }
   }
 
@@ -304,7 +308,7 @@ export function VoiceInput({
         {view?.gate === 'unknown' && (
           // Deliberately not disabled while `locked`: clearing an unproven outcome is
           // recovery, and another plugin holding the composer must not trap the gate.
-          <button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
+          <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
         )}
         {message !== ''
           ? <span role="status" style={messageStyle} title={message}>{message}</span>

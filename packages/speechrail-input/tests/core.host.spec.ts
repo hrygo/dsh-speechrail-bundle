@@ -44,6 +44,9 @@ interface Harness {
   clearFails: boolean
   recordFails: boolean
   readFails: boolean
+  /** When set, `read()` queues its resolution for the test to release. */
+  deferReads: boolean
+  pendingReads: Array<(state: JournalState) => void>
   /** Readable medium holding a malformed record: unreadable, but writable. */
   corrupt: boolean
   config: ResolvedConfig
@@ -66,6 +69,8 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
     clearFails: false,
     recordFails: false,
     readFails: false,
+    deferReads: false,
+    pendingReads: [],
     corrupt: false,
     config: CONFIG,
     credential: 'secret-key',
@@ -75,6 +80,7 @@ function harness(options: { readonly pending?: JournalRecord | null } = {}): Har
   }
   const journal: PendingJournal = {
     async read(): Promise<JournalState> {
+      if (state.deferReads) return await new Promise<JournalState>((resolve) => { state.pendingReads.push(resolve) })
       if (state.readFails || state.corrupt) return { available: false }
       return { available: true, pending: stored }
     },
@@ -155,6 +161,63 @@ describe('unreadable medium recovery', () => {
     const result = await h.core.transcribe(payload('op_wwwwwwww'))
     expect(result.ok).toBe(true)
     expect(h.sends).toHaveLength(1)
+  })
+
+  it('adopts a record that was written while the medium was unreadable', async () => {
+    // Seeded before boot, invisible while the medium is unreadable, then adopted on recovery.
+    const h = harness({ pending: { operationId: 'op_rrrrrrrr', phase: 'unknown', createdAt: '2026-10-23T11:00:00.000Z' } })
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+
+    const result = await h.core.transcribe(payload('op_ssssssss'))
+    expect(result.failure?.code).toBe('unknown-outcome')
+    expect(h.sends).toHaveLength(0)
+    expect((await h.core.status()).pendingOperationId).toBe('op_rrrrrrrr')
+  })
+
+  it('ignores a recovery read that resolves after the gate was already cleared', async () => {
+    // Two attempts start while the medium looks unreadable, so both issue a recovery read.
+    // The first adopts the record; the user then acknowledges it; the second resolves with
+    // the snapshot it took before that clear. Applying it would resurrect a gate that
+    // nothing holds and refuse the next upload.
+    const record = { operationId: 'op_rrrrrrrr', phase: 'unknown' as const, createdAt: '2026-10-23T11:00:00.000Z' }
+    const h = harness({ pending: record })
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+
+    const first = h.core.transcribe(payload('op_tttttttt'))
+    const second = h.core.transcribe(payload('op_uuuuuuuu'))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingReads).toHaveLength(2)
+
+    h.pendingReads.shift()?.({ available: true, pending: record })
+    await first
+    const cleared = await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_rrrrrrrr' }))
+    expect(cleared.ok).toBe(true)
+
+    h.pendingReads.shift()?.({ available: true, pending: record })
+    // Later reads in the same attempt are ordinary again.
+    h.deferReads = false
+    const result = await second
+    expect(result.ok).toBe(true)
+    expect(h.sends).toHaveLength(1)
+    expect((await h.core.status()).pendingOperationId).toBe(null)
+  })
+
+  it('accepts both inclusive budget bounds and refuses just outside them', async () => {
+    const h = harness()
+    for (const timeout of [1_000, 180_000]) {
+      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, expectedRevision: 3 }))
+      expect(result.ok, String(timeout)).toBe(true)
+    }
+    for (const timeout of [999, 180_001]) {
+      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, expectedRevision: 3 }))
+      expect(result.failure?.code, String(timeout)).toBe('bad-request')
+    }
   })
 })
 

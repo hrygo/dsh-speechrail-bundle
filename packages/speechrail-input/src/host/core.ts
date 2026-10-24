@@ -238,6 +238,10 @@ export class SpeechRailInputCore {
    */
   private async reopenJournal(): Promise<void> {
     const state = await this.deps.journal.read()
+    // The read is asynchronous: another attempt may have healed the gate, or the user may
+    // have acknowledged the record, while it was in flight. Applying a snapshot older than
+    // that would resurrect a gate nothing is holding.
+    if (this.gateState !== 'unknown') return
     this.journalUnreadable = !state.available
     if (!state.available) return
     if (state.pending === null) {

@@ -74,10 +74,27 @@ describe('SpeechRailSettings acknowledge', () => {
 
   it('reports success once nothing is outstanding', async () => {
     const acknowledge = vi.fn(async () => ({ ok: true, pendingOperationId: null, failure: null }))
-    render(<SpeechRailSettings {...props({ gate: 'unknown', pendingOperationId: 'op_cccccccc' }, { acknowledge })} />)
+    // The first read is the page's mount; after the acknowledgement the host reports a
+    // cleared gate, which is what makes the success claim true.
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_cccccccc' }, { acknowledge })
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_cccccccc' })
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    render(<SpeechRailSettings {...base} status={status} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
     expect(await screen.findByText('acknowledged')).toBeTruthy()
+  })
+
+  it('does not claim success when the refreshed status still holds an operation', async () => {
+    const acknowledge = vi.fn(async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_dddddddd' }, { acknowledge })
+    const status = vi.fn(async () => ({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_reappeared_9' }))
+    render(<SpeechRailSettings {...base} status={status} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    expect(await screen.findByText('gateBusy')).toBeTruthy()
+    expect(screen.queryByText('acknowledged')).toBeNull()
   })
 })
 
@@ -130,6 +147,53 @@ describe('SpeechRailSettings check result', () => {
   })
 })
 
+describe('SpeechRailSettings check row verdicts', () => {
+  const checkWith = (result: Partial<SpeechRailCheckResult>) => vi.fn(async () => ({
+    reachable: false, authenticated: false, capabilities: null, failure: null,
+    checkedAt: '2026-10-23T12:00:00.000Z', ...result,
+  }))
+
+  it('prints no authentication verdict when the service never answered', async () => {
+    const check = checkWith({ failure: failure('unreachable') })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    expect(await screen.findByText('settings.unreachable')).toBeTruthy()
+    expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
+  })
+
+  it('prints no authentication verdict when a response carried none', async () => {
+    // A 200 whose body was unusable proves reachability, not a rejected credential.
+    const check = checkWith({ reachable: true, failure: failure('malformed-response', { httpStatus: 200 }) })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    expect(await screen.findByText('settings.connected')).toBeTruthy()
+    expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
+  })
+
+  it('still reports a credential the service actually refused', async () => {
+    const check = checkWith({ reachable: true, failure: failure('unauthorized', { httpStatus: 401 }) })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => {
+      expect(screen.getByText('settings.connected · settings.authentication:{"state":"settings.authFailed"}')).toBeTruthy()
+    })
+  })
+
+  it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
+    render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
+
+    const field = await screen.findByRole('spinbutton')
+    fireEvent.change(field, { target: { value: '5000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'settings.check' })).toBeTruthy() })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+  })
+})
+
 describe('SpeechRailSettings capability label', () => {
   it('states nothing about a capability that was never determined', async () => {
     render(<SpeechRailSettings {...props({ capabilities: null })} />)
@@ -138,5 +202,16 @@ describe('SpeechRailSettings capability label', () => {
       expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeTruthy()
     })
     expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.unsupported"}')).toBeNull()
+  })
+
+  it('distinguishes a check that ran without a snapshot from one that never ran', async () => {
+    // "Not checked yet" would be false here: the probe completed, the service just did not
+    // state a capability.
+    render(<SpeechRailSettings {...props({ capabilities: null, checkedAt: '2026-10-23T12:00:00.000Z' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.undetermined"}')).toBeTruthy()
+    })
+    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeNull()
   })
 })

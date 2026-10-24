@@ -5,9 +5,11 @@
  * touches the network unless asked, and cannot carry a credential or a transcript.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { STATUS_TOOL_NAME, describeStatus, createStatusTool, type StatusToolSource, type StatusToolValue } from '../src/host/tools.ts'
 import { failure } from '../src/host/failure.ts'
+import { SpeechRailInputCore } from '../src/host/core.ts'
+import { memoryJournal } from '../src/host/journal.ts'
 import type { SpeechRailCheckResult, SpeechRailInputStatus } from '../src/types.ts'
 
 const STATUS: SpeechRailInputStatus = {
@@ -139,6 +141,38 @@ describe('speechrail_input_status', () => {
     const text = (block as { text: string }).text
     expect(text).toContain('service not probed')
     expect(text).not.toContain('service unreachable')
+  })
+
+  it('treats a refused endpoint as "not probed" as well', async () => {
+    const { stub } = source({ baseUrl: '', endpointProblem: 'the endpoint must be a loopback address' })
+    const refused: StatusToolSource = {
+      ...stub,
+      check: async () => ({ ...CHECK, reachable: false, authenticated: false, failure: failure('endpoint-invalid') }),
+    }
+    const value = await createStatusTool(refused).execute({ probe: true }) as StatusToolValue
+    expect(value.probed).toBe(false)
+  })
+
+  it('reports "not probed" through the real core when no credential is configured', async () => {
+    // The integration case behind the live profile: the host short-circuits before any
+    // exchange, so the tool must not claim the service was unreachable.
+    const probe = vi.fn(async () => { throw new Error('the service must not be contacted') })
+    const core = new SpeechRailInputCore({
+      now: () => new Date('2026-10-23T12:00:00.000Z'),
+      config: () => ({ baseUrl: 'http://127.0.0.1:8201/v1', endpointRefusal: null, credentialRef: 'SPEECHRAIL_API_KEY', model: '', language: 'auto', requestTimeoutMs: 150_000 }),
+      resolveCredential: async () => null,
+      journal: memoryJournal(),
+      transcribe: async () => ({ ok: false, failure: failure('internal') }),
+      probe,
+      settingsRevision: () => 1,
+      writeSettings: async () => 'ok',
+    })
+    const tool = createStatusTool(core)
+    const value = await tool.execute({ probe: true }) as StatusToolValue
+    const [block] = tool.output.render({ probe: true }, value)
+    expect(probe).not.toHaveBeenCalled()
+    expect(value.probed).toBe(false)
+    expect((block as { text: string }).text).not.toContain('service unreachable')
   })
 
   it('renders one bounded line naming the blocking facts', async () => {

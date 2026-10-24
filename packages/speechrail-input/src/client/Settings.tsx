@@ -81,7 +81,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     try {
       const result = await check()
       setChecked(result)
-      adopt(await status())
+      // Only the snapshot is refreshed: adopting would overwrite a language or budget the
+      // user has edited but not saved yet.
+      setView(await status())
     } catch {
       setNote(t('failure.internal'))
     } finally {
@@ -127,10 +129,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
         return
       }
-      adopt(await status())
-      if (result.pendingOperationId !== null) {
-        // The Host accepted the request but something still holds the gate, so claiming
-        // success here would be false.
+      const fresh = await status()
+      adopt(fresh)
+      if (result.pendingOperationId !== null || fresh.pendingOperationId !== null) {
+        // The Host accepted the request but something still holds the gate (now, or as the
+        // refreshed status reports), so claiming success here would be false.
         setNote(t('gateBusy'))
         return
       }
@@ -144,6 +147,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
 
   const capabilities = checked?.capabilities ?? view?.capabilities ?? null
   const limits = view?.limits
+  // A probe that ran and produced no snapshot is not the same as one that never ran.
+  const checkedYet = checked !== undefined || (view?.checkedAt ?? null) !== null
+  const lastCheckTime = checked?.checkedAt ?? view?.checkedAt ?? t('settings.never')
+  const verified = checked !== undefined && (checked.authenticated || checked.failure?.code === 'unauthorized')
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -226,21 +233,21 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       <div style={rowStyle}>
         <span style={labelStyle}>{t('settings.transcriptionStatus', {
           state: capabilities === null || capabilities === undefined
-            ? t('settings.never')
+            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
             : capabilities.transcriptionSupported
               ? t('settings.available')
               : t('settings.unsupported'),
         })}</span>
         <span style={valueStyle}>
           {capabilities === null || capabilities === undefined
-            ? t('settings.never')
+            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
             : capabilities.transcriptionSupported
               ? t('settings.supported')
               : `${t('settings.unsupported')}${capabilities.reason === null ? '' : ` (${capabilities.reason})`}`}
         </span>
         <span style={labelStyle}>
           {capabilities === null || capabilities === undefined
-            ? t('settings.never')
+            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
             : t('settings.languages', { values: capabilities.languages.values.length === 0 ? '—' : capabilities.languages.values.join(', ') })}
         </span>
       </div>
@@ -249,10 +256,14 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           {checked === undefined || checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid'
             // A check that never reached the service must not be reported as a failed
             // connection to a healthy one.
-            ? t('settings.lastCheck', { time: view?.checkedAt ?? t('settings.never') })
-            : `${checked.reachable ? t('settings.connected') : t('settings.unreachable')} · ${t('settings.authentication', {
-              state: checked.authenticated ? t('settings.authOk') : t('settings.authFailed'),
-            })}`}
+            ? t('settings.lastCheck', { time: lastCheckTime })
+            : verified
+              // `authenticated: false` covers "refused" and "never judged" alike, so it is
+              // only reported once a response actually carried a verdict.
+              ? `${t('settings.connected')} · ${t('settings.authentication', { state: checked.authenticated ? t('settings.authOk') : t('settings.authFailed') })}`
+              : checked.reachable
+                ? t('settings.connected')
+                : t('settings.unreachable')}
         </span>
         {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(checked.failure)}</span>}
       </div>
