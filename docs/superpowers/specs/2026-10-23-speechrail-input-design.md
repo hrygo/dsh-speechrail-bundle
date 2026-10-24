@@ -341,6 +341,15 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
 
+## 2026-10-24 决定记录（0.2.8：结算规则只认"已证明未被处理"）
+
+- 0.2.5 让**任何到达的 ≥300 状态**结算 gate，这是错的：504 恰恰意味着上游可能仍在转写，500/502/302 也不证明音频的去向。改为单一谓词 `provesNotProcessed(status)`——**只有 4xx（除 408 Request Timeout）证明服务拒绝了这次请求**；5xx、3xx、408 一律保持"未证明"，journal 保留、gate 继续询问。审查者实测：读完整段 3.2 MB 音频后答 504，0.2.5 会清空 journal 并邀请用户重录。
+- 同一谓词覆盖传输中断、响应体超长两条路径；另修一条早已存在的同类问题：完整正文的 **2xx≠200**（202 Accepted 最典型）此前按 `internal`/已拒绝结算，现在报 `malformed-response` 且保持未证明。例外只有一条且有意保留：**完整 200 但正文不可用**仍按失败结算——服务已结束该请求，没有在途工作可等，用户无论如何都要重录。
+- 参考实现证据：`SpeechRail/src/speechrail/application/capability_snapshot.py:367` 只会发出 `languages.status` 为 `supported` 或 `unknown`，**永不发 `unsupported`**。因此"`unsupported` ⇒ 只开放 auto"这条规则对 SpeechRail 不可达，审查提出的 invariant-A 疑点结案；该分支只对其他引擎生效，而那时withhold 是正确的。
+- 其余审查项：语言提示改为"在本快照下生效"的措辞（不再断言"正在发送"，因为快照可在 status 与上传之间被检测替换）；Settings 的三元判断不再在合法的 `null`（无快照）上穿透到上一次检测结果；删掉从未被读取的第二条"证明"通道 `HttpFailure.sent`；composer 测试的 `t` stub 改为插值，正例现在能区分 `zh` 与任何非空值；新增 10+8 例状态阶梯（卡住与完整正文两种）钉住结算规则。
+- 变异检验（本轮新增测试全部验证过有牙齿）：把结算规则退回 `>=300` → 阶梯测试失败；把 Settings 退回 `??` 穿透 → 单快照测试失败。
+- 流程约定：审查期间 HEAD 会移动（本轮从 v0.2.5 移到 v0.2.6，审查者据 tag 复核并用 `git archive` 固定副本），因此**审查对象是 tag 而非 HEAD**；v0.2.5 tag 未移动。
+
 ## 2026-10-24 决定记录（0.2.6：边界字段不与服务声明同名）
 
 - 0.2.5 给 status 加的三态字段原名 `transcriptionSupported`，与 `SpeechRailCapabilitiesView.transcriptionSupported`（服务自己的布尔声明）**同名不同型**，而两者恰好同处一条 Remote 边界。已改名 `transcriptionSupport`：视图上的布尔是"服务怎么说"，status 上的三态是"插件知道什么"。

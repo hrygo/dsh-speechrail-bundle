@@ -114,8 +114,10 @@ export interface SpeechRailInputStatus {
   /** Configured language mode. */
   readonly language: SpeechRailLanguageMode
   /**
-   * The language hint the next upload will actually carry, or an empty string when none will:
-   * `auto` never sends one and a language the service refused to admit is withheld.
+   * The language hint the next upload carries while this snapshot stays in force, or an empty string
+   * when it carries none: `auto` never sends one, and a language the snapshot refuses to admit is
+   * withheld. The host decides it again when the upload starts, so a check that changes the snapshot
+   * in between changes the wire.
    */
   readonly languageHint: string
   /**

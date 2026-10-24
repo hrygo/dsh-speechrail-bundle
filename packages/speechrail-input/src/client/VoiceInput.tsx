@@ -377,9 +377,10 @@ export function VoiceInput({
                 <>
                   <span>{phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')}</span>
                   {phase === 'transcribing' && (view?.languageHint ?? '') !== '' && (
-                    // This hint is being sent with the request in flight, so this is the moment it
-                    // is worth saying which language is in force - the composer has no other place
-                    // for it, and the settings page is not on screen while dictating.
+                    // The hint the snapshot in force puts on the wire. The host decides it again when
+                    // the upload starts, so this is the reported value, not a promise about bytes: what
+                    // it is worth saying is which language is in force while dictating, since the
+                    // settings page is not on screen.
                     <> · <span>{t('languageHintInline', { language: view?.languageHint ?? '' })}</span></>
                   )}
                   {message !== '' && <> · <span>{message}</span></>}

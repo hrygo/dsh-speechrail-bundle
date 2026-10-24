@@ -38,6 +38,9 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 - **凭据不落盘、不记录、不回传。** 经 DSH credentials 或设置解析引用后作为 bearer 头发送；跨边界只有引用名与布尔值。
 - **不持久化音频与转写文本。** 未结案 journal 只存操作 id、阶段与时间戳，因此崩溃或刷新不会静默丢失结局未知的上传。
 - **不会重复上传。** 门禁同一时刻只允许一次操作；结局未知会阻塞后续上传，直到显式确认清除。
+- **只有"被拒绝"才会重新开门。** 到达客户端的状态只有在**证明服务没有处理这次上传**时才结算未结案记录：
+  4xx（408 除外），或服务回了 200 但该响应本身不可用。5xx（网关可能已放弃，而上游 worker 仍在转写）、3xx、
+  408、以及 202 "accepted" 都保持"未证明"，门禁继续询问，而不是在可能仍在运行的工作之上邀请用户再录一遍。
 - **服务声明的限额才生效。** 不可识别、不可达或未声明限额的能力响应，其中的缺失字段沿用当前生效值。
 
 ## 要求
@@ -64,7 +67,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.7/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.8/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。

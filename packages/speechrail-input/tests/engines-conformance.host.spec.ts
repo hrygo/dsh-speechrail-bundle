@@ -313,7 +313,7 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     expect(value.language).toBe('zh')
     expect(value.languageHint).toBe('')
     expect(value.languageOptions).toEqual(['auto', 'en'])
-    expect(describeStatus(value)).toContain('language zh with no hint sent')
+    expect(describeStatus(value)).toContain('language zh with no hint in force')
 
     // And the wire agrees with the line the agent was given.
     await core.transcribe(payload('op_ge0000004'))
@@ -383,6 +383,97 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     expect(plainText).not.toContain('not accepting the request')
     // The limits it reports are the ones actually in force, not the service's.
     expect(plainText).toContain(`limits ${String(DEFAULT_LIMITS.maxUploadBytes)} bytes / ${String(DEFAULT_LIMITS.maxAudioSeconds)}s`)
+  })
+
+  it('settles only on a status that proves the service refused the request', async () => {
+    // The engine reads the whole recording and only then answers. A 504 says a gateway gave up while
+    // an upstream worker may still be transcribing, a 500/502 says nothing about the audio, a 302
+    // points elsewhere, and 202 means "still working" in so many words: none of those may open the
+    // gate, or the user is invited to dictate again over work that may still be running. A 4xx
+    // (except 408 Request Timeout) is the service refusing the request itself, and only that settles.
+    const stalled: readonly { readonly status: number, readonly settles: boolean }[] = [
+      { status: 400, settles: true },
+      { status: 401, settles: true },
+      { status: 404, settles: true },
+      { status: 408, settles: false },
+      { status: 500, settles: false },
+      { status: 502, settles: false },
+      { status: 504, settles: false },
+      { status: 302, settles: false },
+      { status: 202, settles: false },
+      { status: 200, settles: false },
+    ]
+    for (const shape of stalled) {
+      const service = await engine({
+        capabilities: (response) => { response.writeHead(404).end() },
+        transcription: (_request, response) => {
+          response.writeHead(shape.status, { 'content-type': 'application/json' })
+          response.flushHeaders()
+        },
+      })
+      const operationId = `op_settle${shape.status}`
+      const core = coreOver(service, 'auto', 400)
+      await core.check()
+
+      const result = await core.transcribe(payload(operationId))
+      expect(result.failure?.outcome, `stalled ${shape.status}`).toBe(shape.settles ? 'failed' : 'unknown')
+      expect(result.failure?.httpStatus, `stalled ${shape.status}`).toBe(shape.status)
+      const view = await core.status()
+      expect(view.gate, `stalled ${shape.status}`).toBe(shape.settles ? 'ready' : 'unknown')
+      expect(view.pendingOperationId, `stalled ${shape.status}`).toBe(shape.settles ? null : operationId)
+      if (!shape.settles) await core.acknowledgeUnknown(JSON.stringify({ operationId }))
+    }
+  })
+
+  it('keeps a completed answer on the wire from settling the gate, except a refusal', async () => {
+    // The same ladder with a complete body. A 202 Accepted is the sharpest case: the service says in
+    // so many words that the work continues. A 200 whose body cannot be used is the deliberate
+    // contrast - the service did finish the request, so nothing is in flight and the operation
+    // settles as failed, with no acknowledgement demanded for work that provably ended.
+    const answered: readonly { readonly status: number, readonly settles: boolean, readonly body?: string }[] = [
+      { status: 400, settles: true, body: '{"error":"bad"}' },
+      { status: 401, settles: true, body: '{"error":"no"}' },
+      { status: 500, settles: false, body: '{"error":"boom"}' },
+      { status: 504, settles: false, body: '{"error":"slow"}' },
+      { status: 302, settles: false, body: '' },
+      { status: 201, settles: false, body: '{"id":"job_1"}' },
+      { status: 202, settles: false, body: '{"id":"job_1"}' },
+      { status: 204, settles: false, body: '' },
+    ]
+    for (const shape of answered) {
+      const service = await engine({
+        capabilities: (response) => { response.writeHead(404).end() },
+        transcription: (_request, response) => {
+          response.writeHead(shape.status, { 'content-type': 'application/json' })
+          response.end(shape.body ?? '')
+        },
+      })
+      const operationId = `op_answer${shape.status}`
+      const core = coreOver(service)
+      await core.check()
+
+      const result = await core.transcribe(payload(operationId))
+      expect(result.failure?.outcome, `answered ${shape.status}`).toBe(shape.settles ? 'failed' : 'unknown')
+      const view = await core.status()
+      expect(view.gate, `answered ${shape.status}`).toBe(shape.settles ? 'ready' : 'unknown')
+      expect(view.pendingOperationId, `answered ${shape.status}`).toBe(shape.settles ? null : operationId)
+      if (!shape.settles) await core.acknowledgeUnknown(JSON.stringify({ operationId }))
+    }
+
+    // The contrast: a complete 200 the client cannot use ends the operation for good.
+    const unusable = await engine({
+      capabilities: (response) => { response.writeHead(404).end() },
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/html' })
+        response.end('<html>not a transcript</html>')
+      },
+    })
+    const core = coreOver(unusable)
+    await core.check()
+    const result = await core.transcribe(payload('op_0000html'))
+    expect(result.failure?.code).toBe('malformed-response')
+    expect(result.failure?.outcome).toBe('failed')
+    expect((await core.status()).gate).toBe('ready')
   })
 
   it('keeps the journal, the gate and the acknowledgement for an unproven outcome', async () => {

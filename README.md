@@ -47,6 +47,12 @@ over real loopback sockets against both kinds of engine and asserts what each on
   unknown.
 - **Nothing is uploaded twice.** The gate admits one operation at a time, and an unknown outcome
   blocks further uploads until it is explicitly acknowledged.
+- **Only a refusal opens the gate again.** A status that reached the client settles the pending
+  journal only when it proves the service did not process the upload - a 4xx other than 408 - or when
+  the service answered 200 and the answer itself was unusable. A 5xx (a gateway may have given up
+  while an upstream worker kept transcribing), a 3xx, a 408 and a 202 "accepted" all leave the
+  outcome unproven, so the gate keeps asking instead of inviting a second dictation over work that
+  may still be running.
 - **Advertised limits only change when the service states them.** A limit an unrecognised,
   unreachable, or limit-less capability response omits keeps the value already in force.
 
@@ -79,7 +85,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.7/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.8/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.

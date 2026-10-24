@@ -91,6 +91,24 @@ export function readErrorEnvelope(body: unknown): { readonly requestId: string |
 }
 
 /**
+ * Whether an answered status proves the service did not process the upload.
+ *
+ * Only the service refusing the request itself proves that: 4xx, except 408 Request Timeout. A 5xx
+ * may be a gateway timing out while an upstream worker is still transcribing (504 says exactly
+ * that), a 3xx tells the client to look elsewhere without establishing anything about the bytes, and
+ * a 2xx that is not 200 - 202 Accepted above all - can mean the work is explicitly still running.
+ * Those outcomes stay unproven, so the pending journal is kept and the gate keeps asking.
+ *
+ * This is the only rule that decides it; the upload path must not grow a second one.
+ *
+ * @param status - response status code that reached the client.
+ * @returns whether the upload provably was not processed.
+ */
+export function provesNotProcessed(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408
+}
+
+/**
  * Map an HTTP status to the closed failure vocabulary.
  * @param status - response status code.
  * @param declaredCode - server error code, inspected only for model-specific refusals.

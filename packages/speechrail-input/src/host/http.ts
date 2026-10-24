@@ -21,7 +21,7 @@ import {
 } from '../contracts.ts'
 import type { SpeechRailAuthentication, SpeechRailLimits } from '../types.ts'
 import { projectCapabilities } from './capabilities.ts'
-import { failure, failureForStatus, readErrorEnvelope, unknownFailure } from './failure.ts'
+import { failure, failureForStatus, provesNotProcessed, readErrorEnvelope, unknownFailure } from './failure.ts'
 
 /** One low-level response. */
 export interface HttpSuccess {
@@ -39,8 +39,6 @@ export interface HttpFailure {
   readonly ok: false
   /** Sanitized failure. */
   readonly failure: SpeechRailFailure
-  /** Whether any request byte was written, which is what makes the outcome unprovable. */
-  readonly sent: boolean
 }
 
 /** Result of one low-level exchange. */
@@ -101,17 +99,11 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
     /**
      * Classify a transport failure: bytes already written make the remote outcome unprovable.
      *
-     * `responded` is the status of a response head that did arrive. A stall or a reset
-     * mid-body therefore still reports the service as reachable, which is what the
-     * probe's `reachable` field promises.
-     */
-    /**
-     * Classify a transport failure: bytes already written make the remote outcome unprovable.
-     *
-     * Unless a final status of 300 or more arrived first. That is a proven refusal - the service
-     * answered, and did not process the request - so the gate settles instead of demanding that the
-     * user acknowledge an operation the service already rejected. A 2xx (or an informational 1xx)
-     * head proves nothing about the body, so that stays an unproven outcome.
+     * `responded` is the status of a response head that did arrive, so a stall or reset mid-body
+     * still reports the service as reachable - which is what the probe's `reachable` field promises.
+     * It settles the gate only when that status proves the upload was not processed
+     * (`provesNotProcessed`); a 5xx head, which may be a gateway giving up on an upstream that is
+     * still working, keeps the outcome unproven.
      */
     const transportFailure = (code: SpeechRailFailureCode): void => {
       const status = responded
@@ -120,10 +112,9 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         ok: false,
         failure: !wrote
           ? failure(code, options)
-          : status !== null && status >= 300
+          : status !== null && provesNotProcessed(status)
             ? failureForStatus(status, null, null, null)
             : unknownFailure(code, options),
-        sent: wrote,
       })
     }
 
@@ -147,7 +138,7 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         headers: options.headers,
       })
     } catch {
-      finish({ ok: false, failure: failure('endpoint-invalid'), sent: false })
+      finish({ ok: false, failure: failure('endpoint-invalid') })
       return
     }
 
@@ -157,7 +148,7 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
     }
     if (options.signal !== undefined) {
       if (options.signal.aborted) {
-        finish({ ok: false, failure: failure('cancelled'), sent: false })
+        finish({ ok: false, failure: failure('cancelled') })
         return
       }
       options.signal.addEventListener('abort', onAbort, { once: true })
@@ -195,14 +186,13 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
         if (bytes > options.maxResponseBytes) {
           response.destroy()
           const status = response.statusCode ?? null
-          // Same rule as a stalled body: a >=300 head is a proven refusal even when the body that
-          // followed it was unusable.
+          // Same rule as a stalled body: only a status that proves the request was not processed
+          // settles the gate, even though the body that followed it was unusable.
           finish({
             ok: false,
-            failure: status !== null && status >= 300
+            failure: status !== null && provesNotProcessed(status)
               ? failureForStatus(status, null, null, null)
               : unknownFailure('malformed-response', { httpStatus: status }),
-            sent: true,
           })
           return
         }
@@ -346,7 +336,19 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
   })
   const requestSeconds = Math.max(0, (performance.now() - started) / 1000)
   if (!result.ok) return { ok: false, failure: result.failure }
-  if (result.status !== 200) return { ok: false, failure: failureForResponse(result.status, result.body) }
+  if (result.status !== 200) {
+    // 202 Accepted is the canonical "still working", and a complete 5xx or 3xx body does not
+    // establish what happened to the bytes either: only a status that proves the request was not
+    // processed lets the gate settle. The code still says what arrived.
+    if (result.status >= 200 && result.status < 300) {
+      return { ok: false, failure: unknownFailure('malformed-response', { httpStatus: result.status }) }
+    }
+    const answered = failureForResponse(result.status, result.body)
+    return {
+      ok: false,
+      failure: provesNotProcessed(result.status) ? answered : { ...answered, outcome: 'unknown' },
+    }
+  }
   const payload = parseJson(result.body)
   if (typeof payload !== 'object' || payload === null) {
     return { ok: false, failure: failure('malformed-response', { httpStatus: 200 }) }

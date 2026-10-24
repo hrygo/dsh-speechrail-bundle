@@ -418,6 +418,39 @@ describe('SpeechRailSettings check row verdicts', () => {
     await waitFor(() => { expect(screen.getByText((content) => content.includes('settings.limitsDefault'))).toBeTruthy() })
   })
 
+  it('describes one snapshot, never half of the projection and half of the last check', async () => {
+    // The state is reachable: the check read a snapshot, then the status read that follows it did not
+    // return one. `capabilities: null` is a real value ("no snapshot in force"), so it must not fall
+    // through to the snapshot the check just read - the page would mix two snapshots in the rows
+    // below the language labels, which take their options from the projection.
+    const checked = {
+      schemaVersion: 'effective_capabilities_v1',
+      transcriptionSupported: false,
+      reason: 'asr_not_ready',
+      languages: { status: 'unknown', values: [] },
+      limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+    } as unknown as SpeechRailCapabilitiesView
+    const status = vi.fn().mockResolvedValue({
+      ...STATUS,
+      language: 'zh' as const,
+      languageHint: 'zh',
+      languageOptions: ['auto', 'zh', 'en'],
+      capabilities: null,
+    })
+    render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: 'accepted', capabilities: checked }) as never })} status={status} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    // Wait until the check has landed and the projection has been re-read with no snapshot in it.
+    await waitFor(() => { expect(status.mock.calls.length).toBeGreaterThan(1) })
+    await waitFor(() => { expect(screen.getByText((content) => content.includes('settings.limitUpload'))).toBeTruthy() })
+
+    // The projection is what the host enforces, so its "no snapshot" state is what the page reports:
+    // the limits are the package defaults, not the 1 MiB/30 s the check happened to see.
+    expect(screen.getByText((content) => content.includes('settings.limitsDefault'))).toBeTruthy()
+    // And the numbers are the projection's (4 MiB here), not the 1 MiB the check happened to see.
+    expect(screen.queryByText((content) => content.includes('limitUpload:{"mb":1}'))).toBeNull()
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: 'accepted' }) as never })} />)
 

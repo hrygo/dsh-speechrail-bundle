@@ -44,7 +44,10 @@ function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request:
     },
     locked: false,
     onActiveChange: () => { /* observation only */ },
-    t: (key: string) => key,
+    // Interpolating keeps the assertions honest: with `(key) => key` every language renders the
+    // same text, so a positive test could not tell `zh` from `en` or from a wrong variable.
+    t: (key: string, values?: Record<string, string>) =>
+      (values === undefined ? key : `${key}:${JSON.stringify(values)}`),
     status: async () => ({ ...STATUS, ...overrides }),
     check: async () => ({ reachable: true, authenticated: 'accepted', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }),
     configure: async () => ({ ok: true, revision: 1, failure: null }),
@@ -104,14 +107,17 @@ describe('VoiceInput acknowledge', () => {
     // The composer is where the user dictates and it has no settings page beside it, so the one
     // moment the hint matters is while the request carrying it is in flight.
     const release = await driveToTranscribing('zh')
-    expect(await screen.findByText('languageHintInline')).toBeTruthy()
+    // The exact interpolation is the assertion: a component that passed a constant, the wrong
+    // variable or an empty string would render different text.
+    expect(await screen.findByText('languageHintInline:{"language":"zh"}')).toBeTruthy()
+    expect(screen.queryByText(/languageHintInline:\{"language":"en"\}/)).toBeNull()
     release()
   })
 
   it('stays quiet while no language hint travels', async () => {
     const release = await driveToTranscribing('')
     expect(screen.getByText('transcribingShort')).toBeTruthy()
-    expect(screen.queryByText('languageHintInline')).toBeNull()
+    expect(screen.queryByText(/^languageHintInline/)).toBeNull()
     release()
   })
 

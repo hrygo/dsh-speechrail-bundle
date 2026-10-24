@@ -256,12 +256,12 @@ export function describeStatus(value: StatusToolValue): string {
       : 'service unreachable')
   }
   else parts.push('service not probed')
-  // The language the wire will carry, not the one that was configured: the tool's own
-  // description promises what is in force, and an agent must not be told a hint will travel when
-  // the snapshot withholds it.
+  // The language this snapshot puts on the wire, not the one that was configured: an agent must not
+  // be told a hint travels while the snapshot withholds it. Phrased as the snapshot's fact rather
+  // than a promise, because a check can replace the snapshot before the next upload.
   parts.push(value.languageHint === ''
-    ? `language ${value.language} with no hint sent`
-    : `language hint ${value.languageHint} sent`)
+    ? `language ${value.language} with no hint in force`
+    : `language hint ${value.languageHint} in force`)
   if (value.transcriptionSupport === 'unsupported') {
     parts.push('transcription unsupported by the service: every upload is refused before the audio is sent')
   } else if (value.transcriptionSupport === 'unknown') {
