@@ -149,7 +149,7 @@ requestSeconds 用 Host monotonic clock 测量出站请求开始至响应正文�
 
 有效快照必须满足：schema_version 精确为 `effective_capabilities_v1`；`operations.transcription.status === 'supported'`；`operations.transcription.output.formats` 含 json；`operations.transcription.input.max_upload_bytes`、`.max_audio_seconds` 是有限正数。没有 `.available` 或 `.ready` 公开字段，不能猜字段。
 
-读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、开放全部已知语言并把用户选择作为**未验证提示**发送（**2026-10-24 修订，0.2.3**：原设计"unknown 只开放 auto"已被活的 SpeechRail 证据推翻——本机快照为 `transcription.status: supported` + `languages.status: unknown`，而其 `/v1/audio/transcriptions` 的 OpenAPI 明确接受 `language` 提示；不把语言域 unknown 偷换成整个 ASR 不可用）；`unsupported` 则只开放 auto，不臆造语言域。401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible（**2026-10-24 修订，0.2.0**：能力端点答 404/405 时不再算
+读取 `operations.transcription.languages.status/values`。supported 时只开放 values 与 zh/en 的精确交集；unknown 时保留事实、开放全部已知语言并把用户选择作为**未验证提示**发送（**2026-10-24 修订，0.2.3**：原设计"unknown 只开放 auto"已被活的 SpeechRail 证据推翻——本机快照为 `transcription.status: supported` + `languages.status: unknown`，而其 `/v1/audio/transcriptions` 的 OpenAPI 明确接受 `language` 提示；不把语言域 unknown 偷换成整个 ASR 不可用）；`unsupported` 则只开放 auto，不臆造语言域。（**2026-10-24 修订，0.7.1**：对真实服务的实测把这条从「OpenAPI 声明」升级为「真实转写证据」——`language` 取 `zh`、`en` 或不传均 200 并返回正确文本；而任何**多于一个子标签**的取值（`zh-CN`/`zh-Hans`/`zh-Hans-CN`/`en-US`/`zh-Hant-TW`）返回 **500 且正文为纯文本**。插件发不出这类值：语言是封闭三值 `auto|zh|en`，`languageOptionsFor` 只取 `KNOWN_LANGUAGES` 与快照的交集。）401 显示 auth-required；未知 schema/缺字段/非法限额显示 incompatible（**2026-10-24 修订，0.2.0**：能力端点答 404/405 时不再算
   失败，而是稳定的 `capabilities-absent`，服务按纯转写端点继续可用；501 仍按 5xx 处理）；supported 以外显示 unavailable。能力服务自身故障不能推断 ASR 模型已坏。
 
 这些嵌套字段来自本机 SpeechRail 参考实现的 `capability_snapshot.py`（未随本仓库分发），OpenAPI 对 operations 为开放对象；因此必须有专用投影测试，不声称机器契约已完整枚举。
@@ -345,6 +345,14 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 - **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
 - **两处死导出：先在观察项中记录，后按要求删除。** 全仓库（src/tests/tools/scripts）扫描后，`core.ts` 的 `decodeBase64Audio` 与 `journal.ts` 的 `UNAVAILABLE_JOURNAL` 无任何引用——前者是 0.6.0 引入 `decodeValidatedBase64` 后留下的旧入口（它看起来像"仍在校验的安全网"，其实不再被调用）。当轮按"不顺手清理"的约定**只记录未动**；用户随后要求处理遗留项，遂删除。删除前确认无牵连：`isBase64` 仍被解析器使用、`decodeValidatedBase64` 仍被真实调用点使用、`PendingJournal` 类型仍被广泛使用；删除后 `pnpm verify` 退出码 0、246 测试全绿（什么都没坏，即证明它们确为死代码）。
+
+## 2026-10-24 决定记录（0.7.1：真实转写验证、CI 真跑 schema 检查、两处死代码清除）
+
+- **真实转写验证（用户授权，本机真实推理一次）。** 用 macOS `say` 合成 3.13 s 的**规范 WAV**（单声道/16 kHz/16 位），用**插件自己的 `transcribe()`**（不是 curl 复刻）打真实服务，再用 curl 独立复现。结果：`language=zh`、`language=en`、不传语言**三种都是 200**，正文 `{"text":"你好，这是一次语音输入测试。","usage":{"type":"duration","seconds":3.129}}`——即服务端**接受我们的完整线格式**（multipart 的 `response_format`/可选 `model`/可选 `language` + `file` 部件的 `filename="recording.wav"` 与 `Content-Type: audio/wav` + Bearer 与 `Accept`）并真的转写成功。此前「服务接受 `language`」只有 OpenAPI 与快照证据，**这一环节现已关闭**。
+- **顺带实测到的服务端限制（记录，不是插件缺陷）。** 任何**多于一个子标签**的 `language` 值（实测 `zh-CN`/`zh-Hans`/`zh-Hans-CN`/`en-US`/`zh-Hant-TW`，各可复现）返回 **500 且正文是纯文本 `Internal Server Error`**（非 JSON）。我最初判断这是「用户可见失败路径」，核对后**撤回**：语言在插件里是**封闭三值** `auto|zh|en`（config schema `z.union([...])`，既有用例 `language:'ja' → bad-request`），且 `languageOptionsFor` 只从 `KNOWN_LANGUAGES` 与快照取交集，所以插件**发不出**这类值。教训：「先核对可达性，再下结论」。
+- **附带确认：非 JSON 5xx 正文在真实世界确实会走到。** 探针对 500 的实测是 `code=server-error http=500 outcome=unknown`——门保持关闭、需要确认，与设计一致（服务声明的 400/401/413/422/429/502/503 清单里没有 500，属意外响应，处理方式正确）。
+- **CI 现在真跑注册表 schema 检查。** 新增步骤：把 `@deepseek-ai/dsh-tools@0.2.1-rc.2`（与工作区其他 `@deepseek-ai/*` devDependencies 同版本）装到 `$RUNNER_TEMP` 下的**临时前缀**（实测 23 包 / 9.5 MB / 8 秒），再以显式路径、**不带 `--optional`** 运行检查——装错或路径错就大声失败（实测退出码 2）。`verify:ci` 内那一次仍是 `--optional`（干净 runner 上没有该包，且它**不能**成为工作区依赖：会把 `dsh-llm` 拉进 Typert 程序并破坏生成），日志里以 `SKIPPED` 明示。该步骤已在本地逐字复刻跑通（exit 0，并报出被校验版本）。
+- **两处死代码清除（按用户要求处理遗留项）。** `core.ts` 的 `decodeBase64Audio` 与 `journal.ts` 的 `UNAVAILABLE_JOURNAL` 删除；删除前确认无牵连（`isBase64`、`decodeValidatedBase64`、`PendingJournal` 均另有使用），删后 `pnpm verify` 退出码 0、246 测试全绿。
 
 ## 2026-10-24 决定记录（0.7.0 续：v0.6.0 审查的五项处置）
 
