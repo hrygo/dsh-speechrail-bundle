@@ -388,7 +388,9 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
     return {
       ok: false,
       reachable: true,
-      authenticated: result.status !== 401 && result.status !== 403,
+      // A non-200 answer never proves the credential was accepted: 500/404/413 say nothing
+      // about it, so claiming `true` here would turn any server error into "authorized".
+      authenticated: false,
       failure: failureForResponse(result.status, result.body),
     }
   }

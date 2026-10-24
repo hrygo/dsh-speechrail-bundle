@@ -112,6 +112,8 @@ export interface StatusToolValue {
   readonly reachable: boolean
   /** Whether the service accepted the credential; false when it was not asked. */
   readonly authenticated: boolean
+  /** Failure code of the probe in this call, or an empty string. */
+  readonly failureCode: string
 }
 
 /** Canonical output schema, matching `defineTool`'s compiled form. */
@@ -131,10 +133,12 @@ const OUTPUT_SCHEMA = {
     probed: { type: 'boolean', description: 'Whether the local service was asked during this call.' },
     reachable: { type: 'boolean', description: 'Whether the local service answered; false when it was not asked.' },
     authenticated: { type: 'boolean', description: 'Whether the service accepted the credential; false when it was not asked.' },
+    failureCode: { type: 'string', description: 'Probe failure code in this call, or an empty string.' },
   },
   required: [
     'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'gate',
     'pendingOperationId', 'maxUploadBytes', 'maxAudioSeconds', 'probed', 'reachable', 'authenticated',
+    'failureCode',
   ],
 } as const
 
@@ -186,6 +190,7 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
         probed,
         reachable: check?.reachable ?? false,
         authenticated: check?.authenticated ?? false,
+        failureCode: check?.failure?.code ?? '',
       }
     },
   }
@@ -201,7 +206,17 @@ export function describeStatus(value: StatusToolValue): string {
   if (value.endpointProblem !== '') parts.push(`endpoint refused: ${value.endpointProblem}`)
   else parts.push(`endpoint ${value.endpoint === '' ? '(unset)' : value.endpoint}`)
   parts.push(value.credentialConfigured ? 'credential configured' : 'credential missing')
-  if (value.probed) parts.push(value.reachable ? (value.authenticated ? 'service reachable and authorized' : 'service reachable but rejecting the credential') : 'service unreachable')
+  if (value.probed) {
+    // Only a 200 proves acceptance, so a reachable service that is not authenticated either
+    // refused this credential or answered with something else; the code tells them apart.
+    parts.push(value.reachable
+      ? value.authenticated
+        ? 'service reachable and authorized'
+        : value.failureCode === 'unauthorized'
+          ? 'service reachable but rejecting the credential'
+          : 'service reachable but not accepting the request'
+      : 'service unreachable')
+  }
   else parts.push('service not probed')
   parts.push(`gate ${value.gate}`)
   if (value.pendingOperationId !== '') parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)

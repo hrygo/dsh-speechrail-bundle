@@ -265,6 +265,21 @@ describe('capability probe', () => {
     expect(outcome.reachable).toBe(true)
   })
 
+  it('does not call a service error an accepted credential', async () => {
+    // Only a 200 proves the credential was accepted; a 500 says nothing about it, and
+    // reporting `authenticated: true` here turned any server error into "authorized".
+    const server = await start((_request, response) => {
+      response.writeHead(500, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ error: { message: 'boom', code: 'server_error' } }))
+    })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 1_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.reachable).toBe(true)
+    expect(outcome.authenticated).toBe(false)
+    expect(outcome.failure?.code).toBe('server-error')
+  })
+
   it('counts an informational response as an answer too', async () => {
     // Node reports 1xx on its own event; a 103 followed by a stall still proves the
     // service is there.

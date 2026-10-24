@@ -52,11 +52,18 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [budgetText, setBudgetText] = useState(String(MIN_REQUEST_TIMEOUT_MS))
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  // A refresh must replace the fields the user has not touched, or the page would keep a
+  // stale value while adopting the fresh revision and write it back over someone else's
+  // change; an edit in progress must survive instead.
+  const [languageDirty, setLanguageDirty] = useState(false)
+  const [budgetDirty, setBudgetDirty] = useState(false)
 
   const adopt = (next: SpeechRailInputStatus): void => {
     setView(next)
     setLanguage(next.language)
     setBudgetText(String(next.requestTimeoutMs))
+    setLanguageDirty(false)
+    setBudgetDirty(false)
   }
 
   const failureText = (failure: SpeechRailFailure): string => {
@@ -81,9 +88,13 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     try {
       const result = await check()
       setChecked(result)
-      // Only the snapshot is refreshed: adopting would overwrite a language or budget the
-      // user has edited but not saved yet.
-      setView(await status())
+      // Refresh the snapshot and every field the user has not edited; adopting wholesale
+      // would discard an edit in progress, and refreshing only the view would leave an
+      // untouched field stale while its conflict token moves on.
+      const fresh = await status()
+      setView(fresh)
+      if (!languageDirty) setLanguage(fresh.language)
+      if (!budgetDirty) setBudgetText(String(fresh.requestTimeoutMs))
     } catch {
       setNote(t('failure.internal'))
     } finally {
@@ -148,9 +159,15 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const capabilities = checked?.capabilities ?? view?.capabilities ?? null
   const limits = view?.limits
   // A probe that ran and produced no snapshot is not the same as one that never ran.
-  const checkedYet = checked !== undefined || (view?.checkedAt ?? null) !== null
+  // A check the host refused locally (no credential, unusable endpoint) never reached the
+  // service, so it must not blame the service for not stating a capability.
+  const neverAskedLocally = checked !== undefined
+    && (checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid')
+  const checkedYet = !neverAskedLocally && (checked !== undefined || (view?.checkedAt ?? null) !== null)
   const lastCheckTime = checked?.checkedAt ?? view?.checkedAt ?? t('settings.never')
-  const verified = checked !== undefined && (checked.authenticated || checked.failure?.code === 'unauthorized')
+  // A verdict is reported only when a response carried one: `authenticated` is false both
+  // when the credential was refused and when nothing judged it, and true only after a 200.
+  const verified = checked !== undefined && (checked.failure?.code === 'unauthorized' || checked.failure === null)
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -195,7 +212,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 name="speechrail-language"
                 checked={language === mode}
                 disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode) }}
+                onChange={() => { setLanguage(mode); setLanguageDirty(true) }}
               />
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
@@ -210,7 +227,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
           value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value) }}
+          onChange={(event) => { setBudgetText(event.currentTarget.value); setBudgetDirty(true) }}
           onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />

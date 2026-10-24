@@ -69,7 +69,7 @@ describe('speechrail_input_status', () => {
     expect(schema.type).toBe('object')
     expect(schema.additionalProperties).toBe(false)
     const names = Object.keys(schema.properties)
-    expect(names).toHaveLength(12)
+    expect(names).toHaveLength(13)
     expect([...schema.required].sort()).toEqual([...names].sort())
     for (const [name, property] of Object.entries(schema.properties)) {
       // Requiredness belongs to the top-level array only. A per-property `required`
@@ -97,6 +97,7 @@ describe('speechrail_input_status', () => {
       probed: false,
       reachable: false,
       authenticated: false,
+      failureCode: '',
     })
   })
 
@@ -204,9 +205,35 @@ describe('speechrail_input_status', () => {
       probed: true,
       reachable: false,
       authenticated: false,
+      failureCode: 'unreachable',
     }
     expect(describeStatus(base)).toContain('service unreachable')
     expect(describeStatus({ ...base, probed: false })).toContain('service not probed')
     expect(describeStatus({ ...base, endpoint: '', endpointProblem: 'not loopback' })).toContain('endpoint refused: not loopback')
+  })
+
+  it('separates a refused credential from another reachable failure', () => {
+    // A 401 says the credential is wrong; a 500 only says the service answered badly, and
+    // calling that "authorized" or "rejecting the credential" would both be false.
+    const base: StatusToolValue = {
+      credentialConfigured: true,
+      endpoint: 'http://127.0.0.1:8201/v1',
+      endpointProblem: '',
+      model: '',
+      language: 'auto',
+      gate: 'ready',
+      pendingOperationId: '',
+      maxUploadBytes: 4_194_304,
+      maxAudioSeconds: 120,
+      probed: true,
+      reachable: true,
+      authenticated: false,
+      failureCode: 'unauthorized',
+    }
+    expect(describeStatus(base)).toContain('rejecting the credential')
+    const failed = describeStatus({ ...base, failureCode: 'server-error' })
+    expect(failed).toContain('not accepting the request')
+    expect(failed).not.toContain('authorized')
+    expect(failed).not.toContain('rejecting the credential')
   })
 })

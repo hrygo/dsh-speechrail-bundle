@@ -112,6 +112,32 @@ describe('VoiceInput acknowledge', () => {
     await waitFor(() => { expect(acknowledge).toHaveBeenCalledTimes(1) })
   })
 
+  it('keeps a live recording reachable when an acknowledgement refreshes late', async () => {
+    // The assertion's own status read can land after the user has started recording again.
+    // Collapsing the control then would hide the stop button of a running microphone.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_ffffffff' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_ffffffff' }, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    const stop = vi.fn(async () => new Uint8Array([1]))
+    const capture = { start: async () => undefined, stop, dispose: async () => undefined } as unknown as Recording
+    render(<VoiceInput {...base} status={status} createRecording={() => capture} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    // Flush the late continuation, then assert: an immediate assertion would pass before
+    // React applies the state the guard is meant to withhold.
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+    expect(screen.queryByText('acknowledged')).toBeNull()
+  })
+
   it('refuses before opening the microphone when no credential is configured', async () => {
     // Without a credential every upload is refused, so the refusal must arrive before a
     // whole dictation is recorded and thrown away.

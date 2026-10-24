@@ -250,6 +250,7 @@ export function VoiceInput({
 
   const acknowledgeUnknown = async (): Promise<void> => {
     if (view === undefined || ackBusy) return
+    const run = generation.current
     setAckBusy(true)
     // A null id means the stored record could not be read at all; the Host accepts it
     // only as the user's explicit assertion that nothing of theirs is outstanding.
@@ -269,6 +270,9 @@ export function VoiceInput({
         return
       }
       await refresh()
+      // A recording may have started while this assertion was in flight; collapsing the
+      // control then would hide the stop button of a live microphone.
+      if (run !== generation.current) return
       setPending('')
       setMessage(t('acknowledged'))
       setPhase('idle')
@@ -346,7 +350,7 @@ export function VoiceInput({
           <button type="button" style={inlineStyle} disabled={locked} onClick={() => { void start() }}>{t('retryRecording')}</button>
         ))}
       {view?.gate === 'unknown' && (
-        <button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
+        <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
       )}
     </div>
   )

@@ -182,6 +182,46 @@ describe('SpeechRailSettings check row verdicts', () => {
     })
   })
 
+  it('prints no authentication verdict when the service failed without judging it', async () => {
+    // A 500 says the service is up and unhappy; the credential was never judged, and
+    // "accepted" beside that error would be an affirmative lie.
+    const check = checkWith({ reachable: true, authenticated: true, failure: failure('server-error', { httpStatus: 500 }) })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    expect(await screen.findByText('settings.connected')).toBeTruthy()
+    expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
+  })
+
+  it('adopts a value nobody edited instead of writing the stale one back', async () => {
+    // The refresh moves the revision, so an untouched field must move with it; otherwise
+    // the next save reverts another writer's change while passing the conflict check.
+    const configure = vi.fn(async () => ({ ok: true, revision: 2, failure: null }))
+    const base = props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, language: 'auto' as const, requestTimeoutMs: 150_000, revision: 1 })
+      .mockResolvedValue({ ...STATUS, language: 'en' as const, requestTimeoutMs: 60_000, revision: 2 })
+    render(<SpeechRailSettings {...base} status={status} configure={configure as never} />)
+
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('150000') })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('60000') })
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+    await waitFor(() => { expect(configure).toHaveBeenCalledWith({ language: 'en', requestTimeoutMs: 60_000, expectedRevision: 2 }) })
+  })
+
+  it('blames no service for a capability when the check never left the host', async () => {
+    const check = checkWith({ failure: failure('endpoint-invalid') })
+    render(<SpeechRailSettings {...props({ capabilities: null, checkedAt: '2026-10-23T12:00:00.000Z' }, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => {
+      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeTruthy()
+    })
+    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.undetermined"}')).toBeNull()
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
 
