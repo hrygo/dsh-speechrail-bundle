@@ -344,6 +344,13 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **给"发布"本身加守卫（此前无人审查过的面）。** 发布是手工三步：bump 版本、把三处 README 的安装 URL 指向新 tag、打 tag 并附上 tarball——三处必须一致，而流水线里没有任何东西会发现漏改：`v0.6.0` 的 tag 完全可能挂着 `package.json` 仍写 0.5.0 的包，README 也可能指向从未上传的资产，两者都要等安装后读版本才暴露。新增 `tools/check-release-consistency.mjs`：扫描 `packages/*/package.json` 中声明了 `dsh` 的包（版本须为 `x.y.z`、彼此一致），抽取所有 `releases/download/vX.Y.Z/` 安装 URL 并要求与版本一致；带 tag 参数（或 `GITHUB_REF_NAME`）时再要求 tag 命名该版本，非版本 tag（如 `latest`）按设计跳过。已接入 `pnpm verify` 与 CI 的 `verify:ci`（`check:release`）；同时 CI 从只跑 Node 22 改为**声明范围矩阵** `['22','24']`（`^22.19.0 || >=24.0.0` 的两条分支，`fail-fast: false`），使声明的运行时范围由 CI 持续验证，而不只靠每轮手工测量，并实测三种漂移全部被拒（只 bump 版本、tag 不符、README 单改），报错精确到文件；同时要求英文入口 `README.md` 与包 README **各自带一处**安装 URL（少一处也报错，而非只有零处才报），已实测删掉 README.md 那一行即失败。今后每轮发布都先跑 `node tools/check-release-consistency.mjs vX.Y.Z` 再打 tag。
 
 - **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
+## 2026-10-24 决定记录（0.7.0：把两处"只靠人看"的面变成守卫）
+
+- **词典静态键守卫。** 既有测试只比较两部词典彼此、失败码与捕获类是否齐备，**看不到**源码里 `t('…')` 拼错的键——那会直接把键名渲染给用户，而套件全绿。新用例扫描 `src/client/*.ts`，把每个静态键与两部词典比对，并断言"扫描至少发现 30 个键"（**结构上防止扫描本身失效**，即"变异/检查必须真的跑到东西"那条教训的常驻化）。变异检验：把 `t('gateUnknown')` 改成 `t('gateUnknownTypo')` 后失败并指名 `VoiceInput.tsx: gateUnknownTypo`。
+- **发布内容守卫 `tools/check-package-contents.mjs`。** `files` 决定 npm 发布什么，而 `main`/`types`/`exports`/`dsh.bundle.patch` 决定 Harness 安装时加载什么：新增产物忘了写进 `files`、或路径改名让某个模式失效，都能**照样发布、照样安装**，直到别人的 profile 里报模块缺失。此前的核对是我手工做的（声明 vs `tar -tzf`），现在常驻：以 `npm pack --dry-run --json` 的清单为基准，逐一验证每个清单引用与每个 `files` 模式都有落点。实测两种失效模式（漏 `lib/typert.host.d.ts`、加入匹配不到的模式）都被精确报出；当前基线 15 处引用 + 2 个 glob 全部覆盖。已接入 `pnpm verify` 与 CI（在 build 之后）。
+- **顺带核查：安装补丁与代码默认值不可能分歧。** `cordis.patch.yml` 只做 `insert`（id + name），**不带任何配置默认值**，默认值全在代码 schema 里，所以"补丁默认值与代码默认值不一致"这一类风险不存在。
+- **过程教训（本轮第二次同类）：先读基线输出，再解读变异。** 新守卫第一次运行时退出码就是 1、并打印了"所有文件都未被打包"，我却把它当成了变异的预期输出——真实原因是 npm 12 的 `pack --json` 以**包名为键的对象**返回，而我的解析只认数组。**一个对所有人都失败的检查不是检查**；变异之前必须确认基线与预期一致，变异之后必须确认输出是"这一处"而不是"全部"。
+
 ## 2026-10-24 决定记录（0.6.0 续：v0.5.0 审查的四项处置与一处我自己的发现）
 
 - **MEDIUM（危险方向）：`Transfer-Encoding` 任何"值判断"都不成立，分帧只认 `Content-Length`。** 审查实测：`chunked\t`（HTAB 是合法 OWS）被 Node **按未 trim 的原始字节**判定为不分帧，而上报值与 `rawHeaders` 都被 trim 成 `chunked`——与真实分块回复**完全同形**。我按审查建议先试"含 tab 即保守"，实测**无效**（tab 在 JS 层已经不存在）；随后直接量清 Node 的四种上报（`chunked` 真分块 / `chunked\t` 未分帧 / `identity` / 无 TE），确认没有可用信号。故改为：`framed` 只由 `Content-Length` 证明。**代价（刻意取舍）**：一个真正分块、正文不可用的 200 不再结算，而是保持未证明、需要确认；换来的是"绝不结算未被证实的结局"——由四个测试钉住（含 v0.4.0 的子串规则与 HTAB 情形，任一复活即失败）。
