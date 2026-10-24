@@ -86,7 +86,14 @@ describe('generated Remote contribution', () => {
     const manifest = (contribution.methods as unknown as Record<string, StatusManifest | undefined>)['speechrailInput/status']
     if (manifest === undefined) throw new Error('the status method is part of the contribution')
     const schema = manifest.result.spec.jsonSchema
-    expect(Object.keys(schema.properties)).toHaveLength(17)
+    // The exact set, not only its size: a count cannot say which field was renamed, added or lost.
+    expect(Object.keys(schema.properties).sort()).toEqual([
+      'baseUrl', 'capabilities', 'checkedAt', 'credentialConfigured', 'credentialRef', 'endpointProblem',
+      'gate', 'language', 'languageHint', 'languageOptions', 'limits', 'model', 'pendingOperationId',
+      'requestTimeoutMs', 'revision', 'transcriptionSupport', 'unprovenFailure',
+    ])
+    // The cause of a closed gate has to cross the boundary, not stay host-side.
+    expect(schema.required).toContain('unprovenFailure')
     expect(schema.required).toContain('languageHint')
     expect(schema.required).toContain('transcriptionSupport')
     expect(schema.required).toContain('languageOptions')

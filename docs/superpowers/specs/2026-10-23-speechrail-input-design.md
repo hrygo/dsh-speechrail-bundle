@@ -343,6 +343,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 - **给"发布"本身加守卫（此前无人审查过的面）。** 发布是手工三步：bump 版本、把三处 README 的安装 URL 指向新 tag、打 tag 并附上 tarball——三处必须一致，而流水线里没有任何东西会发现漏改：`v0.6.0` 的 tag 完全可能挂着 `package.json` 仍写 0.5.0 的包，README 也可能指向从未上传的资产，两者都要等安装后读版本才暴露。新增 `tools/check-release-consistency.mjs`：扫描 `packages/*/package.json` 中声明了 `dsh` 的包（版本须为 `x.y.z`、彼此一致），抽取所有 `releases/download/vX.Y.Z/` 安装 URL 并要求与版本一致；带 tag 参数（或 `GITHUB_REF_NAME`）时再要求 tag 命名该版本，非版本 tag（如 `latest`）按设计跳过。已接入 `pnpm verify` 与 CI 的 `verify:ci`（`check:release`）；同时 CI 从只跑 Node 22 改为**声明范围矩阵** `['22','24']`（`^22.19.0 || >=24.0.0` 的两条分支，`fail-fast: false`），使声明的运行时范围由 CI 持续验证，而不只靠每轮手工测量，并实测三种漂移全部被拒（只 bump 版本、tag 不符、README 单改），报错精确到文件；同时要求英文入口 `README.md` 与包 README **各自带一处**安装 URL（少一处也报错，而非只有零处才报），已实测删掉 README.md 那一行即失败。今后每轮发布都先跑 `node tools/check-release-consistency.mjs vX.Y.Z` 再打 tag。
 
+- **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
 ## 2026-10-24 决定记录（0.6.0：刷新之后也说得出原因；把"未测"变成"已量"）
 
 - **客户端接上宿主已经过界的原因。** 页面刷新会丢掉组件自己对那次尝试的记忆，所以门关着时它只能说"存在一次未确认的转写"；而宿主仍保留 `unprovenFailure`（0.5.0 加入、本就在边界 schema 里、无新契约）。现在**确认行与设置页门禁行**在门关着且（确认行还要求）没有其它消息时拼上失败细节（`gateUnknown` + `failure.server-error (req_1)`），宿主没有原因可给时**不编造**、只说门关着。
