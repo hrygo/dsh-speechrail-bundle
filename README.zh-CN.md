@@ -39,8 +39,16 @@
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
 ```
 
-用本地 checkout 也可以（`target: <packages/speechrail-input 的路径>`）。随后在设置页填写地址与凭据引用。
-本仓库不代为安装，也尚未在任何 profile 激活过。
+用本地 checkout 也可以（`target: <packages/speechrail-input 的路径>`）；本机 profile 已在运行本 bundle 的最新 Release。
+
+升级时请安装带标签的资产，而不是 `latest`：插件管理器按 target 字符串去重，对已安装的 bundle 重跑上面的
+命令只会报 `already-installed`，不会拉取新的字节。
+
+```
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.3/dsh-speechrail-bundle.tgz
+```
+
+随后在设置页填写地址与凭据引用。
 
 ## 验证
 

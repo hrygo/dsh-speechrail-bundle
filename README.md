@@ -50,8 +50,18 @@ reproduce those steps by hand):
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
 ```
 
-A checkout worktree works the same way (`target: <path to packages/speechrail-input>`). Then set the
-endpoint and credential reference on its settings page. Nothing here has been activated in a profile.
+A checkout worktree works the same way (`target: <path to packages/speechrail-input>`), and the
+local profile here runs this bundle at the latest release.
+
+To upgrade, install the tag-pinned asset rather than the `latest` one: the plugin manager keys a
+dependency by its target string, so re-running the command above on an installed bundle reports
+`already-installed` instead of fetching the newer bytes.
+
+```
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.3/dsh-speechrail-bundle.tgz
+```
+
+Then set the endpoint and credential reference on its settings page.
 
 ## Verify
 

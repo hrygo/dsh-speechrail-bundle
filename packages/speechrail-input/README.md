@@ -16,8 +16,17 @@ performs package installation and bundle selection (do not reproduce those steps
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
 ```
 
-A checkout worktree works the same way (`target: <path to packages/speechrail-input>`). Then set the
-endpoint and the credential reference on the bundle's settings page.
+A checkout worktree works the same way (`target: <path to packages/speechrail-input>`).
+
+To upgrade an installed bundle, install the tag-pinned asset: the plugin manager keys a dependency by
+its target string, so the `latest` command above answers `already-installed` instead of fetching newer
+bytes.
+
+```
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.3/dsh-speechrail-bundle.tgz
+```
+
+Then set the endpoint and the credential reference on the bundle's settings page.
 
 ## What it does
 
