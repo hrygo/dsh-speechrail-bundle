@@ -24,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.4.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.5.0/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -43,8 +43,9 @@ Then set the endpoint and the credential reference on the bundle's settings page
 - Persists language and request budget through the Harness settings page.
 - Registers one read-only agent tool, `speechrail_input_status`, that reports the effective
   endpoint, credential and service state, the limits in force, and whether an earlier recording
-  still needs acknowledgement. It never uploads audio, never changes the gate, and never carries
-  a credential or a transcript.
+  still needs acknowledgement, and, while the gate is closed because of one, the failure that left
+  that attempt unconfirmed. It never uploads audio, never changes the gate, and never carries a
+  credential or a transcript.
 
 ## Other engines
 
