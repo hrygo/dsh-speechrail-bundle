@@ -47,7 +47,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.3/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.4/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。
