@@ -335,7 +335,7 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     })
     const core = coreOver(service, 'zh')
     const value = await createStatusTool(core).execute({ probe: true }) as StatusToolValue
-    expect(value.transcriptionSupported).toBe('unsupported')
+    expect(value.transcriptionSupport).toBe('unsupported')
     expect(value.languageHint).toBe('')
     const text = describeStatus(value)
     expect(text).toContain('transcription unsupported by the service')

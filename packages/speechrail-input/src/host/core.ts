@@ -289,7 +289,7 @@ export class SpeechRailInputCore {
       // One expression decides both this report and the wire, so the tool can never promise a hint
       // the upload would withhold.
       languageHint: this.effectiveLanguageHint(config) ?? '',
-      transcriptionSupported: capabilities === null
+      transcriptionSupport: capabilities === null
         ? 'unknown'
         : capabilities.transcriptionSupported ? 'supported' : 'unsupported',
       languageOptions: languageOptionsFor(capabilities),

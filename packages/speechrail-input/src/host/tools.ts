@@ -105,8 +105,14 @@ export interface StatusToolValue {
   readonly language: string
   /** Language hint the next upload will actually carry, or an empty string when none will. */
   readonly languageHint: string
-  /** What the snapshot in force states about the transcription operation. */
-  readonly transcriptionSupported: SpeechRailTranscriptionSupport
+  /**
+   * What is known about the transcription operation: `unsupported` means every upload is refused.
+   *
+   * Deliberately not named like `SpeechRailCapabilitiesView.transcriptionSupported`, which is the
+   * service's own boolean claim: the two travel on the same boundary and same-named fields of
+   * different types invite exactly the confusion this type exists to remove.
+   */
+  readonly transcriptionSupport: SpeechRailTranscriptionSupport
   /** Language modes the snapshot in force admits for this endpoint. */
   readonly languageOptions: readonly string[]
   /** Whether a recording may start, or the state blocking it. */
@@ -143,7 +149,7 @@ const OUTPUT_SCHEMA = {
       items: { type: 'string' },
       description: 'Language modes the snapshot in force admits for this endpoint.',
     },
-    transcriptionSupported: {
+    transcriptionSupport: {
       type: 'string',
       enum: ['supported', 'unsupported', 'unknown'],
       description: 'Whether the endpoint states it can transcribe: `unsupported` means every upload is refused before the audio is sent, `unknown` that no snapshot said.',
@@ -163,7 +169,7 @@ const OUTPUT_SCHEMA = {
   },
   required: [
     'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'languageHint',
-    'languageOptions', 'transcriptionSupported', 'gate', 'pendingOperationId', 'maxUploadBytes',
+    'languageOptions', 'transcriptionSupport', 'gate', 'pendingOperationId', 'maxUploadBytes',
     'maxAudioSeconds', 'probed', 'reachable', 'authenticated', 'failureCode',
   ],
 } as const
@@ -210,7 +216,7 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
         model: view.model,
         language: view.language,
         languageHint: view.languageHint,
-        transcriptionSupported: view.transcriptionSupported,
+        transcriptionSupport: view.transcriptionSupport,
         languageOptions: [...view.languageOptions],
         gate: view.gate,
         pendingOperationId: view.pendingOperationId ?? '',
@@ -256,9 +262,9 @@ export function describeStatus(value: StatusToolValue): string {
   parts.push(value.languageHint === ''
     ? `language ${value.language} with no hint sent`
     : `language hint ${value.languageHint} sent`)
-  if (value.transcriptionSupported === 'unsupported') {
+  if (value.transcriptionSupport === 'unsupported') {
     parts.push('transcription unsupported by the service: every upload is refused before the audio is sent')
-  } else if (value.transcriptionSupported === 'unknown') {
+  } else if (value.transcriptionSupport === 'unknown') {
     parts.push('transcription support not stated')
   }
   parts.push(`gate ${value.gate}`)

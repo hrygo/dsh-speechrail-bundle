@@ -122,7 +122,7 @@ export interface SpeechRailInputStatus {
    * What the snapshot in force states about the transcription operation, or `unknown` when none
    * is in force.
    */
-  readonly transcriptionSupported: SpeechRailTranscriptionSupport
+  readonly transcriptionSupport: SpeechRailTranscriptionSupport
   /** Language modes the capability snapshot currently admits. */
   readonly languageOptions: readonly SpeechRailLanguageMode[]
   /** One request budget in milliseconds. */

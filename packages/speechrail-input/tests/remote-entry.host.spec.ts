@@ -73,6 +73,38 @@ describe('generated Remote contribution', () => {
     expect(result.authenticated).toBe('refused')
   })
 
+  it('carries the effective hint and the transcription fact across the boundary', () => {
+    // The page renders `languageHint` and reads the tri-state fact, so a stale generation would
+    // silently blank both rather than fail. The two facts that nearly share a name are asserted
+    // apart: the capability view keeps the service's own boolean, the status carries what is known.
+    interface StatusManifest {
+      readonly result: { readonly spec: { readonly jsonSchema: {
+        readonly properties: Record<string, { readonly type?: string, readonly enum?: readonly string[] }>
+        readonly required: readonly string[]
+      } } }
+    }
+    const manifest = (contribution.methods as unknown as Record<string, StatusManifest | undefined>)['speechrailInput/status']
+    if (manifest === undefined) throw new Error('the status method is part of the contribution')
+    const schema = manifest.result.spec.jsonSchema
+    expect(Object.keys(schema.properties)).toHaveLength(16)
+    expect(schema.required).toContain('languageHint')
+    expect(schema.required).toContain('transcriptionSupport')
+    expect(schema.required).toContain('languageOptions')
+    expect(schema.properties.languageHint?.type).toBe('string')
+    expect(schema.properties.transcriptionSupport).toMatchObject({
+      type: 'string',
+      enum: ['supported', 'unsupported', 'unknown'],
+    })
+    expect(schema.properties.languageOptions?.type).toBe('array')
+    // The near-name collision is deliberate and must stay visible: this type-level one is the
+    // service's boolean claim, the status-level one is what the plugin knows.
+    expect(schema.properties).not.toHaveProperty('transcriptionSupported')
+    const capabilities = (schema.properties.capabilities as unknown as {
+      oneOf: readonly { properties: Record<string, { type?: string }> }[]
+    }).oneOf[1]
+    expect(capabilities?.properties.transcriptionSupported?.type).toBe('boolean')
+  })
+
   it('refuses a carrier with an unknown field instead of dropping it', () => {
     // What the entry would carry verbatim: a string with one field the contract
     // does not declare. Strictness is the Host's, not the codec's.
