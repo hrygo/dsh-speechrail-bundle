@@ -1,0 +1,21 @@
+# Market listing entry for the awesome-dsh-plugin index.
+#
+# Not part of the published package (the package's `files` list does not include docs/). Kept here so
+# the submission is reviewable and reproducible. One entry is a single YAML under `data/plugins/` in
+# that repository, and the repository also needs the `dsh-plugin` topic, which hrygo/dsh-speechrail-bundle
+# already carries.
+#
+#   gh repo fork awesome-dsh-plugin/awesome-dsh-plugin --clone=false
+#   # add data/plugins/hrygo__dsh-speechrail-bundle.yml with the fields below
+#   gh pr create --repo awesome-dsh-plugin/awesome-dsh-plugin --title 'Add hrygo/dsh-speechrail-bundle'
+#
+# The pinned `tarball` is a GitHub release asset, so listing does not depend on npm. npm is a second
+# install channel: `npm publish --access public` from packages/speechrail-input, then
+# `dsh plugin --profile <name> add @hrygo/dsh-speechrail-bundle`.
+url: https://github.com/hrygo/dsh-speechrail-bundle
+name: hrygo/dsh-speechrail-bundle
+category: voice
+tarball: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.8.1/dsh-speechrail-bundle.tgz
+description:
+  zh: "在 DSH 输入框里直接说话：浏览器录音，交由本机 SpeechRail 服务（或回环上的任意 OpenAI 兼容引擎）转写并插入草稿。具备服务能力快照（限额/语言/鉴权判定）、未确认转写的门禁与待确认语义，并给 Agent 一个只读状态工具解释「为什么现在用不了」。只连回环地址，不激活配置、不写凭据、不做真实录音。"
+  en: "Talk into the DSH composer: record in the browser, transcribe through your local SpeechRail service (or any loopback OpenAI-compatible engine) and insert the text into the draft. Capability-snapshot aware (limits, languages, credential verdict), a fail-closed gate for unconfirmed transcriptions, and a read-only status tool so an agent can explain why voice input is unavailable. Loopback only: never activates profiles, writes credentials or performs recordings."
