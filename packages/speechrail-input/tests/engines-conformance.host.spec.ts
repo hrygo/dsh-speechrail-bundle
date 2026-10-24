@@ -210,6 +210,7 @@ describe('SpeechRail engine: the service keeps deciding', () => {
     const core = coreOver(service)
     await core.check()
 
+    expect((await core.status()).languageOptions).toEqual(['auto'])
     const result = await core.transcribe(payload('op_sr0000002'))
     expect(result.ok).toBe(false)
     expect(result.failure?.code).toBe('unsupported')
@@ -235,9 +236,9 @@ describe('SpeechRail engine: the service keeps deciding', () => {
 })
 
 describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
-  it('still offers only auto when a snapshot answers but names no language', async () => {
-    // The other "not stated" case: the service did talk about languages and said nothing usable,
-    // so the selector must not invent a domain for it.
+  it('honours the chosen language when the service transcribes but lists none', async () => {
+    // The shape SpeechRail itself answers with, and the case that matters most: an endpoint that
+    // transcribes but never enumerated its languages still documents `language` as a hint.
     const service = await engine({
       capabilities: (response) => {
         response.writeHead(200, { 'content-type': 'application/json' })
@@ -253,10 +254,10 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     })
     const core = coreOver(service, 'zh')
     await core.check()
-    expect((await core.status()).languageOptions).toEqual(['auto'])
+    expect((await core.status()).languageOptions).toEqual(['auto', 'zh', 'en'])
 
     await core.transcribe(payload('op_ge0000003'))
-    expect(fieldOf(service.posts[0] ?? '', 'language')).toBeNull()
+    expect(fieldOf(service.posts[0] ?? '', 'language')).toBe('zh')
   })
 
   it('transcribes with package defaults while no snapshot is in force', async () => {

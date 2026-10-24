@@ -1,7 +1,7 @@
 {
   "name": "@hrygo/dsh-speechrail-bundle",
   "description": "Independent voice input bundle that transcribes browser recordings with a local SpeechRail service",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "icon": "./icon.svg",
   "type": "module",
   "main": "lib/index.js",

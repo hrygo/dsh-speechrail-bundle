@@ -109,18 +109,22 @@ export function projectCapabilities(snapshot: unknown, previous?: SpeechRailLimi
 /**
  * Language modes the selector may offer for one snapshot.
  *
- * Two different "not stated" cases are treated differently on purpose:
- * - no snapshot is in force at all (never probed, endpoint absent, probe failed): nothing has
- *   spoken about languages, so the user's explicit choice is the only evidence there is and every
- *   known mode is offered, to be sent as an unverified hint;
- * - a snapshot that *did* answer but states no language domain: it spoke and said nothing usable,
- *   so only `auto` is offered, exactly as before.
+ * Three cases, and the distinction that matters is whether the endpoint can transcribe at all:
+ * - it cannot (`transcriptionSupported === false`): only `auto`. The upload is refused before the
+ *   audio leaves the host, so offering a hint would promise a choice that cannot be exercised;
+ * - it can, and the snapshot enumerated languages: only the modes whose exact value it listed;
+ * - it can, but nothing enumerated the languages (no snapshot at all, or a snapshot whose language
+ *   domain is `unknown`): every known mode is offered and the chosen one travels as an unverified
+ *   hint. SpeechRail itself answers this way -- its transcription endpoint documents `language` as
+ *   a hint ("BCP-47-style or provider-compatible", example `zh`) while its capability snapshot
+ *   states `languages.status: unknown` -- so refusing the choice here would lose a real capability.
  * @param view - projected capability facts, or null when none is in force.
- * @returns `auto` always, plus every known mode while no snapshot is in force.
+ * @returns `auto` always, plus the modes worth offering.
  */
 export function languageOptionsFor(view: SpeechRailCapabilitiesView | null): readonly SpeechRailLanguageMode[] {
-    if (view === null) return ['auto', ...KNOWN_LANGUAGES]
-    if (view.languages.status !== 'supported') return ['auto']
+  if (view === null) return ['auto', ...KNOWN_LANGUAGES]
+  if (!view.transcriptionSupported) return ['auto']
+  if (view.languages.status !== 'supported') return ['auto', ...KNOWN_LANGUAGES]
   const admitted = KNOWN_LANGUAGES.filter((mode) => view.languages.values.includes(mode))
   return ['auto', ...admitted]
 }

@@ -659,9 +659,9 @@ describe('successful transcription', () => {
     expect(h.sends[0]?.language).toBe('zh')
   })
 
-  it('falls back to automatic mode when a snapshot names no usable language', async () => {
-    // A snapshot that answered "transcription supported, languages unknown" did speak about the
-    // language domain and stated nothing usable, so no hint is invented from it.
+  it('sends the chosen language as a hint when the service transcribes but lists none', async () => {
+    // SpeechRail's own shape: transcription supported, language domain unknown, and a documented
+    // `language` hint field. The user's choice is honoured rather than silently dropped.
     const h = harness()
     h.config = { ...CONFIG, language: 'zh' }
     h.probe = {
@@ -675,10 +675,31 @@ describe('successful transcription', () => {
       },
     }
     await h.core.check()
-    expect((await h.core.status()).languageOptions).toEqual(['auto'])
+    expect((await h.core.status()).languageOptions).toEqual(['auto', 'zh', 'en'])
 
     await h.core.transcribe(payload('op_kkkkkkkk'))
-    expect(h.sends[0]?.language).toBeNull()
+    expect(h.sends[0]?.language).toBe('zh')
+  })
+
+  it('falls back to automatic mode when the service declares transcription unsupported', async () => {
+    const h = harness()
+    h.config = { ...CONFIG, language: 'zh' }
+    h.probe = {
+      ok: true,
+      capabilities: {
+        schemaVersion: 'effective_capabilities_v1',
+        transcriptionSupported: false,
+        reason: 'no asr model loaded',
+        languages: { status: 'unknown', values: [] },
+        limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+      },
+    }
+    await h.core.check()
+    expect((await h.core.status()).languageOptions).toEqual(['auto'])
+
+    const refused = await h.core.transcribe(payload('op_kkkkkkkk'))
+    expect(refused.failure?.code).toBe('unsupported')
+    expect(h.sends).toHaveLength(0)
   })
 })
 

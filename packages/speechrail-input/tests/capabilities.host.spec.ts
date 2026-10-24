@@ -62,15 +62,32 @@ describe('projectCapabilities', () => {
     expect(view?.reason).toBeNull()
   })
 
-  it('treats an unenumerated language list as unknown rather than as every language', () => {
+  it('offers every known language when the service transcribes but lists none', () => {
+    // SpeechRail's own shape: the snapshot says `languages.status: unknown` while its transcription
+    // endpoint documents `language` as a hint. The choice is offered and travels unverified.
     const view = projectCapabilities(snapshot({ ...SUPPORTED, languages: { status: 'unknown', values: [] } }))
     expect(view?.languages).toEqual({ status: 'unknown', values: [] })
-    expect(languageOptionsFor(view)).toEqual(['auto'])
-    // No snapshot at all is a different statement from a snapshot that names no language: with
-    // nothing in force the user's choice is offered and sent as a hint.
+    expect(languageOptionsFor(view)).toEqual(['auto', 'zh', 'en'])
+    expect(languageIsAdmitted('zh', view)).toBe(true)
+    expect(languageIsAdmitted('en', view)).toBe(true)
+    // The facts are still reported as unknown: nothing claims the service supports them.
     expect(languageOptionsFor(null)).toEqual(['auto', 'zh', 'en'])
     expect(languageIsAdmitted('zh', null)).toBe(true)
-    expect(languageIsAdmitted('en', view)).toBe(false)
+  })
+
+  it('offers no language at all for an endpoint that cannot transcribe', () => {
+    // Nothing can be exercised here: the upload is refused before the audio leaves the host, so a
+    // language hint would promise a choice the endpoint cannot honour.
+    const view = projectCapabilities(snapshot({ ...SUPPORTED, status: 'unsupported', languages: undefined }))
+    expect(view?.transcriptionSupported).toBe(false)
+    expect(languageOptionsFor(view)).toEqual(['auto'])
+    expect(languageIsAdmitted('zh', view)).toBe(false)
+  })
+
+  it('admits only the exact values an enumerated list named', () => {
+    const view = projectCapabilities(snapshot({ ...SUPPORTED, languages: { status: 'supported', values: ['en'] } }))
+    expect(languageOptionsFor(view)).toEqual(['auto', 'en'])
+    expect(languageIsAdmitted('en', view)).toBe(true)
     expect(languageIsAdmitted('zh', view)).toBe(false)
   })
 
