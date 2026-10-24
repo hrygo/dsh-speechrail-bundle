@@ -133,6 +133,81 @@ describe('VoiceInput acknowledge', () => {
     }
   })
 
+  it('reconciles the gate after a cancelled upload instead of returning to idle silently', async () => {
+    // Cancelling while the upload is on the wire cannot un-send it: the host keeps the attempt as
+    // unproven and closes the gate. Returning to idle without saying so would let the user record a
+    // whole new take and only then be refused, so the cancellation waits for the call and reads the
+    // gate it may have left behind. The gate flips only once the upload is in flight, exactly as the
+    // host would report it.
+    let release: (() => void) | undefined
+    let gate: 'ready' | 'unknown' = 'ready'
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const status = vi.fn(async () => ({
+      ...STATUS,
+      gate,
+      pendingOperationId: gate === 'unknown' ? 'op_cccccccc' : null,
+      capabilities: null,
+    }))
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => {
+          gate = 'unknown'
+          await new Promise<void>((resolve) => { release = resolve })
+          return { ok: false, transcript: null, failure: failure('cancelled') }
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(release).toBeDefined() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'cancel' }))
+    release?.()
+    await waitFor(() => {
+      expect(screen.getByText('unknownOutcomeLocal:{"detail":"failure.cancelled"}')).toBeTruthy()
+    })
+  })
+
+  it('says nothing after a cancellation that never reached the wire', async () => {
+    // The other half of the rule: a take cancelled before the upload starts leaves the gate ready, so
+    // the page must not claim an unproven attempt.
+    let release: (() => void) | undefined
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const status = vi.fn(async () => ({ ...STATUS, gate: 'ready' as const, capabilities: null }))
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => {
+          await new Promise<void>((resolve) => { release = resolve })
+          return { ok: false, transcript: null, failure: failure('cancelled') }
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(release).toBeDefined() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'cancel' }))
+    release?.()
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(screen.queryByText(/^unknownOutcome/)).toBeNull()
+  })
+
   it('names the language hint that is travelling with the request', async () => {
     // The composer is where the user dictates and it has no settings page beside it, so the one
     // moment the hint matters is while the request carrying it is in flight.

@@ -56,6 +56,14 @@ interface Active {
   readonly limits: SpeechRailLimits
   phase: 'requesting' | 'recording' | 'transcribing'
   timer?: ReturnType<typeof setTimeout> | undefined
+  /**
+   * The upload this attempt started, if it got that far.
+   *
+   * A cancellation cannot un-send an upload: the host then records an unproven outcome and closes the
+   * gate. Keeping the promise lets the cancellation reconcile that, instead of returning to idle and
+   * letting the user spend their next take on an upload the host will refuse.
+   */
+  upload?: Promise<void> | undefined
 }
 
 /** Release one recording without hiding the transcription outcome. */
@@ -125,6 +133,12 @@ export function VoiceInput({
   }
 
   const cancel = (): void => {
+    // An upload already on the wire is not cancelled by the page: the host sends the abort to the
+    // service, cannot prove what the service did with the audio, and keeps the attempt as unproven.
+    // Reconciling that after the call settles is what keeps the next take from being spent on an
+    // upload the host will refuse; a cancellation that never reached the wire leaves the gate ready
+    // and this reports nothing.
+    const inFlight = current.current?.phase === 'transcribing' ? current.current.upload : undefined
     generation.current++
     const active = current.current
     current.current = undefined
@@ -136,6 +150,15 @@ export function VoiceInput({
     setPending('')
     setMessage('')
     setPhase('idle')
+    if (inFlight !== undefined) {
+      void inFlight.then(async () => {
+        const reconciled = await refresh()
+        if (reconciled?.gate !== 'unknown') return
+        feedback(t(reconciled.capabilities == null ? 'unknownOutcomeLocal' : 'unknownOutcome', {
+          detail: t('failure.cancelled'),
+        }))
+      })
+    }
   }
 
   useEffect(() => {
@@ -193,7 +216,9 @@ export function VoiceInput({
     try {
       const wave = await active.capture.stop(limits.maxAudioSeconds, limits.maxUploadBytes)
       if (run !== generation.current) return
-      const result = await transcribe({ operationId: active.operationId, audioBase64: audioBase64(wave) }, active.abort.signal)
+      const upload = transcribe({ operationId: active.operationId, audioBase64: audioBase64(wave) }, active.abort.signal)
+      active.upload = upload.then(() => undefined, () => undefined)
+      const result = await upload
       if (run !== generation.current) return
       if (!result.ok || result.transcript === null) {
         const refreshed = await refresh()
