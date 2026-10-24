@@ -82,8 +82,12 @@ What changes on a non-SpeechRail engine, and what does not:
 - A snapshot that already said `transcriptionSupported: false` stays in force through a
   `capabilities-absent` probe (a snapshot never expires), so an endpoint that used to advertise an
   unsupported operation keeps refusing uploads until a later probe replaces it.
-- `unknownOutcome` asks the user to check the service's own record. On an engine with no operation
-  ids there is no such record; the local journal is what recorded the attempt.
+- The unproven-outcome message follows the same rule: while a snapshot is in force it tells the user
+  to check the service's record, and with none in force it says the attempt is in the local journal,
+  because on an engine with no operation ids there is no service record to look for.
+- A snapshot that reports transcription as unsupported refuses **before the microphone opens** rather
+  than after a full dictation (the host would refuse the upload anyway, before the audio leaves the
+  machine). A service without a snapshot is never blocked at that point.
 
 ## Security boundaries
 

@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { SpeechRailInputCore, type CoreDependencies, type ResolvedConfig } from '../src/host/core.ts'
 import { DEFAULT_LIMITS } from '../src/host/capabilities.ts'
 import { probeCapabilities, transcribe as httpTranscribe } from '../src/host/http.ts'
+import { createStatusTool, describeStatus, type StatusToolValue } from '../src/host/tools.ts'
 import type { PendingJournal } from '../src/host/journal.ts'
 import { encodeWave } from '../src/protocol/wave.ts'
 import type { SpeechRailLimits } from '../src/types.ts'
@@ -283,6 +284,26 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     // Whisper-class engines use it, and an engine that rejects it answers with its own error.
     expect(fieldOf(service.posts[0] ?? '', 'language')).toBe('zh')
     expect((await core.status()).gate).toBe('ready')
+  })
+
+  it('describes each profile truthfully to the agent that asks', async () => {
+    // The agent-facing line once called a transcription-only engine "not accepting the request";
+    // it is pinned here for both profiles, over the same real sockets the rest of this file uses.
+    const speechrail = await speechrailEngine()
+    const speechrailValue = await createStatusTool(coreOver(speechrail)).execute({ probe: true }) as StatusToolValue
+    expect(speechrailValue.authenticated).toBe('accepted')
+    expect(speechrailValue.failureCode).toBe('')
+    expect(describeStatus(speechrailValue)).toContain('service reachable and authorized')
+
+    const plain = await plainEngine()
+    const plainValue = await createStatusTool(coreOver(plain)).execute({ probe: true }) as StatusToolValue
+    expect(plainValue.authenticated).toBe('unverified')
+    expect(plainValue.failureCode).toBe('capabilities-absent')
+    const plainText = describeStatus(plainValue)
+    expect(plainText).toContain('plain transcription endpoint')
+    expect(plainText).not.toContain('not accepting the request')
+    // The limits it reports are the ones actually in force, not the service's.
+    expect(plainText).toContain(`limits ${String(DEFAULT_LIMITS.maxUploadBytes)} bytes / ${String(DEFAULT_LIMITS.maxAudioSeconds)}s`)
   })
 
   it('keeps the journal, the gate and the acknowledgement for an unproven outcome', async () => {
