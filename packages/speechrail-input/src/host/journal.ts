@@ -159,14 +159,6 @@ export function journalFromUnit(unit: JournalUnit): PendingJournal {
   }
 }
 
-/** Journal used when no storage medium is available: every question fails closed. */
-export const UNAVAILABLE_JOURNAL: PendingJournal = {
-  read: async () => ({ available: false }),
-  record: async () => false,
-  clear: async () => false,
-  reset: async () => false,
-}
-
 /** In-memory journal for compositions and tests without a storage medium. */
 export function memoryJournal(initial: JournalRecord | null = null): PendingJournal {
   let current = initial

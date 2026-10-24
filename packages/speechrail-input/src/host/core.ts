@@ -226,15 +226,6 @@ export function parseAcknowledgeRequest(text: string): ParseResult<SpeechRailAck
 }
 
 /**
- * Decode standard base64 into bytes.
- * @param value - validated base64 text.
- * @returns the decoded bytes, or null when the length is inconsistent.
- */
-export function decodeBase64Audio(value: string): Uint8Array | null {
-  return isBase64(value) ? decodeValidatedBase64(value) : null
-}
-
-/**
  * Decode base64 that a caller has already validated.
  *
  * Scanning a near-ceiling take twice costs another ~12 ms of blocked event loop for nothing, and the
