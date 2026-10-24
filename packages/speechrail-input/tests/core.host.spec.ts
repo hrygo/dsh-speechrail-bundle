@@ -208,6 +208,37 @@ describe('unreadable medium recovery', () => {
     expect((await h.core.status()).pendingOperationId).toBe(null)
   })
 
+  it('ignores a recovery read older than the record now held', async () => {
+    // The gate stays "unknown" while a newer record is adopted by a second attempt, so a
+    // gate-only guard would let an older read overwrite that id. Clearing compares ids, so
+    // the status and the journal would then disagree and acknowledgement would dead-end.
+    const stale = { operationId: 'op_old0000001', phase: 'unknown' as const, createdAt: '2026-10-23T11:00:00.000Z' }
+    const held = { operationId: 'op_cccccccc', phase: 'unknown' as const, createdAt: '2026-10-23T11:30:00.000Z' }
+    const h = harness({ pending: held })
+    h.readFails = true
+    await h.core.restore()
+    h.readFails = false
+    h.deferReads = true
+
+    const older = h.core.transcribe(payload('op_ssssssss'))
+    const newer = h.core.transcribe(payload('op_uuuuuuuu'))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.pendingReads).toHaveLength(2)
+
+    // The newer attempt reads the record that is really there and adopts it.
+    h.pendingReads.pop()?.({ available: true, pending: held })
+    h.deferReads = false
+    await newer
+    expect((await h.core.status()).pendingOperationId).toBe('op_cccccccc')
+
+    // The older read lands with what it saw before that.
+    h.pendingReads.shift()?.({ available: true, pending: stale })
+    await older
+    expect((await h.core.status()).pendingOperationId).toBe('op_cccccccc')
+    expect((await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_cccccccc' }))).ok).toBe(true)
+  })
+
   it('accepts both inclusive budget bounds and refuses just outside them', async () => {
     const h = harness()
     for (const timeout of [1_000, 180_000]) {

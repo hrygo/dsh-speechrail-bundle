@@ -237,12 +237,18 @@ export class SpeechRailInputCore {
    * @returns after the gate reflects the readable record, if any.
    */
   private async reopenJournal(): Promise<void> {
+    const observedGate = this.gateState
+    const observedPending = this.pendingOperationId
     const state = await this.deps.journal.read()
-    // The read is asynchronous: another attempt may have healed the gate, or the user may
-    // have acknowledged the record, while it was in flight. Applying a snapshot older than
-    // that would resurrect a gate nothing is holding.
-    if (this.gateState !== 'unknown') return
+    // Whether the medium is readable is always news, even when the gate or the record moved
+    // meanwhile; skipping it would leave the next attempt diagnosing an unreadable medium as
+    // an unproven outcome.
     this.journalUnreadable = !state.available
+    // The read is asynchronous: another attempt may have healed the gate, the user may have
+    // acknowledged the record, or a newer upload may have recorded a different one while it
+    // was in flight. Applying a snapshot older than any of that would resurrect a gate or an
+    // id nothing holds — and because clearing compares ids, that dead-ends acknowledgement.
+    if (this.gateState !== observedGate || this.pendingOperationId !== observedPending) return
     if (!state.available) return
     if (state.pending === null) {
       this.gateState = 'ready'

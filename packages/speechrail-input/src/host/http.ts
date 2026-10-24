@@ -159,6 +159,15 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
       responded ??= info.statusCode ?? null
     })
 
+    // A 101 Upgrade is neither `information` nor `response`, and once it has upgraded the
+    // deadline and destroy() settle nothing: without this the promise never resolves and
+    // the gate stays busy forever.
+    request.on('upgrade', (_response: IncomingMessage, socket: { destroy: () => void }) => {
+      responded = 101
+      socket.destroy()
+      transportFailure('unreachable')
+    })
+
     request.on('response', (response: IncomingMessage) => {
       responded = response.statusCode ?? null
       const chunks: Buffer[] = []

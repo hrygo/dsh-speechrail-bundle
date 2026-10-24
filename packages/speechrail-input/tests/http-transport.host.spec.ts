@@ -280,6 +280,31 @@ describe('capability probe', () => {
     expect(outcome.failure?.code).toBe('server-error')
   })
 
+  it('settles when the service upgrades the connection instead of answering', async () => {
+    // A 101 is neither `information` nor `response`, and after it destroy() settles nothing:
+    // the probe used to hang past its deadline and hold the gate busy forever.
+    const sockets = new Set<Socket>()
+    const server = createSocketServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => { sockets.delete(socket) })
+      socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const port = (server.address() as AddressInfo).port
+      const started = Date.now()
+      const outcome = await probeCapabilities({ baseUrl: `http://127.0.0.1:${String(port)}/v1`, credential: SECRET, timeoutMs: 30_000 })
+      expect(Date.now() - started).toBeLessThan(5_000)
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure?.code).toBe('unreachable')
+      expect(outcome.reachable).toBe(true)
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
   it('counts an informational response as an answer too', async () => {
     // Node reports 1xx on its own event; a 103 followed by a stall still proves the
     // service is there.
