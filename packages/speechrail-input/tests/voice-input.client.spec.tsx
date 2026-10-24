@@ -218,6 +218,10 @@ describe('VoiceInput acknowledge', () => {
 
     releaseAck?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
     expect(await screen.findByText('failure.conflict')).toBeTruthy()
+    // The transcribing state stays visible, and the retry it used to offer was inert because
+    // the capture still owned the operation.
+    expect(screen.getByText('transcribingShort')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'retryRecording' })).toBeNull()
     releaseTranscribe?.()
   })
 

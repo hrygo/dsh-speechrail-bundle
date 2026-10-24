@@ -265,9 +265,9 @@ export function VoiceInput({
     // A result may arrive after the user has started recording again; reporting it must not
     // collapse the row then, or the stop button of a live microphone disappears with it.
     const report = (text: string): void => {
-      // Only `phase === 'recording'` renders a stop control, so a live capture in any other
-      // phase is reported through feedback without hiding anything.
-      if (current.current?.phase === 'recording') setMessage(text)
+      // An owned capture keeps its phase: feedback would hide the transcribing indicator and
+      // offer a retry that `start` refuses because the capture is still in flight.
+      if (current.current !== undefined) setMessage(text)
       else feedback(text)
     }
     // A null id means the stored record could not be read at all; the Host accepts it
@@ -359,11 +359,12 @@ export function VoiceInput({
           <span role="status" style={messageStyle} title={pending === '' ? message : pending}>
             {phase === 'feedback'
               ? message
-              : phase === 'transcribing'
-                ? t('transcribingShort')
-                : phase === 'checking'
-                  ? t('checking')
-                  : t('requesting')}
+              : (
+                <>
+                  <span>{phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')}</span>
+                  {message !== '' && <> · <span>{message}</span></>}
+                </>
+              )}
           </span>
         )}
       {phase === 'recording' && (

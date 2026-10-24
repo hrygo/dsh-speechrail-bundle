@@ -58,7 +58,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.9/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.10/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.

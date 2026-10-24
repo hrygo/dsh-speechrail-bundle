@@ -66,8 +66,27 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
 
   const editEpoch = (): { language: number, budget: number } => ({ language: languageEdits.current, budget: budgetEdits.current })
 
+  const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
+  const statusSeq = useRef(0)
+
+  /**
+   * Read the status, dropping a response a newer read has already superseded.
+   *
+   * Without this an older read landing last reverts the fields and the revision, and the next
+   * save then sends a revision the host has already moved past, failing as a conflict.
+   * @returns the newest snapshot, or undefined when this read lost the race.
+   */
+  const readStatus = async (): Promise<SpeechRailInputStatus | undefined> => {
+    const seq = ++statusSeq.current
+    const next = await status()
+    if (seq < statusSeq.current) return undefined
+    viewRef.current = next
+    return next
+  }
+
   /** Show fresh values, keeping anything the user has edited and not saved. */
   const applyStatus = (next: SpeechRailInputStatus): void => {
+    viewRef.current = next
     setView(next)
     if (!languageDirty.current) setLanguage(next.language)
     if (!budgetDirty.current) setBudgetText(String(next.requestTimeoutMs))
@@ -86,8 +105,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
 
   useEffect(() => {
     void (async () => {
+      const epoch = editEpoch()
       try {
-        adopt(await status(), editEpoch())
+        const next = await readStatus()
+        if (next !== undefined) adopt(next, epoch)
       } catch {
         setNote(t('failure.internal'))
       }
@@ -104,7 +125,8 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       // Refresh the snapshot and every field the user has not edited; adopting wholesale
       // would discard an edit in progress, and refreshing only the view would leave an
       // untouched field stale while its conflict token moves on.
-      applyStatus(await status())
+      const next = await readStatus()
+      if (next !== undefined) applyStatus(next)
     } catch {
       setNote(t('failure.internal'))
     } finally {
@@ -122,8 +144,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       const epoch = editEpoch()
       const result = await configure({ language, requestTimeoutMs: timeout, expectedRevision: view.revision })
       if (result.ok) {
-        adopt(await status(), epoch)
-        setNote(t('settings.saved'))
+        const next = await readStatus()
+        if (next !== undefined) adopt(next, epoch)
+        // An edit made while the save was in flight is still unsaved; saying "saved" beside it
+        // is the one message the page must never show.
+        setNote(languageDirty.current || budgetDirty.current ? '' : t('settings.saved'))
         return
       }
       const failure = result.failure
@@ -147,7 +172,8 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       if (!result.ok) {
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
-        applyStatus(await status())
+        const next = await readStatus()
+      if (next !== undefined) applyStatus(next)
         setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
         return
       }
@@ -223,7 +249,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 name="speechrail-language"
                 checked={language === mode}
                 disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1 }}
+                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1; setNote('') }}
               />
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
@@ -238,7 +264,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
           value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1 }}
+          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; setNote('') }}
           onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />

@@ -269,12 +269,57 @@ describe('SpeechRailSettings check row verdicts', () => {
     await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+    // And the page must not claim the value was saved.
+    expect(screen.queryByText('settings.saved')).toBeNull()
 
     // Still unsaved, so a later refresh must leave it alone.
     fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
     await waitFor(() => { expect(status).toHaveBeenCalledTimes(3) })
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+  })
+
+  it('keeps an edit typed during the mount read, and stays unsaved', async () => {
+    // The mount read decides the dirty flags. Taking the epoch after awaiting it counted an
+    // edit that arrived during the read as part of the read, so the next refresh replaced it.
+    let release: ((value: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValue({ ...STATUS, requestTimeoutMs: 90_000, revision: 2 })
+    render(<SpeechRailSettings {...props({}, {})} status={status} />)
+
+    fireEvent.change(await screen.findByRole('spinbutton'), { target: { value: '5000' } })
+    release?.({ ...STATUS, requestTimeoutMs: 150_000, revision: 1 })
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(1) })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+  })
+
+  it('ignores a mount read that lands after a newer one', async () => {
+    // The older read carries the older revision; applying it makes the next save send a
+    // revision the host has already moved past, so the save fails as a conflict for no reason.
+    let releaseMount: ((value: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { releaseMount = resolve }))
+      .mockResolvedValue({ ...STATUS, language: 'en', languageOptions: ['auto', 'zh', 'en'], requestTimeoutMs: 60_000, revision: 2 })
+    const configure = vi.fn(async () => ({ ok: true, revision: 2, failure: null }))
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} status={status} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('60000') })
+    releaseMount?.({ ...STATUS, language: 'auto', requestTimeoutMs: 150_000, revision: 1 })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('60000')
+    expect((screen.getByRole('radio', { name: 'settings.languageEn' }) as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+    await waitFor(() => { expect(configure).toHaveBeenCalled() })
+    expect(configure.mock.calls[0]?.[0]).toMatchObject({ expectedRevision: 2 })
   })
 
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
