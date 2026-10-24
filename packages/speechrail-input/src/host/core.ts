@@ -312,12 +312,13 @@ export class SpeechRailInputCore {
     if (config.endpointRefusal !== null) {
       this.checkedAt = checkedAt
       // The cached snapshot stays in force, so report the same one this host enforces.
-      return { reachable: false, authenticated: false, capabilities: this.capabilities, failure: failure('endpoint-invalid'), checkedAt }
+      // A refused endpoint never asked the service anything, so the credential is unjudged.
+      return { reachable: false, authenticated: 'unverified', capabilities: this.capabilities, failure: failure('endpoint-invalid'), checkedAt }
     }
     const credential = await this.deps.resolveCredential(config.credentialRef)
     if (credential === null) {
       this.checkedAt = checkedAt
-      return { reachable: false, authenticated: false, capabilities: this.capabilities, failure: failure('not-configured'), checkedAt }
+      return { reachable: false, authenticated: 'unverified', capabilities: this.capabilities, failure: failure('not-configured'), checkedAt }
     }
     const outcome = await this.deps.probe({
       baseUrl: config.baseUrl,
@@ -332,11 +333,14 @@ export class SpeechRailInputCore {
       // known limits: falling back to the absolute ceilings would silently widen what
       // this host accepts, and enforce nothing the service ever stated.
       if (outcome.capabilities !== null) this.capabilities = outcome.capabilities
-      return { reachable: true, authenticated: true, capabilities: this.capabilities, failure: null, checkedAt }
+      // A 200 on an authenticated request is the only evidence of acceptance available.
+      return { reachable: true, authenticated: 'accepted', capabilities: this.capabilities, failure: null, checkedAt }
     }
     // A failed probe keeps the last snapshot on purpose: falling back to the
     // absolute ceilings here would silently widen what this host accepts after a
-    // service that once advertised tighter limits became briefly unreachable.
+    // service that once advertised tighter limits became briefly unreachable. That holds
+    // for a service that never advertised any (a `capabilities-absent` engine), where the
+    // package defaults stay in force exactly as they do before the first probe.
     return {
       reachable: outcome.reachable,
       authenticated: outcome.authenticated,

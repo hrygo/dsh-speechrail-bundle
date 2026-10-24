@@ -836,6 +836,28 @@ describe('unproven outcomes', () => {
     expect((await h.core.status()).gate).toBe('ready')
   })
 
+  it('keeps a service without the capability endpoint usable for transcription', async () => {
+    // The compatibility path end to end: the engine only transcribes, so the probe reports
+    // `capabilities-absent`, no snapshot is in force, and an upload still goes through.
+    const h = harness()
+    h.probe = { ok: false, reachable: true, authenticated: 'unverified', failure: failure('capabilities-absent', { httpStatus: 404 }) }
+    const check = await h.core.check()
+    expect(check.failure?.code).toBe('capabilities-absent')
+    expect(check.reachable).toBe(true)
+    expect(check.authenticated).toBe('unverified')
+    expect(check.capabilities).toBeNull()
+
+    const view = await h.core.status()
+    expect(view.languageOptions).toEqual(['auto'])
+    expect(view.limits).toEqual({ maxUploadBytes: 4_194_304, maxAudioSeconds: 120 })
+
+    const result = await h.core.transcribe(payload('op_cap00001'))
+    expect(result.ok).toBe(true)
+    expect(result.failure).toBeNull()
+    expect(h.sends).toHaveLength(1)
+    expect((await h.core.status()).gate).toBe('ready')
+  })
+
   it('never widens the enforced limits when a probe answers without a snapshot', async () => {
     const h = harness()
     h.probe = {
@@ -857,7 +879,7 @@ describe('unproven outcomes', () => {
     expect((await h.core.status()).limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
 
     // An unreachable service must not widen them either.
-    h.probe = { ok: false, reachable: false, authenticated: false, failure: failure('unreachable') }
+    h.probe = { ok: false, reachable: false, authenticated: 'unverified', failure: failure('unreachable') }
     await h.core.check()
     expect((await h.core.status()).limits).toEqual({ maxUploadBytes: 1_048_576, maxAudioSeconds: 30 })
   })

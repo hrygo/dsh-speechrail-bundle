@@ -44,7 +44,7 @@ function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request:
     onActiveChange: () => { /* observation only */ },
     t: (key: string) => key,
     status: async () => ({ ...STATUS, ...overrides }),
-    check: async () => ({ reachable: true, authenticated: true, capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }),
+    check: async () => ({ reachable: true, authenticated: 'accepted', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }),
     configure: async () => ({ ok: true, revision: 1, failure: null }),
     acknowledge,
     transcribe: async () => ({ ok: false, transcript: null, failure: null }),

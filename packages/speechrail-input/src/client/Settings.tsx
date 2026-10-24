@@ -214,9 +214,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     && (checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid')
   const checkedYet = !neverAskedLocally && (checked !== undefined || (view?.checkedAt ?? null) !== null)
   const lastCheckTime = checked?.checkedAt ?? view?.checkedAt ?? t('settings.never')
-  // A verdict is reported only when a response carried one: `authenticated` is false both
-  // when the credential was refused and when nothing judged it, and true only after a 200.
-  const verified = checked !== undefined && (checked.failure?.code === 'unauthorized' || checked.failure === null)
+  // A verdict is reported only when a probe carried one: `unverified` covers "nothing
+  // judged the credential" (no response, a missing endpoint, a server error) and is never
+  // shown as a refusal.
+  const authentication = checked?.authenticated ?? 'unverified'
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -323,13 +324,15 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
             // A check that never reached the service must not be reported as a failed
             // connection to a healthy one.
             ? t('settings.lastCheck', { time: lastCheckTime })
-            : verified
-              // `authenticated: false` covers "refused" and "never judged" alike, so it is
-              // only reported once a response actually carried a verdict.
-              ? `${t('settings.connected')} · ${t('settings.authentication', { state: checked.authenticated ? t('settings.authOk') : t('settings.authFailed') })}`
-              : checked.reachable
-                ? t('settings.connected')
-                : t('settings.unreachable')}
+            : checked.reachable
+              ? `${t('settings.connected')} · ${t('settings.authentication', {
+                state: authentication === 'accepted'
+                  ? t('settings.authOk')
+                  : authentication === 'refused'
+                    ? t('settings.authFailed')
+                    : t('settings.authUnverified'),
+              })}`
+              : t('settings.unreachable')}
         </span>
         {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(checked.failure)}</span>}
       </div>

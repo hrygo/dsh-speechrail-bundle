@@ -18,7 +18,7 @@ import {
   type SpeechRailFailure,
   type SpeechRailFailureCode,
 } from '../contracts.ts'
-import type { SpeechRailLimits } from '../types.ts'
+import type { SpeechRailAuthentication, SpeechRailLimits } from '../types.ts'
 import { projectCapabilities } from './capabilities.ts'
 import { failure, failureForStatus, readErrorEnvelope, unknownFailure } from './failure.ts'
 
@@ -326,11 +326,16 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
   }
   const record = payload as Record<string, unknown>
   const usage = record.usage
-  const usageValid = typeof usage === 'object' && usage !== null
-    && (usage as Record<string, unknown>).type === 'duration'
-    && typeof (usage as Record<string, unknown>).seconds === 'number'
-    && Number.isFinite((usage as Record<string, unknown>).seconds as number)
-    && ((usage as Record<string, unknown>).seconds as number) >= 0
+  // `usage` is SpeechRail's own extension: an OpenAI-compatible engine answers with
+  // `{"text": ...}` alone, and no consumer reads the duration, so its absence is accepted
+  // and only its presence is held to the stricter shape. A `usage` that exists but is
+  // malformed stays a refused response: it is a claim the service made and got wrong.
+  const usageValid = usage === undefined
+    || (typeof usage === 'object' && usage !== null
+      && (usage as Record<string, unknown>).type === 'duration'
+      && typeof (usage as Record<string, unknown>).seconds === 'number'
+      && Number.isFinite((usage as Record<string, unknown>).seconds as number)
+      && ((usage as Record<string, unknown>).seconds as number) >= 0)
   if (typeof record.text !== 'string' || !usageValid) {
     return { ok: false, failure: failure('malformed-response', { httpStatus: 200 }) }
   }
@@ -365,8 +370,8 @@ export interface ProbeRefused {
   readonly ok: false
   /** Whether any HTTP response arrived. */
   readonly reachable: boolean
-  /** Whether that response was authorized. */
-  readonly authenticated: boolean
+  /** What that response proved about the credential. */
+  readonly authenticated: SpeechRailAuthentication
   /** Sanitized failure, or null when the response simply was not a snapshot. */
   readonly failure: SpeechRailFailure | null
 }
@@ -391,16 +396,25 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
   if (!result.ok) {
     // A response can arrive and still fail (a body over the cap, a stall after the
     // headers); `httpStatus` records that it did, so report reachability honestly.
-    return { ok: false, reachable: result.failure.httpStatus !== null, authenticated: false, failure: result.failure }
+    // No response at all judged nothing, so this is `unverified` rather than `refused`.
+    return { ok: false, reachable: result.failure.httpStatus !== null, authenticated: 'unverified', failure: result.failure }
   }
   if (result.status !== 200) {
+    // Only 401/403 judge the credential. A 500/404/413 says nothing about it, so it must
+    // report `unverified`: calling it `refused` would blame a credential nothing looked at,
+    // and calling it `accepted` would turn any server error into "authorized".
+    const authenticated: SpeechRailAuthentication = result.status === 401 || result.status === 403 ? 'refused' : 'unverified'
+    // An engine that only transcribes answers 404/405/501 here. That is a usable service
+    // that states no capabilities, not a broken one, so it gets its own code; the caller
+    // then keeps `capabilities: null` instead of reporting a missing endpoint as a failure.
+    const capabilitiesAbsent = result.status === 404 || result.status === 405 || result.status === 501
     return {
       ok: false,
       reachable: true,
-      // A non-200 answer never proves the credential was accepted: 500/404/413 say nothing
-      // about it, so claiming `true` here would turn any server error into "authorized".
-      authenticated: false,
-      failure: failureForResponse(result.status, result.body),
+      authenticated,
+      failure: capabilitiesAbsent
+        ? failure('capabilities-absent', { httpStatus: result.status })
+        : failureForResponse(result.status, result.body),
     }
   }
   return { ok: true, capabilities: projectCapabilities(parseJson(result.body), options.previousLimits ?? null) }

@@ -27,7 +27,9 @@
 
 - DeepSeek Harness `>= 0.2.1-rc.2`（`engines.dsh`）。
 - Node `^22.19.0 || >=24.0.0`。
-- 本机 SpeechRail 服务提供 `POST /v1/audio/transcriptions`，可选 `GET /v1/speechrail/capabilities`。
+- 本机服务提供 OpenAI 形状的 `POST /v1/audio/transcriptions` 并返回 `{"text": ...}`。SpeechRail 是
+  参考实现（它的 `usage` 扩展与 `GET /v1/speechrail/capabilities` 能力快照均可选）；其他同形状的
+  本机引擎同样可用，缺少能力端点时按 `capabilities-absent` 报告，而不是当作服务故障。
 - Host 可解析的凭据引用，例如 `SPEECHRAIL_API_KEY`。
 
 ## 安装
@@ -45,7 +47,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.12/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
 ```
 
 随后在设置页填写地址与凭据引用。

@@ -23,7 +23,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.12/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -35,13 +35,33 @@ Then set the endpoint and the credential reference on the bundle's settings page
 - Inserts the transcript into the current composer draft without touching the draft's later
   edits: a captured `TokenSpan` guards the insertion, and a refused insertion is kept for the
   user to apply.
-- Probes connectivity and the advertised capability snapshot (`/v1/speechrail/capabilities`)
-  to bound upload size and duration, and to offer only the languages the service enumerates.
+- Probes connectivity and, when the service offers it, the advertised capability snapshot
+  (`/v1/speechrail/capabilities`) to bound upload size and duration and to offer only the
+  languages the service enumerates. A service that does not implement that endpoint is used as a
+  plain transcription endpoint instead (see [Other engines](#other-engines)).
 - Persists language and request budget through the Harness settings page.
 - Registers one read-only agent tool, `speechrail_input_status`, that reports the effective
   endpoint, credential and service state, the limits in force, and whether an earlier recording
   still needs acknowledgement. It never uploads audio, never changes the gate, and never carries
   a credential or a transcript.
+
+## Other engines
+
+The transcription call is OpenAI-shaped, so an engine that is not SpeechRail works as long as it
+speaks the same shape on loopback:
+
+| Expectation | Detail |
+| --- | --- |
+| Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`. |
+| Transcript | A 200 whose JSON body carries a string `text`. The SpeechRail `usage: {type: "duration", seconds}` extension is optional; a `usage` that is present but malformed is still refused as `malformed-response`. |
+| Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404, 405 or 501 the probe reports `capabilities-absent`: the service stays reachable and usable, the language selector stays on `auto`, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, 5xx stays `server-error`, and an unreachable service stays `unreachable`. |
+| Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403, and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused or unconfigured endpoint). The `speechrail_input_status` tool returns the same three strings. |
+
+What a non-SpeechRail engine does not get: it never issues an operation id, so the gate never
+enters `unknown`, the acknowledgement control never appears, and an outcome that cannot be proven
+(cancel or deadline after the body was written) has no server-side record to reconcile against —
+the local journal still records the attempt and still forbids replay until you acknowledge it.
+Language selection stays `auto` because nothing stated which languages exist.
 
 ## Security boundaries
 
@@ -111,7 +131,8 @@ against the published declarations.
   that starts a recording or an upload.
 - A snapshot that reports transcription as unsupported admits no language and refuses an upload
   before it is sent, with the stable `unsupported` code; a null snapshot states nothing, so it is
-  never treated as such a refusal.
+  never treated as such a refusal. A service without the capability endpoint keeps the last
+  snapshot it ever advertised in force, exactly like any other failed probe.
 - The unproven-outcome path requires an explicit acknowledgement in the composer or settings
   page, and the composer offers that control whenever the gate is blocked; there is no automatic reconciliation with the service's own record. An unreadable
   journal is acknowledged by asserting that nothing is outstanding, which cannot be verified

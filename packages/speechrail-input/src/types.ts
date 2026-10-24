@@ -24,6 +24,7 @@ export type SpeechRailFailureCode =
   | 'audio-invalid'
   | 'unauthorized'
   | 'not-found'
+  | 'capabilities-absent'
   | 'unsupported'
   | 'model-not-found'
   | 'server-error'
@@ -117,12 +118,21 @@ export interface SpeechRailInputStatus {
   readonly revision: number
 }
 
+/**
+ * How far a probe judged the credential.
+ *
+ * Three states rather than a boolean: `accepted` needs a 200 that answered an
+ * authenticated request, `refused` needs a 401/403, and everything else (no response, a
+ * missing endpoint, a server error, a refused endpoint) judged nothing at all.
+ */
+export type SpeechRailAuthentication = 'accepted' | 'refused' | 'unverified'
+
 /** Result of one connectivity and capability probe. */
 export interface SpeechRailCheckResult {
   /** Whether an HTTP response arrived from the configured endpoint. */
   readonly reachable: boolean
-  /** Whether the probe was authorized. */
-  readonly authenticated: boolean
+  /** What the probe proved about the credential. */
+  readonly authenticated: SpeechRailAuthentication
   /** Fresh or cached capability facts, or null when the probe failed. */
   readonly capabilities: SpeechRailCapabilitiesView | null
   /** Failure of the probe itself, or null when it succeeded. */

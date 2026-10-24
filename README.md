@@ -36,8 +36,11 @@ enabled, and it never talks to a remote endpoint: loopback only.
 
 - DeepSeek Harness `>= 0.2.1-rc.2` (`engines.dsh`).
 - Node `^22.19.0 || >=24.0.0`.
-- A local SpeechRail service exposing `POST /v1/audio/transcriptions` and, optionally,
-  `GET /v1/speechrail/capabilities`.
+- A local service exposing `POST /v1/audio/transcriptions` in OpenAI's multipart shape and
+  answering `{"text": ...}`. SpeechRail is the reference implementation (its `usage` extension and
+  `GET /v1/speechrail/capabilities` snapshot are optional); any other loopback engine with the same
+  transcription shape works, and a service without the capability endpoint is reported as
+  `capabilities-absent` instead of broken.
 - A credential reference usable by the Host, for example `SPEECHRAIL_API_KEY`.
 
 ## Install
@@ -58,7 +61,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.12/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.0/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and credential reference on its settings page.

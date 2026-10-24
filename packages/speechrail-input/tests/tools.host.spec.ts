@@ -31,7 +31,7 @@ const STATUS: SpeechRailInputStatus = {
 
 const CHECK: SpeechRailCheckResult = {
   reachable: true,
-  authenticated: true,
+  authenticated: 'accepted',
   capabilities: null,
   failure: null,
   checkedAt: '2026-10-23T12:00:00.000Z',
@@ -96,7 +96,7 @@ describe('speechrail_input_status', () => {
       maxAudioSeconds: 30,
       probed: false,
       reachable: false,
-      authenticated: false,
+      authenticated: 'unverified',
       failureCode: '',
     })
   })
@@ -107,7 +107,7 @@ describe('speechrail_input_status', () => {
     expect(calls).toEqual({ status: 1, check: 1 })
     expect(value.probed).toBe(true)
     expect(value.reachable).toBe(true)
-    expect(value.authenticated).toBe(true)
+    expect(value.authenticated).toBe('accepted')
   })
 
   it('surfaces a refused endpoint, a missing credential and a blocked gate as data', async () => {
@@ -132,7 +132,7 @@ describe('speechrail_input_status', () => {
     const { stub } = source({ credentialConfigured: false })
     const neverAsked: StatusToolSource = {
       ...stub,
-      check: async () => ({ ...CHECK, reachable: false, authenticated: false, failure: failure('not-configured') }),
+      check: async () => ({ ...CHECK, reachable: false, authenticated: 'unverified', failure: failure('not-configured') }),
     }
     const tool = createStatusTool(neverAsked)
     const value = await tool.execute({ probe: true }) as StatusToolValue
@@ -148,7 +148,7 @@ describe('speechrail_input_status', () => {
     const { stub } = source({ baseUrl: '', endpointProblem: 'the endpoint must be a loopback address' })
     const refused: StatusToolSource = {
       ...stub,
-      check: async () => ({ ...CHECK, reachable: false, authenticated: false, failure: failure('endpoint-invalid') }),
+      check: async () => ({ ...CHECK, reachable: false, authenticated: 'unverified', failure: failure('endpoint-invalid') }),
     }
     const value = await createStatusTool(refused).execute({ probe: true }) as StatusToolValue
     expect(value.probed).toBe(false)
@@ -204,7 +204,7 @@ describe('speechrail_input_status', () => {
       maxAudioSeconds: 120,
       probed: true,
       reachable: false,
-      authenticated: false,
+      authenticated: 'unverified',
       failureCode: 'unreachable',
     }
     expect(describeStatus(base)).toContain('service unreachable')
@@ -227,11 +227,11 @@ describe('speechrail_input_status', () => {
       maxAudioSeconds: 120,
       probed: true,
       reachable: true,
-      authenticated: false,
+      authenticated: 'refused',
       failureCode: 'unauthorized',
     }
     expect(describeStatus(base)).toContain('rejecting the credential')
-    const failed = describeStatus({ ...base, failureCode: 'server-error' })
+    const failed = describeStatus({ ...base, authenticated: 'unverified', failureCode: 'server-error' })
     expect(failed).toContain('not accepting the request')
     expect(failed).not.toContain('authorized')
     expect(failed).not.toContain('rejecting the credential')

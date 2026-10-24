@@ -104,6 +104,17 @@ describe('transcription transport', () => {
     expect(body).toContain('name="file"; filename="recording.wav"')
   })
 
+  it('accepts a transcript that states no usage', async () => {
+    // `usage` is SpeechRail's own extension. An OpenAI-compatible engine answers with
+    // `{"text": ...}` alone, and nothing downstream reads the duration.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ text: '你好世界' }))
+    })
+    const outcome = await transcribe({ baseUrl: server.baseUrl, model: 'whisper-1', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+    expect(outcome).toEqual({ ok: true, text: '你好世界', requestSeconds: expect.any(Number) as number })
+  })
+
   it('omits language and model when they are unset', async () => {
     const server = await start((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -217,8 +228,39 @@ describe('capability probe', () => {
     expect(outcome.ok).toBe(false)
     if (outcome.ok) throw new Error('unreachable')
     expect(outcome.reachable).toBe(true)
-    expect(outcome.authenticated).toBe(false)
+    expect(outcome.authenticated).toBe('refused')
     expect(outcome.failure?.code).toBe('unauthorized')
+  })
+
+  it('classifies a service without the capability endpoint as capabilities-absent', async () => {
+    // An engine that only transcribes answers 404 here. It is usable, and the state the
+    // caller must keep is "no snapshot", never "unreachable" or "credential refused".
+    const server = await start((_request, response) => { response.writeHead(404); response.end() })
+    const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 2_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.reachable).toBe(true)
+    expect(outcome.authenticated).toBe('unverified')
+    expect(outcome.failure?.code).toBe('capabilities-absent')
+    expect(outcome.failure?.httpStatus).toBe(404)
+  })
+
+  it('treats 405 and 501 on the capability endpoint the same way', async () => {
+    for (const status of [405, 501]) {
+      const server = await start((_request, response) => { response.writeHead(status); response.end() })
+      const outcome = await probeCapabilities({ baseUrl: server.baseUrl, credential: SECRET, timeoutMs: 2_000 })
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) throw new Error('unreachable')
+      expect(outcome.failure?.code).toBe('capabilities-absent')
+    }
+  })
+
+  it('reports a server that never answered as unverified', async () => {
+    const outcome = await probeCapabilities({ baseUrl: 'http://127.0.0.1:1/v1', credential: SECRET, timeoutMs: 1_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.reachable).toBe(false)
+    expect(outcome.authenticated).toBe('unverified')
   })
 
   it('projects a well-formed snapshot and bounds it with the absolute ceilings', async () => {
@@ -267,7 +309,7 @@ describe('capability probe', () => {
 
   it('does not call a service error an accepted credential', async () => {
     // Only a 200 proves the credential was accepted; a 500 says nothing about it, and
-    // reporting `authenticated: true` here turned any server error into "authorized".
+    // reporting acceptance here turned any server error into "authorized".
     const server = await start((_request, response) => {
       response.writeHead(500, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ error: { message: 'boom', code: 'server_error' } }))
@@ -276,7 +318,7 @@ describe('capability probe', () => {
     expect(outcome.ok).toBe(false)
     if (outcome.ok) throw new Error('unreachable')
     expect(outcome.reachable).toBe(true)
-    expect(outcome.authenticated).toBe(false)
+    expect(outcome.authenticated).toBe('unverified')
     expect(outcome.failure?.code).toBe('server-error')
   })
 

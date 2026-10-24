@@ -20,7 +20,7 @@
  * @module @hrygo/dsh-speechrail-bundle/host/tools
  */
 
-import type { SpeechRailCheckResult, SpeechRailInputStatus } from '../types.ts'
+import type { SpeechRailAuthentication, SpeechRailCheckResult, SpeechRailInputStatus } from '../types.ts'
 
 /** Registered tool name. */
 export const STATUS_TOOL_NAME = 'speechrail_input_status'
@@ -110,8 +110,8 @@ export interface StatusToolValue {
   readonly probed: boolean
   /** Whether the local service answered; false when it was not asked. */
   readonly reachable: boolean
-  /** Whether the service accepted the credential; false when it was not asked. */
-  readonly authenticated: boolean
+  /** What the probe proved about the credential; `unverified` when it judged nothing. */
+  readonly authenticated: SpeechRailAuthentication
   /** Failure code of the probe in this call, or an empty string. */
   readonly failureCode: string
 }
@@ -132,7 +132,11 @@ const OUTPUT_SCHEMA = {
     maxAudioSeconds: { type: 'number', description: 'Longest recording the next upload may contain.' },
     probed: { type: 'boolean', description: 'Whether the local service was asked during this call.' },
     reachable: { type: 'boolean', description: 'Whether the local service answered; false when it was not asked.' },
-    authenticated: { type: 'boolean', description: 'Whether the service accepted the credential; false when it was not asked.' },
+    authenticated: {
+      type: 'string',
+      enum: ['accepted', 'refused', 'unverified'],
+      description: 'What the probe proved about the credential: `accepted` only after a 200, `refused` after a 401/403, `unverified` when nothing judged it.',
+    },
     failureCode: { type: 'string', description: 'Probe failure code in this call, or an empty string.' },
   },
   required: [
@@ -189,7 +193,7 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
         maxAudioSeconds: view.limits.maxAudioSeconds,
         probed,
         reachable: check?.reachable ?? false,
-        authenticated: check?.authenticated ?? false,
+        authenticated: check?.authenticated ?? 'unverified',
         failureCode: check?.failure?.code ?? '',
       }
     },
@@ -207,12 +211,11 @@ export function describeStatus(value: StatusToolValue): string {
   else parts.push(`endpoint ${value.endpoint === '' ? '(unset)' : value.endpoint}`)
   parts.push(value.credentialConfigured ? 'credential configured' : 'credential missing')
   if (value.probed) {
-    // Only a 200 proves acceptance, so a reachable service that is not authenticated either
-    // refused this credential or answered with something else; the code tells them apart.
+    // Three states, so a report never has to guess between "refused" and "never judged".
     parts.push(value.reachable
-      ? value.authenticated
+      ? value.authenticated === 'accepted'
         ? 'service reachable and authorized'
-        : value.failureCode === 'unauthorized'
+        : value.authenticated === 'refused'
           ? 'service reachable but rejecting the credential'
           : 'service reachable but not accepting the request'
       : 'service unreachable')

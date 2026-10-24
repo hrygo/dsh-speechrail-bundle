@@ -55,7 +55,7 @@ function props(
   return {
     t,
     status: async () => ({ ...STATUS, ...overrides }),
-    check: handlers.check ?? (async () => ({ reachable: true, authenticated: true, capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' })),
+    check: handlers.check ?? (async () => ({ reachable: true, authenticated: 'accepted', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' })),
     configure: handlers.configure ?? (async () => ({ ok: true, revision: 1, failure: null })),
     acknowledge: handlers.acknowledge ?? (async () => ({ ok: true, pendingOperationId: null, failure: null })),
   } as unknown as SpeechRailSettingsProps
@@ -133,7 +133,7 @@ describe('SpeechRailSettings check result', () => {
   it('does not report a failed connection for a check that never left the host', async () => {
     const check = vi.fn(async () => ({
       reachable: false,
-      authenticated: false,
+      authenticated: 'unverified',
       capabilities: null,
       failure: failure('not-configured'),
       checkedAt: '2026-10-23T12:00:00.000Z',
@@ -149,7 +149,7 @@ describe('SpeechRailSettings check result', () => {
 
 describe('SpeechRailSettings check row verdicts', () => {
   const checkWith = (result: Partial<SpeechRailCheckResult>) => vi.fn(async () => ({
-    reachable: false, authenticated: false, capabilities: null, failure: null,
+    reachable: false, authenticated: 'unverified', capabilities: null, failure: null,
     checkedAt: '2026-10-23T12:00:00.000Z', ...result,
   }))
 
@@ -162,18 +162,18 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
   })
 
-  it('prints no authentication verdict when a response carried none', async () => {
-    // A 200 whose body was unusable proves reachability, not a rejected credential.
+  it('reports the credential as unverified when a response carried no verdict', async () => {
+    // A 200 whose body was unusable proves reachability, not a rejected credential, so the
+    // row says so instead of staying silent about a question the user is asking.
     const check = checkWith({ reachable: true, failure: failure('malformed-response', { httpStatus: 200 }) })
     render(<SpeechRailSettings {...props({}, { check: check as never })} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
-    expect(await screen.findByText('settings.connected')).toBeTruthy()
-    expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
+    expect(await screen.findByText('settings.connected · settings.authentication:{"state":"settings.authUnverified"}')).toBeTruthy()
   })
 
   it('still reports a credential the service actually refused', async () => {
-    const check = checkWith({ reachable: true, failure: failure('unauthorized', { httpStatus: 401 }) })
+    const check = checkWith({ reachable: true, authenticated: 'refused', failure: failure('unauthorized', { httpStatus: 401 }) })
     render(<SpeechRailSettings {...props({}, { check: check as never })} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
@@ -182,22 +182,35 @@ describe('SpeechRailSettings check row verdicts', () => {
     })
   })
 
-  it('prints no authentication verdict when the service failed without judging it', async () => {
-    // A 500 says the service is up and unhappy; the credential was never judged, and
-    // "accepted" beside that error would be an affirmative lie.
-    const check = checkWith({ reachable: true, authenticated: true, failure: failure('server-error', { httpStatus: 500 }) })
+  it('reports the credential as unverified when the service failed without judging it', async () => {
+    // A 500 says the service is up and unhappy; the credential was never judged, so the row
+    // may not claim acceptance ("accepted" would be an affirmative lie) or refusal.
+    const check = checkWith({ reachable: true, authenticated: 'unverified', failure: failure('server-error', { httpStatus: 500 }) })
     render(<SpeechRailSettings {...props({}, { check: check as never })} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
-    expect(await screen.findByText('settings.connected')).toBeTruthy()
-    expect(screen.queryByText((content) => content.includes('settings.authentication'))).toBeNull()
+    expect(await screen.findByText('settings.connected · settings.authentication:{"state":"settings.authUnverified"}')).toBeTruthy()
+  })
+
+  it('explains a service that reports no capabilities instead of blaming the endpoint', async () => {
+    // The compatibility path: a transcription-only engine answers 404 on the capability
+    // endpoint. It stays usable, the snapshot stays unstated, and the credential is
+    // reported as unverified rather than refused.
+    const check = checkWith({ reachable: true, failure: failure('capabilities-absent', { httpStatus: 404 }) })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => {
+      expect(screen.getByText('settings.connected · settings.authentication:{"state":"settings.authUnverified"}')).toBeTruthy()
+    })
+    expect(screen.getByText('failure.capabilities-absent')).toBeTruthy()
   })
 
   it('adopts a value nobody edited instead of writing the stale one back', async () => {
     // The refresh moves the revision, so an untouched field must move with it; otherwise
     // the next save reverts another writer's change while passing the conflict check.
     const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
-    const base = props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })
+    const base = props({}, { check: checkWith({ reachable: true, authenticated: 'accepted' }) as never })
     const status = vi.fn()
       .mockResolvedValueOnce({ ...STATUS, language: 'auto' as const, requestTimeoutMs: 150_000, revision: 1 })
       .mockResolvedValue({ ...STATUS, language: 'en' as const, requestTimeoutMs: 60_000, revision: 2 })
@@ -228,7 +241,7 @@ describe('SpeechRailSettings check row verdicts', () => {
     let release: (() => void) | undefined
     const check = vi.fn(async () => {
       await new Promise<void>((resolve) => { release = resolve })
-      return { reachable: true, authenticated: true, capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }
+      return { reachable: true, authenticated: 'accepted', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }
     })
     const base = props({}, { check: check as never })
     const status = vi.fn()
@@ -336,7 +349,7 @@ describe('SpeechRailSettings check row verdicts', () => {
   })
 
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
-    render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
+    render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: 'accepted' }) as never })} />)
 
     const field = await screen.findByRole('spinbutton')
     fireEvent.change(field, { target: { value: '5000' } })
