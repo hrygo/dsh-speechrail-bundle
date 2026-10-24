@@ -346,6 +346,12 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
 - **两处死导出：先在观察项中记录，后按要求删除。** 全仓库（src/tests/tools/scripts）扫描后，`core.ts` 的 `decodeBase64Audio` 与 `journal.ts` 的 `UNAVAILABLE_JOURNAL` 无任何引用——前者是 0.6.0 引入 `decodeValidatedBase64` 后留下的旧入口（它看起来像"仍在校验的安全网"，其实不再被调用）。当轮按"不顺手清理"的约定**只记录未动**；用户随后要求处理遗留项，遂删除。删除前确认无牵连：`isBase64` 仍被解析器使用、`decodeValidatedBase64` 仍被真实调用点使用、`PendingJournal` 类型仍被广泛使用；删除后 `pnpm verify` 退出码 0、246 测试全绿（什么都没坏，即证明它们确为死代码）。
 
+## 2026-10-24 决定记录（0.8.0 交付与环境观察：profile 的 `pnpm peers check` 噪音）
+
+- **交付**：0.8.0 已发布并装机（资产摘要一致、8/8 产物逐字节一致、已装 manifest 的 peer 确为放宽后的 `^0.2.1-rc.2`）。工具 schema 另在 **rc.3** 的临时前缀上真验一次通过（`@deepseek-ai/dsh-tools@0.2.1-rc.3`，18 字段）。
+- **环境观察（记录，不修）**：在 profile 里跑 `pnpm peers check` 会把 `@deepseek-ai/dsh-api-remotes` 等宿主包与 `react`/`react-dom` 报成 `missing peer`——因为 profile 的 `node_modules` 里**没有**这些包，它们由 Harness 运行时自带（应用 asar 内）。同一个 profile 里的 `dsh-better-sidebar`、`dsh-lsp-actions` 也报同类缺失，属系统性噪音。**判据**：插件管理器的安装结果是 `applied` / `enabled: true` / `warnings: []`，且客户端面与工具在此前各轮已实测可用。**刻意不改**：移除真实的 peer 声明（如 react）只会消音，不会修好任何东西，反而丢掉契约。
+- **顺便**：本仓库 store 里只有 `@deepseek-ai/dsh-tools@0.2.1-rc.2` 的残留副本（该包**不是**工作区依赖，不能加），所以本地那次检查报 rc.2 是**如实**的；rc.3 的验证通过 CI 同款临时前缀完成。
+
 ## 2026-10-24 决定记录（0.8.0：DSH 升到 0.2.1-rc.3 的兼容响应）
 
 - **事实**：运行时 `dsh --version` 为 **0.2.1-rc.3**，而本包把 `@deepseek-ai/dsh-*` 的 **peer 精确钉在 `0.2.1-rc.2`**——新运行时不再满足。Harness 的版本要求检查会看 `engines.dsh`，否则看 DSH peer 依赖，因此这不只是警告，存在**阻断安装/激活**的风险。（`engines.dsh` 因是范围 `>=0.2.1-rc.2`，同 tuple 预发布被允许，本来就不受影响。）
