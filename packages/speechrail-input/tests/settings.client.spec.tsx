@@ -222,6 +222,31 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.undetermined"}')).toBeNull()
   })
 
+  it('keeps an edit made while the check was still in flight', async () => {
+    // The dirtiness has to be read after the awaits: a state variable would be captured from
+    // the render at click time, so an edit typed during the flight was overwritten.
+    let release: (() => void) | undefined
+    const check = vi.fn(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return { reachable: true, authenticated: true, capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }
+    })
+    const base = props({}, { check: check as never })
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, language: 'auto' as const, requestTimeoutMs: 150_000, revision: 1 })
+      .mockResolvedValue({ ...STATUS, language: 'zh' as const, requestTimeoutMs: 60_000, revision: 2 })
+    render(<SpeechRailSettings {...base} status={status} />)
+
+    await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('150000') })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(check).toHaveBeenCalled() })
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '5000' } })
+
+    release?.()
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('5000')
+  })
+
   it('refreshes the snapshot without discarding an unsaved budget edit', async () => {
     render(<SpeechRailSettings {...props({}, { check: checkWith({ reachable: true, authenticated: true }) as never })} />)
 

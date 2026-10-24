@@ -135,7 +135,54 @@ describe('VoiceInput acknowledge', () => {
     // React applies the state the guard is meant to withhold.
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
-    expect(screen.queryByText('acknowledged')).toBeNull()
+    // The confirmation is reported without collapsing the live control.
+    expect(screen.getByText('acknowledged')).toBeTruthy()
+  })
+
+  it('keeps a live recording reachable when the acknowledgement is refused', async () => {
+    // The refusal is reported as a message, not as a phase change: collapsing the row would
+    // drop the stop button while the microphone is still running.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_gggggggg' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_gggggggg' }, async () => ({ ok: false, pendingOperationId: null, failure: failure('conflict') }))
+    const capture = { start: async () => undefined, stop: vi.fn(async () => new Uint8Array([1])), dispose: async () => undefined } as unknown as Recording
+    render(<VoiceInput {...base} status={status} createRecording={() => capture} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+    expect(screen.getByText('failure.conflict')).toBeTruthy()
+  })
+
+  it('still reports a success when an aborted start attempt bumped the generation', async () => {
+    // Clicking the trigger while the gate is still unproven aborts without recording, so it
+    // is not a reason to swallow the acknowledgement's own confirmation.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_hhhhhhhh' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_hhhhhhhh' })
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_hhhhhhhh' }, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    const createRecording = vi.fn(() => ({ start: async () => undefined, dispose: async () => undefined }) as unknown as Recording)
+    render(<VoiceInput {...base} status={status} createRecording={createRecording} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    expect(await screen.findByText('gateUnknown')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    expect(await screen.findByText('acknowledged')).toBeTruthy()
   })
 
   it('refuses before opening the microphone when no credential is configured', async () => {

@@ -3,7 +3,7 @@
  * @module @hrygo/dsh-speechrail-bundle/client/Settings
  */
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
@@ -54,16 +54,23 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [busy, setBusy] = useState(false)
   // A refresh must replace the fields the user has not touched, or the page would keep a
   // stale value while adopting the fresh revision and write it back over someone else's
-  // change; an edit in progress must survive instead.
-  const [languageDirty, setLanguageDirty] = useState(false)
-  const [budgetDirty, setBudgetDirty] = useState(false)
+  // change. These live in refs because the value is read *after* an await: a state variable
+  // would be captured from the render at click time, so an edit made while a check or a save
+  // was in flight would still be overwritten.
+  const languageDirty = useRef(false)
+  const budgetDirty = useRef(false)
+
+  /** Show fresh values, keeping anything the user has edited and not saved. */
+  const applyStatus = (next: SpeechRailInputStatus): void => {
+    setView(next)
+    if (!languageDirty.current) setLanguage(next.language)
+    if (!budgetDirty.current) setBudgetText(String(next.requestTimeoutMs))
+  }
 
   const adopt = (next: SpeechRailInputStatus): void => {
-    setView(next)
-    setLanguage(next.language)
-    setBudgetText(String(next.requestTimeoutMs))
-    setLanguageDirty(false)
-    setBudgetDirty(false)
+    applyStatus(next)
+    languageDirty.current = false
+    budgetDirty.current = false
   }
 
   const failureText = (failure: SpeechRailFailure): string => {
@@ -91,10 +98,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       // Refresh the snapshot and every field the user has not edited; adopting wholesale
       // would discard an edit in progress, and refreshing only the view would leave an
       // untouched field stale while its conflict token moves on.
-      const fresh = await status()
-      setView(fresh)
-      if (!languageDirty) setLanguage(fresh.language)
-      if (!budgetDirty) setBudgetText(String(fresh.requestTimeoutMs))
+      applyStatus(await status())
     } catch {
       setNote(t('failure.internal'))
     } finally {
@@ -136,12 +140,12 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       if (!result.ok) {
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
-        adopt(await status())
+        applyStatus(await status())
         setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
         return
       }
       const fresh = await status()
-      adopt(fresh)
+      applyStatus(fresh)
       if (result.pendingOperationId !== null || fresh.pendingOperationId !== null) {
         // The Host accepted the request but something still holds the gate (now, or as the
         // refreshed status reports), so claiming success here would be false.
@@ -212,7 +216,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 name="speechrail-language"
                 checked={language === mode}
                 disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode); setLanguageDirty(true) }}
+                onChange={() => { setLanguage(mode); languageDirty.current = true }}
               />
               {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
             </label>
@@ -227,7 +231,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
           value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value); setBudgetDirty(true) }}
+          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true }}
           onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />

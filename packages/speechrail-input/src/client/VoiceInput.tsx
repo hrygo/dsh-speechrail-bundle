@@ -250,8 +250,13 @@ export function VoiceInput({
 
   const acknowledgeUnknown = async (): Promise<void> => {
     if (view === undefined || ackBusy) return
-    const run = generation.current
     setAckBusy(true)
+    // A result may arrive after the user has started recording again; reporting it must not
+    // collapse the row then, or the stop button of a live microphone disappears with it.
+    const report = (text: string): void => {
+      if (current.current === undefined) feedback(text)
+      else setMessage(text)
+    }
     // A null id means the stored record could not be read at all; the Host accepts it
     // only as the user's explicit assertion that nothing of theirs is outstanding.
     try {
@@ -259,25 +264,29 @@ export function VoiceInput({
       if (result.ok && result.pendingOperationId !== null) {
         // The host accepted the request but something else still holds the gate.
         await refresh()
-        feedback(t('gateBusy'))
+        report(t('gateBusy'))
         return
       }
       if (!result.ok) {
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
         await refresh()
-        feedback(result.failure === null ? t('failure.internal') : failureText(result.failure))
+        report(result.failure === null ? t('failure.internal') : failureText(result.failure))
         return
       }
       await refresh()
-      // A recording may have started while this assertion was in flight; collapsing the
-      // control then would hide the stop button of a live microphone.
-      if (run !== generation.current) return
+      // A recording may have started while this assertion was in flight. Only a live capture
+      // is a reason to keep the control expanded: an attempt that aborted without recording
+      // (a still-closed gate) must not swallow the acknowledgement's own success.
+      if (current.current !== undefined) {
+        setMessage(t('acknowledged'))
+        return
+      }
       setPending('')
       setMessage(t('acknowledged'))
       setPhase('idle')
     } catch {
-      feedback(t('failure.internal'))
+      report(t('failure.internal'))
     } finally {
       setAckBusy(false)
     }
@@ -325,7 +334,14 @@ export function VoiceInput({
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} data-speechrail-activity={phase}>
       <button type="button" aria-label={t(pending === '' ? 'cancel' : 'discard')} onClick={cancel} style={roundStyle}>×</button>
       {phase === 'recording'
-        ? <Waveform recording={current.current?.capture} label={t('recording')} />
+        ? (
+          <>
+            <Waveform recording={current.current?.capture} label={t('recording')} />
+            {/* A result that arrived while recording must stay visible: the row keeps its stop
+                control, so there is nowhere else to show it. */}
+            {message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
+          </>
+        )
         : (
           <span role="status" style={messageStyle} title={pending === '' ? message : pending}>
             {phase === 'feedback'
