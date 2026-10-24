@@ -13,7 +13,7 @@ There is no npm package. Install the released tarball through the Harness plugin
 performs package installation and bundle selection (do not reproduce those steps by hand):
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.0/hrygo-dsh-speechrail-bundle-0.1.0.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
 ```
 
 A checkout worktree works the same way (`target: <path to packages/speechrail-input>`). Then set the

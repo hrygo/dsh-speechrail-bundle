@@ -97,6 +97,18 @@ describe('VoiceInput acknowledge', () => {
     expect(stop).toHaveBeenCalledWith(0.001, 1_000)
   })
 
+  it('refuses before opening the microphone when no credential is configured', async () => {
+    // Without a credential every upload is refused, so the refusal must arrive before a
+    // whole dictation is recorded and thrown away.
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }) as unknown as Recording)
+    const base = props({ credentialConfigured: false }, vi.fn(async () => ({ ok: true, pendingOperationId: null, failure: null })))
+    render(<VoiceInput {...base} createRecording={createRecording} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    expect(await screen.findByText('failure.not-configured')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+
   it('refreshes after a refusal so the next attempt carries the discovered id', async () => {
     // A transient read failure leaves the gate unproven with no id. If the Host then
     // finds a readable record it refuses the null and reports the id; the control must

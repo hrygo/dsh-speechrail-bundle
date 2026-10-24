@@ -36,7 +36,7 @@
 不要手工替代）：
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.0/hrygo-dsh-speechrail-bundle-0.1.0.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
 ```
 
 用本地 checkout 也可以（`target: <packages/speechrail-input 的路径>`）。随后在设置页填写地址与凭据引用。

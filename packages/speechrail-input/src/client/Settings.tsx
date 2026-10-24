@@ -29,19 +29,34 @@ const buttonStyle: CSSProperties = {
   color: 'inherit', cursor: 'pointer',
 }
 
+/**
+ * Keep the persisted budget inside the range the Host schema accepts.
+ *
+ * The field is free text while it is being edited, so an empty or out-of-range value
+ * could otherwise be written: `settings.write` re-validates shape and volatility, not
+ * `min`/`max`, and a zero timeout aborts every later request immediately.
+ * @param text - the raw field value.
+ * @returns a value within [MIN_REQUEST_TIMEOUT_MS, MAX_REQUEST_TIMEOUT_MS].
+ */
+function clampBudget(text: string): number {
+  const parsed = Number(text)
+  if (!Number.isFinite(parsed) || text.trim() === '') return MIN_REQUEST_TIMEOUT_MS
+  return Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, Math.round(parsed)))
+}
+
 /** Render status, editable language and budget, and the probe result. */
 export function SpeechRailSettings({ t, status, check, configure, acknowledge }: SpeechRailSettingsProps) {
   const [view, setView] = useState<SpeechRailInputStatus | undefined>(undefined)
   const [checked, setChecked] = useState<SpeechRailCheckResult | undefined>(undefined)
   const [language, setLanguage] = useState<SpeechRailLanguageMode>('auto')
-  const [budget, setBudget] = useState(MIN_REQUEST_TIMEOUT_MS)
+  const [budgetText, setBudgetText] = useState(String(MIN_REQUEST_TIMEOUT_MS))
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
   const adopt = (next: SpeechRailInputStatus): void => {
     setView(next)
     setLanguage(next.language)
-    setBudget(next.requestTimeoutMs)
+    setBudgetText(String(next.requestTimeoutMs))
   }
 
   const failureText = (failure: SpeechRailFailure): string => {
@@ -79,7 +94,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     setBusy(true)
     setNote('')
     try {
-      const result = await configure({ language, requestTimeoutMs: budget, expectedRevision: view.revision })
+      const timeout = clampBudget(budgetText)
+      setBudgetText(String(timeout))
+      const result = await configure({ language, requestTimeoutMs: timeout, expectedRevision: view.revision })
       if (result.ok) {
         adopt(await status())
         setNote(t('settings.saved'))
@@ -111,6 +128,12 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         return
       }
       adopt(await status())
+      if (result.pendingOperationId !== null) {
+        // The Host accepted the request but something still holds the gate, so claiming
+        // success here would be false.
+        setNote(t('gateBusy'))
+        return
+      }
       setNote(t('acknowledged'))
     } catch {
       setNote(t('failure.internal'))
@@ -179,8 +202,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           min={MIN_REQUEST_TIMEOUT_MS}
           max={MAX_REQUEST_TIMEOUT_MS}
           step={1000}
-          value={budget}
-          onChange={(event) => { setBudget(Number(event.currentTarget.value)) }}
+          value={budgetText}
+          onChange={(event) => { setBudgetText(event.currentTarget.value) }}
+          onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
           style={{ ...valueStyle, width: 120 }}
         />
       </div>
@@ -200,7 +224,13 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         )}
       </div>
       <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.transcriptionStatus', { state: view?.capabilities?.transcriptionSupported === true ? t('settings.available') : t('settings.unsupported') })}</span>
+        <span style={labelStyle}>{t('settings.transcriptionStatus', {
+          state: capabilities === null || capabilities === undefined
+            ? t('settings.never')
+            : capabilities.transcriptionSupported
+              ? t('settings.available')
+              : t('settings.unsupported'),
+        })}</span>
         <span style={valueStyle}>
           {capabilities === null || capabilities === undefined
             ? t('settings.never')
@@ -216,7 +246,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       </div>
       <div style={rowStyle}>
         <span style={labelStyle}>
-          {checked === undefined
+          {checked === undefined || checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid'
+            // A check that never reached the service must not be reported as a failed
+            // connection to a healthy one.
             ? t('settings.lastCheck', { time: view?.checkedAt ?? t('settings.never') })
             : `${checked.reachable ? t('settings.connected') : t('settings.unreachable')} · ${t('settings.authentication', {
               state: checked.authenticated ? t('settings.authOk') : t('settings.authFailed'),

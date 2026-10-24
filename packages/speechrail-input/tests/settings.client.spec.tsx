@@ -1,0 +1,142 @@
+/**
+ * Settings page behaviour under jsdom.
+ *
+ * Two writes here can mislead the user rather than merely annoy: acknowledging an
+ * unproven outcome that is still outstanding, and persisting a request budget outside
+ * the accepted range (a zero timeout aborts every later request immediately).
+ */
+
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SpeechRailSettings, type SpeechRailSettingsProps } from '../src/client/Settings.tsx'
+import { MIN_REQUEST_TIMEOUT_MS } from '../src/contracts.ts'
+import { failure } from '../src/host/failure.ts'
+import type {
+  SpeechRailAcknowledgeRequest,
+  SpeechRailAcknowledgeResult,
+  SpeechRailCheckResult,
+  SpeechRailConfigureRequest,
+  SpeechRailInputStatus,
+} from '../src/types.ts'
+
+afterEach(() => { cleanup() })
+
+const STATUS: SpeechRailInputStatus = {
+  baseUrl: 'http://127.0.0.1:8201/v1',
+  endpointProblem: null,
+  model: '',
+  credentialRef: 'SPEECHRAIL_API_KEY',
+  credentialConfigured: false,
+  language: 'auto',
+  languageOptions: ['auto'],
+  requestTimeoutMs: 150_000,
+  limits: { maxUploadBytes: 4_194_304, maxAudioSeconds: 120 },
+  gate: 'ready',
+  pendingOperationId: null,
+  capabilities: null,
+  checkedAt: null,
+  revision: 1,
+}
+
+/** Keeps interpolation visible, so a label's arguments can be asserted. */
+const t = (key: string, values?: Record<string, unknown>): string => (
+  values === undefined ? key : `${key}:${JSON.stringify(values)}`
+)
+
+/** Props with the injected face replaced by stubs. */
+function props(
+  overrides: Partial<SpeechRailInputStatus>,
+  handlers: {
+    readonly acknowledge?: (request: SpeechRailAcknowledgeRequest) => Promise<SpeechRailAcknowledgeResult>
+    readonly configure?: (request: SpeechRailConfigureRequest) => Promise<{ ok: boolean; revision: number; failure: null }>
+    readonly check?: () => Promise<SpeechRailCheckResult>
+  } = {},
+): SpeechRailSettingsProps {
+  return {
+    t,
+    status: async () => ({ ...STATUS, ...overrides }),
+    check: handlers.check ?? (async () => ({ reachable: true, authenticated: true, capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' })),
+    configure: handlers.configure ?? (async () => ({ ok: true, revision: 1, failure: null })),
+    acknowledge: handlers.acknowledge ?? (async () => ({ ok: true, pendingOperationId: null, failure: null })),
+  } as unknown as SpeechRailSettingsProps
+}
+
+describe('SpeechRailSettings acknowledge', () => {
+  it('does not claim success while an operation still holds the gate', async () => {
+    const acknowledge = vi.fn(async () => ({ ok: true, pendingOperationId: 'op_bbbbbbbb', failure: null }))
+    render(<SpeechRailSettings {...props({ gate: 'unknown', pendingOperationId: 'op_bbbbbbbb' }, { acknowledge })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: 'op_bbbbbbbb' }) })
+    expect(await screen.findByText('gateBusy')).toBeTruthy()
+    expect(screen.queryByText('acknowledged')).toBeNull()
+  })
+
+  it('reports success once nothing is outstanding', async () => {
+    const acknowledge = vi.fn(async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    render(<SpeechRailSettings {...props({ gate: 'unknown', pendingOperationId: 'op_cccccccc' }, { acknowledge })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    expect(await screen.findByText('acknowledged')).toBeTruthy()
+  })
+})
+
+describe('SpeechRailSettings budget', () => {
+  it('clamps a value typed but not yet blurred before writing', async () => {
+    // Clicking Save moves focus, but a commit that arrives before the blur must not be
+    // able to persist a zero timeout, which would abort every later request at once.
+    const configure = vi.fn(async () => ({ ok: true, revision: 1, failure: null }))
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} />)
+
+    const field = await screen.findByRole('spinbutton')
+    fireEvent.change(field, { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, expectedRevision: 1 })
+    })
+  })
+
+  it('clamps an emptied field to the accepted minimum before writing', async () => {
+    const configure = vi.fn(async () => ({ ok: true, revision: 1, failure: null }))
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} />)
+
+    const field = await screen.findByRole('spinbutton')
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, expectedRevision: 1 })
+    })
+  })
+})
+
+describe('SpeechRailSettings check result', () => {
+  it('does not report a failed connection for a check that never left the host', async () => {
+    const check = vi.fn(async () => ({
+      reachable: false,
+      authenticated: false,
+      capabilities: null,
+      failure: failure('not-configured'),
+      checkedAt: '2026-10-23T12:00:00.000Z',
+    }))
+    render(<SpeechRailSettings {...props({}, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(check).toHaveBeenCalled() })
+    expect(screen.queryByText((content) => content.includes('settings.unreachable'))).toBeNull()
+    expect(screen.getByText((content) => content.includes('settings.lastCheck'))).toBeTruthy()
+  })
+})
+
+describe('SpeechRailSettings capability label', () => {
+  it('states nothing about a capability that was never determined', async () => {
+    render(<SpeechRailSettings {...props({ capabilities: null })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeTruthy()
+    })
+    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.unsupported"}')).toBeNull()
+  })
+})

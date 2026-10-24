@@ -219,6 +219,9 @@ export function VoiceInput({
     if (snapshot.endpointProblem !== null) { feedback(t('failure.endpoint-invalid')); return }
     if (snapshot.gate === 'unknown') { feedback(t('gateUnknown')); return }
     if (snapshot.gate === 'busy') { feedback(t('gateBusy')); return }
+    // Without a credential every upload is refused, so say so before the microphone is
+    // opened rather than after a full dictation.
+    if (!snapshot.credentialConfigured) { feedback(t('failure.not-configured')); return }
     const capture = createRecording()
     const active: Active = {
       capture, abort: new AbortController(), span: inputActions.captureInsertion(),
@@ -303,7 +306,9 @@ export function VoiceInput({
           // recovery, and another plugin holding the composer must not trap the gate.
           <button type="button" style={inlineStyle} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
         )}
-        {message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
+        {message !== ''
+          ? <span role="status" style={messageStyle} title={message}>{message}</span>
+          : view?.gate === 'unknown' && <span role="status" style={messageStyle} title={t('gateUnknown')}>{t('gateUnknown')}</span>}
       </div>
     )
   }
@@ -315,7 +320,13 @@ export function VoiceInput({
         ? <Waveform recording={current.current?.capture} label={t('recording')} />
         : (
           <span role="status" style={messageStyle} title={pending === '' ? message : pending}>
-            {phase === 'feedback' ? message : t(phase === 'transcribing' ? 'transcribingShort' : 'requesting')}
+            {phase === 'feedback'
+              ? message
+              : phase === 'transcribing'
+                ? t('transcribingShort')
+                : phase === 'checking'
+                  ? t('checking')
+                  : t('requesting')}
           </span>
         )}
       {phase === 'recording' && (
