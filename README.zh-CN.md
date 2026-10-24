@@ -72,7 +72,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 ```bash
 pnpm install
 pnpm verify     # 基线校验 → Typert 生成 → 双面类型检查 → 构建 → 测试
-pnpm test       # host 与 client 单元测试（165 项，全部 mock 或合成音频）
+pnpm test       # host 与 client 单元测试（167 项，全部 mock 或合成音频）
 ```
 
 `pnpm verify` 还会按 [baseline.json](upstream/baseline.json) 与固定上游 commit 复核快照。仓库内任何命令都不
