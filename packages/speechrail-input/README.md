@@ -24,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.8/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.9/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.

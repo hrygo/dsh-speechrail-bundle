@@ -110,10 +110,15 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
       const options = { httpStatus: status }
       finish({
         ok: false,
-        failure: !wrote
-          ? failure(code, options)
-          : status !== null && provesNotProcessed(status)
-            ? failureForStatus(status, null, null, null)
+        // An arrived refusal outranks the transport code and the `wrote` bookkeeping: a service that
+        // checks the authorization header answers 401 without waiting for a body it may still be
+        // receiving, and reporting `unreachable` beside an answered status would be plainly false.
+        // (This branch is argued rather than measured: on loopback the body write always finished
+        // before a 401 arrived, in every attempt. The rule is what has to be right if it ever fires.)
+        failure: status !== null && provesNotProcessed(status)
+          ? failureForStatus(status, null, null, null)
+          : !wrote
+            ? failure(code, options)
             : unknownFailure(code, options),
       })
     }
