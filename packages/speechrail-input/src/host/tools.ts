@@ -131,6 +131,10 @@ export interface StatusToolValue {
   readonly authenticated: SpeechRailAuthentication
   /** Failure code of the probe in this call, or an empty string. */
   readonly failureCode: string
+  /** Failure code of the most recent upload, or an empty string when the last one succeeded. */
+  readonly lastFailureCode: string
+  /** HTTP status that upload received, or 0 when nothing answered. */
+  readonly lastFailureHttpStatus: number
 }
 
 /** Canonical output schema, matching `defineTool`'s compiled form. */
@@ -166,11 +170,17 @@ const OUTPUT_SCHEMA = {
       description: 'What the probe proved about the credential: `accepted` only after a 200, `refused` after a 401/403, `unverified` when nothing judged it.',
     },
     failureCode: { type: 'string', description: 'Probe failure code in this call, or an empty string.' },
+    lastFailureCode: {
+      type: 'string',
+      description: 'Failure code of the most recent upload, or an empty string when the last one succeeded. This is why the gate is closed, when it is.',
+    },
+    lastFailureHttpStatus: { type: 'number', description: 'HTTP status that upload received, or 0 when nothing answered.' },
   },
   required: [
     'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'languageHint',
     'languageOptions', 'transcriptionSupport', 'gate', 'pendingOperationId', 'maxUploadBytes',
     'maxAudioSeconds', 'probed', 'reachable', 'authenticated', 'failureCode',
+    'lastFailureCode', 'lastFailureHttpStatus',
   ],
 } as const
 
@@ -226,6 +236,8 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
         reachable: check?.reachable ?? false,
         authenticated: check?.authenticated ?? 'unverified',
         failureCode: check?.failure?.code ?? '',
+        lastFailureCode: view.lastFailure?.code ?? '',
+        lastFailureHttpStatus: view.lastFailure?.httpStatus ?? 0,
       }
     },
   }
@@ -269,6 +281,13 @@ export function describeStatus(value: StatusToolValue): string {
   }
   parts.push(`gate ${value.gate}`)
   if (value.pendingOperationId !== '') parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)
+  // The cause, not only the action: a closed gate says an upload is unaccounted for, and without this
+  // the reader has to guess what the service did.
+  if (value.pendingOperationId !== '' && value.lastFailureCode !== '') {
+    parts.push(value.lastFailureHttpStatus === 0
+      ? `that attempt failed with ${value.lastFailureCode} before a response arrived`
+      : `that attempt failed with ${value.lastFailureCode} (HTTP ${String(value.lastFailureHttpStatus)})`)
+  }
   parts.push(`limits ${String(value.maxUploadBytes)} bytes / ${String(value.maxAudioSeconds)}s`)
   return parts.join('; ')
 }

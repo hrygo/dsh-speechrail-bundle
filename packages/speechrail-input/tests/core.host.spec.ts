@@ -797,6 +797,39 @@ describe('unproven outcomes', () => {
     expect((await h.core.transcribe(payload('op_nnnnnnnn'))).ok).toBe(true)
   })
 
+  it('keeps the cause of the closed gate it reports', async () => {
+    // The journal keeps the operation id and nothing else, so a report of a closed gate cannot say why
+    // it is closed unless the last outcome is kept. A success clears it; a refusal that never reached
+    // the wire sets it too, because that is equally the reason the next attempt is blocked.
+    const h = harness()
+    expect((await h.core.status()).lastFailure).toBe(null)
+
+    h.fail = { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' }
+    await h.core.transcribe(payload('op_llllllll'))
+    const closed = await h.core.status()
+    expect(closed.gate).toBe('unknown')
+    expect(closed.lastFailure?.code).toBe('server-error')
+    expect(closed.lastFailure?.httpStatus).toBe(502)
+    expect(closed.lastFailure?.outcome).toBe('unknown')
+
+    await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_llllllll' }))
+    h.fail = null
+    expect((await h.core.transcribe(payload('op_nnnnnnnn'))).ok).toBe(true)
+    expect((await h.core.status()).lastFailure).toBe(null)
+  })
+
+  it('reports the cause of a refusal that never left the host', async () => {
+    // A locally refused take (here: one over the snapshot's byte limit) also closes nothing and sends
+    // nothing, and the report still names it rather than leaving the last upload unexplained.
+    const h = harness()
+    const oversized = `{"operationId":"op_12345678","audioBase64":"${'A'.repeat(TRANSCRIBE_PAYLOAD_MAX_BYTES)}"}`
+    await h.core.transcribe(oversized)
+    const status = await h.core.status()
+    expect(status.lastFailure?.code).toBe('audio-too-large')
+    expect(status.gate).toBe('ready')
+    expect(h.sends).toHaveLength(0)
+  })
+
   it('keeps the gate closed when the acknowledgement cannot be persisted', async () => {
     const h = harness()
     h.fail = { code: 'cancelled', httpStatus: null, retryable: false, requestId: null, outcome: 'unknown' }

@@ -341,6 +341,13 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
 
+## 2026-10-24 决定记录（0.5.0：关着的门要说得出为什么）
+
+- **agent 侧缺口（客户端已经会说、工具却说不出）。** 门因"未证明"关闭时，客户端会连同失败细节一起告知（0.3.0 修的那处），而 `speechrail_input_status` 只能报 `gate unknown; awaiting acknowledgement of op_x`——**动作有了、原因没有**，模型只能让用户去猜服务做了什么。journal 按设计只存不敏感的 operation id，所以原因无处可读：现在宿主在内存里保留**最近一次上传的失败**（`SpeechRailInputStatus.lastFailure`），工具以两个平铺字段（`lastFailureCode` / `lastFailureHttpStatus`）过界，仅当门确实关着时渲染成 "that attempt failed with server-error (HTTP 502)"，没有响应到达时则说 "before a response arrived"，不编造状态码。成功会清空它；**本机拒绝**（如超载体）同样记录，因为那也正是下一次被挡的原因。内存态：宿主重启会忘记原因，而它描述的 journal 记录仍在——这是取舍，写在类型注释里。
+- 新增 `lastFailure` 是**加性契约变化**（状态 +1 字段、工具 +2 字段），故记 0.5.0；边界 schema 由 Typert 构建期生成，`pnpm verify` 会重新生成（只跑单测会看到旧的 16 字段，这是我这轮踩到的坑）。
+- **核查为正确、无需改动**：客户端副作用清理（`VoiceInput` 三个监听器全部 `removeEventListener`、定时器全部 `clearTimeout`；`Waveform` 的 `setInterval` 有 `clearInterval`；`Settings` 仅挂载时读一次）；插件生命周期（工具经 `ctx.effect(() => registry.register(...))` 注册，随作用域回收；`inject` 把 settings/storage/Remote 保持可选，缺基础设施时仍能加载并说明不能录音）；`protocol/wave.ts` 的格式检查是**精确等值**（采样率/位深/声道/byteRate 全等），因此不存在"0 采样率 → NaN 秒数绕过时长上限"的通道，长度一致性（RIFF 大小、data 大小、偶数样本）也都严格。
+- **刻意取舍：录音到上限时的静默截断。** `Recording.stop()` 用 `Math.min(decoded.duration, maxDurationSeconds)` 截断到上限；正常情况下走不到这一步，因为客户端在 `maxAudioSeconds * 1000` 处**自动停止**录音、切到后台则直接取消，所以截断只会吃掉定时器抖动的那几毫秒（音频已在上限之内）。不为它新增提示界面：一是不改用户文本、二是不为"上限就是上限"这种必然结果造新表面，代价与收益不成比例。若将来把上限调高到用户容易说满的长度，再补一个成功后的提示。
+
 ## 2026-10-24 决定记录（0.4.0：向真实服务量，而不是推断；对账；声明版本全部实测）
 
 - **拿真实服务量。** 对 `/v1/audio/transcriptions` 做了三次**零推理**探测（错误凭据 + 1 字节正文、正确凭据 + 非音频正文、读它的 OpenAPI），得到可复核的事实：OpenAPI 声明该端点响应集为 **400/401/413/422/429/502/503**；错误凭据得到 `401` + `{"error":{"code":"invalid_api_key","request_id":"req_…","retryable":false}}`（鉴权先于任何音频处理）；非音频正文得到 **`422` + `code:"audio_decode_failed"`**（`retryable:false`）。

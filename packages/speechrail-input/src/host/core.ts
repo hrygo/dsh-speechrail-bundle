@@ -250,6 +250,7 @@ function decodeValidatedBase64(value: string): Uint8Array | null {
 
 /** The engine that owns the gate, the cache and the operation lifecycle. */
 export class SpeechRailInputCore {
+  private lastFailure: SpeechRailFailure | null = null
   private gateState: SpeechRailGateState = 'ready'
   private pendingOperationId: string | null = null
   private capabilities: SpeechRailCapabilitiesView | null = null
@@ -350,6 +351,7 @@ export class SpeechRailInputCore {
       limits: this.capabilities?.limits ?? DEFAULT_LIMITS,
       gate: this.gateState,
       pendingOperationId: this.pendingOperationId,
+      lastFailure: this.lastFailure,
       capabilities,
       checkedAt: this.checkedAt,
       revision: this.deps.settingsRevision() ?? 0,
@@ -498,6 +500,22 @@ export class SpeechRailInputCore {
    * @returns the transcript, or a sanitized failure.
    */
   async transcribe(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
+    const result = await this.attempt(text, signal)
+    // One place records the outcome of every upload, including the refusals that never reach the
+    // wire, so a report can name the cause of the gate the next status call shows.
+    this.lastFailure = result.ok ? null : result.failure
+    return result
+  }
+
+  /**
+   * Run one upload attempt without recording its outcome.
+   *
+   * Split from {@link transcribe} so the recording happens exactly once, whatever this returns.
+   * @param text - JSON carrier text of a {@link SpeechRailTranscribeRequest}.
+   * @param signal - caller cancellation.
+   * @returns the transcript, or a sanitized failure.
+   */
+  private async attempt(text: string, signal?: AbortSignal | undefined): Promise<SpeechRailTranscriptionResult> {
     // A parser that throws would surface as a Remote-level error the page cannot localize, and the
     // one input large enough to do it is a long recording - which is exactly a case the user needs
     // explained rather than a stack trace. The scan above removed the known cause; this keeps any

@@ -86,7 +86,7 @@ describe('generated Remote contribution', () => {
     const manifest = (contribution.methods as unknown as Record<string, StatusManifest | undefined>)['speechrailInput/status']
     if (manifest === undefined) throw new Error('the status method is part of the contribution')
     const schema = manifest.result.spec.jsonSchema
-    expect(Object.keys(schema.properties)).toHaveLength(16)
+    expect(Object.keys(schema.properties)).toHaveLength(17)
     expect(schema.required).toContain('languageHint')
     expect(schema.required).toContain('transcriptionSupport')
     expect(schema.required).toContain('languageOptions')

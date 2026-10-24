@@ -30,6 +30,7 @@ const STATUS: SpeechRailInputStatus = {
   limits: { maxUploadBytes: 4_194_304, maxAudioSeconds: 120 },
   gate: 'ready',
   pendingOperationId: null,
+  lastFailure: null,
   capabilities: null,
   checkedAt: null,
   revision: 1,
