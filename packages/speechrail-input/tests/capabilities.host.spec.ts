@@ -108,6 +108,21 @@ describe('projectCapabilities', () => {
     expect(view?.languages).toEqual({ status: 'supported', values: ['zh', 'en-us'] })
   })
 
+  it('refuses a language token longer than any real tag', () => {
+    // The token shape admits any number of subtags, so it cannot bound the token on its own: without a
+    // length cap a service could put a huge string into a selector entry and into the tool's report.
+    const long = `zh${'-ab'.repeat(20)}`
+    const at23 = `zh${'-ab'.repeat(7)}`
+    const view = projectCapabilities(snapshot({
+      ...SUPPORTED,
+      languages: { status: 'supported', values: ['zh-Hans-CN', 'sr-Latn-RS', 'pt-BR', at23, long] },
+    }))
+    expect(view?.languages).toEqual({
+      status: 'supported',
+      values: ['zh-hans-cn', 'sr-latn-rs', 'pt-br', at23],
+    })
+  })
+
   it('accepts only the language modes this package can send', () => {
     const view = projectCapabilities(snapshot({ ...SUPPORTED, languages: { status: 'supported', values: ['ja'] } }))
     expect(languageOptionsFor(view)).toEqual(['auto'])

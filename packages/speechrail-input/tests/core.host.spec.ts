@@ -828,6 +828,44 @@ describe('unproven outcomes', () => {
     expect((await h.core.status()).unprovenFailure).toBe(null)
   })
 
+  it('does not hand the cause of an earlier attempt to a gate reopened on a new one', async () => {
+    // A's 502 is the cause while A holds the gate. Once acknowledged, a later attempt is refused
+    // locally and its own settle cannot complete, so the gate reopens on *that* operation - and the
+    // host knows nothing about why. Reporting A's failure there would name the wrong attempt.
+    const h = harness()
+    h.fail = { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' }
+    await h.core.transcribe(payload('op_llllllll'))
+    expect((await h.core.status()).unprovenFailure?.code).toBe('server-error')
+
+    await h.core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_llllllll' }))
+
+    // A refused endpoint is a local refusal that happens after the claim; a journal that refuses to
+    // clear keeps the new operation unresolved.
+    h.fail = null
+    h.config = { ...CONFIG, endpointRefusal: 'not-loopback' }
+    h.clearFails = true
+    const refused = await h.core.transcribe(payload('op_mmmmmmmm'))
+    expect(refused.failure?.code).toBe('endpoint-invalid')
+    expect(h.sends).toHaveLength(1)
+
+    const reopened = await h.core.status()
+    expect(reopened.gate).toBe('unknown')
+    expect(reopened.pendingOperationId).toBe('op_mmmmmmmm')
+    expect(reopened.unprovenFailure).toBe(null)
+  })
+
+  it('carries no cause when the restored gate holds no operation id', async () => {
+    // A record that cannot be read closes the gate without an id: there is no attempt to attribute a
+    // cause to, so a report must not carry one (the tool renders the cause alone when it is present).
+    const h = harness({ pending: null })
+    h.readFails = true
+    await h.core.restore()
+    const status = await h.core.status()
+    expect(status.gate).toBe('unknown')
+    expect(status.pendingOperationId).toBe(null)
+    expect(status.unprovenFailure).toBe(null)
+  })
+
   it('keeps the gate closed when the acknowledgement cannot be persisted', async () => {
     const h = harness()
     h.fail = { code: 'cancelled', httpStatus: null, retryable: false, requestId: null, outcome: 'unknown' }

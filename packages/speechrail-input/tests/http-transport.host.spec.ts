@@ -390,6 +390,33 @@ describe('capability probe', () => {
     }
   })
 
+  it('fails closed when the transfer-encoding carries a tab Node did not de-chunk', async () => {
+    // A tab is legal optional whitespace, and Node *reports* the value trimmed while deciding framing
+    // on the untrimmed bytes: `chunked\t` arrives close-delimited but reads as chunked. Treating it as
+    // framed settles an unproven outcome - and this one clears the journal and opens the gate.
+    for (const spelling of ['chunked\t', 'chunked\t ', 'chunked \t']) {
+      const sockets = new Set<Socket>()
+      const server = createSocketServer((socket) => {
+        sockets.add(socket)
+        socket.on('close', () => { sockets.delete(socket) })
+        socket.on('data', () => { /* swallow the upload */ })
+        socket.end(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ntransfer-encoding: ${spelling}\r\n\r\n{"detail":"nope"}`)
+      })
+      await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+      try {
+        const port = (server.address() as AddressInfo).port
+        const outcome = await transcribe({ baseUrl: `http://127.0.0.1:${port}/v1`, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 5_000 })
+        expect(outcome.ok, spelling).toBe(false)
+        if (outcome.ok) throw new Error('unreachable')
+        expect(outcome.failure.code, spelling).toBe('malformed-response')
+        expect(outcome.failure.outcome, spelling).toBe('unknown')
+      } finally {
+        for (const socket of sockets) socket.destroy()
+        await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+      }
+    }
+  })
+
   it('does not let a transfer-encoding that merely contains "chunked" claim framing', async () => {
     // `notchunked`, `xchunked` and `chunked-fake` are not chunked: Node does not de-chunk them, so the
     // body still ends at the close. A substring test would settle an outcome the service never
@@ -415,9 +442,12 @@ describe('capability probe', () => {
     }
   })
 
-  it('settles a decorated chunked reply whose final coding is chunked', async () => {
-    // `gzip, chunked` is chunked-framed: the final coding decides, and the body really does carry a
-    // chunked terminator here.
+  it('keeps a chunked reply unproven, because its framing cannot be proven', async () => {
+    // The body really is chunked-framed here (`gzip, chunked` plus a terminator), but Node reports the
+    // header value trimmed while deciding framing on the raw bytes: a legal `chunked\t` arrives
+    // close-delimited and reports the identical string, so no value test separates them. Believing a
+    // merely stated framing would settle this unusable body and clear the journal, so the reply stays
+    // unproven instead - the price of the conservative rule, recorded as a trade-off.
     const body = '{"detail":"nope"}'
     const sockets = new Set<Socket>()
     const server = createSocketServer((socket) => {
@@ -433,7 +463,7 @@ describe('capability probe', () => {
       expect(outcome.ok).toBe(false)
       if (outcome.ok) throw new Error('unreachable')
       expect(outcome.failure.code).toBe('malformed-response')
-      expect(outcome.failure.outcome).toBe('failed')
+      expect(outcome.failure.outcome).toBe('unknown')
     } finally {
       for (const socket of sockets) socket.destroy()
       await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
@@ -498,13 +528,13 @@ describe('capability probe', () => {
     expect(outcome.failure.outcome).toBe('unknown')
   })
 
-  it('settles a framed 200 whose body is unusable', async () => {
-    // The other half of the framing rule, and the reason it needs a length: a reply that says where
-    // its body ends proves the service finished, so an unusable body is a failed transcription rather
-    // than an unknown one. Node frames this reply with chunked encoding.
+  it('settles a length-framed 200 whose body is unusable', async () => {
+    // The other half of the framing rule: a reply that states its own length proves the service
+    // finished, so an unusable body is a failed transcription rather than an unknown one.
     const server = await start((_request, response) => {
-      response.writeHead(200, { 'content-type': 'application/json' })
-      response.end('{"detail":"nope"}')
+      const body = '{"detail":"nope"}'
+      response.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) })
+      response.end(body)
     })
     const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 2_000 })
     expect(outcome.ok).toBe(false)
@@ -536,6 +566,21 @@ describe('capability probe', () => {
       for (const socket of sockets) socket.destroy()
       await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     }
+  })
+
+  it('keeps a chunked 200 with an unusable body unproven', async () => {
+    // A server that sets no length frames this reply with chunks, and the body really is complete -
+    // but that completeness is not provable from what Node reports (see the decorated-chunked case),
+    // so the outcome stays unproven and the gate stays closed until it is acknowledged.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end('{"detail":"nope"}')
+    })
+    const outcome = await transcribe({ baseUrl: server.baseUrl, model: '', language: null, credential: SECRET, audio: AUDIO, timeoutMs: 2_000 })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error('unreachable')
+    expect(outcome.failure.code).toBe('malformed-response')
+    expect(outcome.failure.outcome).toBe('unknown')
   })
 
   it('keeps a transfer-encoding that is not chunked unframed', async () => {

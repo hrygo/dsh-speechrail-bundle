@@ -7,10 +7,11 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { STATUS_TOOL_NAME, describeStatus, createStatusTool, type StatusToolSource, type StatusToolValue } from '../src/host/tools.ts'
+import { encodeWave } from '../src/protocol/wave.ts'
 import { failure } from '../src/host/failure.ts'
 import { SpeechRailInputCore } from '../src/host/core.ts'
 import { memoryJournal } from '../src/host/journal.ts'
-import type { SpeechRailCheckResult, SpeechRailInputStatus } from '../src/types.ts'
+import type { SpeechRailCheckResult, SpeechRailFailure, SpeechRailInputStatus } from '../src/types.ts'
 
 const STATUS: SpeechRailInputStatus = {
   baseUrl: 'http://127.0.0.1:8201/v1',
@@ -277,9 +278,37 @@ describe('speechrail_input_status', () => {
     // A failure that never got an answer says so instead of inventing a status.
     expect(describeStatus({ ...base, unprovenFailureCode: 'timeout', unprovenFailureHttpStatus: 0 }))
       .toContain('that attempt failed with timeout before a response arrived')
-    // An open gate has nothing to explain, even when an earlier attempt failed.
-    expect(describeStatus({ ...base, gate: 'ready', pendingOperationId: '' }))
+    // Nothing is claimed when the status carries no cause: an open gate reports none, and neither does
+    // a gate reopened on an operation whose own failure the host does not know.
+    expect(describeStatus({ ...base, unprovenFailureCode: '', unprovenFailureHttpStatus: 0 }))
       .not.toContain('that attempt failed')
+  })
+
+  it('does not call a live upload an awaited acknowledgement', () => {
+    // A busy gate holds an operation id too. Calling it "awaiting acknowledgement" would tell the
+    // reader to clear an upload that is still in flight.
+    const busy: StatusToolValue = {
+      credentialConfigured: true,
+      endpoint: 'http://127.0.0.1:8201/v1',
+      endpointProblem: '',
+      model: '',
+      language: 'auto',
+      languageHint: '',
+      languageOptions: [],
+      transcriptionSupport: 'unknown',
+      gate: 'busy',
+      pendingOperationId: 'op_llllllll',
+      maxUploadBytes: 4_194_304,
+      maxAudioSeconds: 120,
+      probed: false,
+      reachable: false,
+      authenticated: 'unverified',
+      failureCode: '',
+      unprovenFailureCode: '',
+      unprovenFailureHttpStatus: 0,
+    }
+    expect(describeStatus(busy)).toContain('gate busy')
+    expect(describeStatus(busy)).not.toContain('awaiting acknowledgement')
   })
 
   it('separates a refused credential from another reachable failure', () => {
@@ -310,5 +339,54 @@ describe('speechrail_input_status', () => {
     expect(failed).toContain('not accepting the request')
     expect(failed).not.toContain('authorized')
     expect(failed).not.toContain('rejecting the credential')
+  })
+})
+
+describe('SpeechRail status tool over a real core', () => {
+  it('carries the gate cause from the status into both flat fields', async () => {
+    // The mapping matters and was only ever hand-built before: a value with a hardwired '' would have
+    // passed the whole suite while the agent saw no cause at all.
+    const unknownFailure: SpeechRailFailure = {
+      code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown',
+    }
+    const core = new SpeechRailInputCore({
+      now: () => new Date('2026-10-23T12:00:00.000Z'),
+      config: () => ({ baseUrl: 'http://127.0.0.1:8201/v1', endpointRefusal: null, credentialRef: 'SPEECHRAIL_API_KEY', model: '', language: 'auto', requestTimeoutMs: 150_000 }),
+      resolveCredential: async () => 'secret',
+      journal: memoryJournal(),
+      transcribe: async () => ({ ok: false, failure: unknownFailure }),
+      probe: async () => ({ ok: true, capabilities: null }),
+      settingsRevision: () => 1,
+      writeSettings: async () => 'ok',
+    })
+    const tool = createStatusTool(core)
+    const audioBase64 = Buffer.from(encodeWave(new Float32Array(1_600))).toString('base64')
+    const result = await core.transcribe(JSON.stringify({ operationId: 'op_aaaaaaaa', audioBase64 }))
+    expect(result.ok).toBe(false)
+
+    const value = await tool.execute({}) as StatusToolValue
+    expect(value.gate).toBe('unknown')
+    expect(value.pendingOperationId).toBe('op_aaaaaaaa')
+    expect(value.unprovenFailureCode).toBe('server-error')
+    expect(value.unprovenFailureHttpStatus).toBe(502)
+    expect(describeStatus(value)).toContain('that attempt failed with server-error (HTTP 502)')
+
+    // An attempt that settles (a refusal the service answered) records nothing: the gate stays open.
+    const settled = new SpeechRailInputCore({
+      now: () => new Date('2026-10-23T12:00:00.000Z'),
+      config: () => ({ baseUrl: 'http://127.0.0.1:8201/v1', endpointRefusal: null, credentialRef: 'SPEECHRAIL_API_KEY', model: '', language: 'auto', requestTimeoutMs: 150_000 }),
+      resolveCredential: async () => 'secret',
+      journal: memoryJournal(),
+      transcribe: async () => ({ ok: false, failure: failure('unauthorized') }),
+      probe: async () => ({ ok: true, capabilities: null }),
+      settingsRevision: () => 1,
+      writeSettings: async () => 'ok',
+    })
+    const settledTool = createStatusTool(settled)
+    await settled.transcribe(JSON.stringify({ operationId: 'op_bbbbbbbb', audioBase64 }))
+    const settledValue = await settledTool.execute({}) as StatusToolValue
+    expect(settledValue.gate).toBe('ready')
+    expect(settledValue.unprovenFailureCode).toBe('')
+    expect(settledValue.unprovenFailureHttpStatus).toBe(0)
   })
 })

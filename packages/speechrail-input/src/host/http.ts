@@ -32,11 +32,10 @@ export interface HttpSuccess {
   /** Response body, already byte-capped. */
   readonly body: Buffer
   /**
-   * Whether the response announced its own length (Content-Length or chunked encoding).
+   * Whether the response stated its own length, so its body is provably complete.
    *
-   * Without framing the body ends when the socket does, and a truncated body is indistinguishable
-   * from a complete one - so a 200 whose body cannot be used only proves the request ended when the
-   * service framed its reply.
+   * Without this the body ends when the socket does, and a reply cut mid-transcript cannot be told
+   * from a complete one. See {@link framingProof} for why only a stated length qualifies.
    */
   readonly framed: boolean
 }
@@ -88,16 +87,21 @@ export function unbracketHostname(hostname: string): string {
 }
 
 /**
- * Read the final transfer coding of a response.
+ * Whether this response proves where its body ends.
  *
- * Only `chunked` frames a body: any other final coding (`identity`, `gzip`) leaves the body delimited
- * by the close, and a substring test would let `notchunked` or `chunked-fake` claim a framing the
- * transport never provided.
- * @param value - raw header value, or undefined.
- * @returns the final coding, lowercased, or an empty string.
+ * Only a `Content-Length` proves it. A `Transfer-Encoding` statement cannot: Node *reports* header
+ * values trimmed while it decides framing on the raw bytes, so a legal `Transfer-Encoding: chunked\t`
+ * (HTAB is optional whitespace) is close-delimited here yet reported as exactly `chunked` - the same
+ * string a genuinely chunked reply reports, with `rawHeaders` trimmed too. There is therefore no value
+ * test that separates the two, and believing a merely *stated* framing is the dangerous direction: a
+ * truncated or unusable body would settle, clearing the journal and opening the gate for an outcome
+ * the service never confirmed. The price is that a complete chunked reply whose body is unusable stays
+ * unproven and needs an acknowledgement; measured, and recorded as a deliberate trade-off.
+ * @param response - the response whose body was received.
+ * @returns true only when the transport stated the body's length.
  */
-function finalCoding(value: unknown): string {
-  return String(value ?? '').split(',').pop()?.trim().toLowerCase() ?? ''
+function framingProof(response: IncomingMessage): boolean {
+  return response.headers['content-length'] !== undefined
 }
 
 export function performRequest(options: HttpRequestOptions): Promise<HttpResult> {
@@ -230,11 +234,9 @@ export function performRequest(options: HttpRequestOptions): Promise<HttpResult>
           ok: true,
           status: response.statusCode ?? 0,
           body: Buffer.concat(chunks),
-          // Framing means the reply says where its body ends. A length does; chunked encoding
-          // does; any other transfer-encoding token (identity, gzip) leaves the body delimited by
-          // the close, where a reply cut mid-transcript cannot be told from a complete one.
-          framed: response.headers['content-length'] !== undefined
-            || finalCoding(response.headers['transfer-encoding']) === 'chunked',
+          // Framing means the reply proves where its body ends; see framingProof for why only a
+          // stated length can prove it.
+          framed: framingProof(response),
         })
       })
       response.on('error', () => { transportFailure('unreachable') })

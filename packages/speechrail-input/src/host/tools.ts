@@ -280,10 +280,15 @@ export function describeStatus(value: StatusToolValue): string {
     parts.push('transcription support not stated')
   }
   parts.push(`gate ${value.gate}`)
-  if (value.pendingOperationId !== '') parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)
+  // Only a closed gate awaits acknowledgement: a live upload holds an id too, and calling it awaited
+  // would tell the reader to clear something that is still in flight.
+  if (value.gate === 'unknown' && value.pendingOperationId !== '') {
+    parts.push(`awaiting acknowledgement of ${value.pendingOperationId}`)
+  }
   // The cause, not only the action: a closed gate says an upload is unaccounted for, and without this
-  // the reader has to guess what the service did.
-  if (value.pendingOperationId !== '' && value.unprovenFailureCode !== '') {
+  // the reader has to guess what the service did. The status only reports a cause that belongs to the
+  // operation holding the gate, so this needs no second condition.
+  if (value.unprovenFailureCode !== '') {
     parts.push(value.unprovenFailureHttpStatus === 0
       ? `that attempt failed with ${value.unprovenFailureCode} before a response arrived`
       : `that attempt failed with ${value.unprovenFailureCode} (HTTP ${String(value.unprovenFailureHttpStatus)})`)

@@ -139,8 +139,8 @@ export interface SpeechRailInputStatus {
   /** Operation id blocking the gate, when one is recorded. */
   readonly pendingOperationId: string | null
   /**
-   * The failure that left an upload's outcome unproven, or null while the gate is open or nothing is
-   * unaccounted for.
+   * The failure that left the operation holding the gate unproven, or null while the gate is open, no
+   * operation is held, or the cause belongs to an earlier one.
    *
    * This is the one thing the gate cannot say about itself: the journal holds an operation id, and a
    * reader who is told "an earlier attempt is unconfirmed" cannot tell whether the service answered

@@ -9,8 +9,11 @@
  * check the schema against the registry, and an unsupported keyword would only
  * surface at runtime as a tool that never registers.
  *
- * This script closes that gap. It needs the package available, which is why it is
- * not part of `pnpm verify`:
+ * This script closes that gap. It runs inside `pnpm verify` as `--optional`: when the
+ * package resolves (any machine with the Harness installed) the real registry check
+ * runs, and when it does not, the run prints that it skipped instead of failing -
+ * nothing is enforced silently. Without `--optional` an unresolvable package is a
+ * failure, which is what a manual check wants.
  *
  *   pnpm --filter @hrygo/dsh-speechrail-bundle add -D @deepseek-ai/dsh-tools@0.2.1-rc.2
  *   pnpm --filter @hrygo/dsh-speechrail-bundle run build:host
@@ -27,7 +30,7 @@
  */
 
 import { pathToFileURL } from 'node:url'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -49,20 +52,73 @@ if (!existsSync(built)) {
   process.exit(2)
 }
 
-const override = process.argv[2]
+// `--optional` makes an unresolvable package a printed skip instead of a failure, so this can run
+// inside `pnpm verify` (which must pass on a machine that never installed the Harness) while the
+// machines that do have the package - the release machine - still check the real registry.
+const optional = process.argv.includes('--optional')
+/** Copies of the package that sit in this workspace's store without being importable by name. */
+function storedCopies() {
+  const store = join(root, 'node_modules/.pnpm')
+  if (!existsSync(store)) return []
+  return readdirSync(store)
+    .filter((entry) => entry.startsWith('@deepseek-ai+dsh-tools@'))
+    .sort()
+    .reverse()
+    .map((entry) => join(store, entry, 'node_modules/@deepseek-ai/dsh-tools/lib/index.js'))
+    .filter((candidate) => existsSync(candidate))
+}
+
+const override = process.argv.slice(2).find((argument) => argument !== '--optional')
+const candidates = override === undefined
+  ? ['@deepseek-ai/dsh-tools', ...storedCopies().map((path) => pathToFileURL(path).href)]
+  : [pathToFileURL(join(resolve(override), 'lib/index.js')).href]
 let assertion
 let compile
-try {
-  const specifier = override === undefined ? '@deepseek-ai/dsh-tools' : pathToFileURL(join(resolve(override), 'lib/index.js')).href
-  // Deliberately not the `({ name } = await import(x))` form: inside this module's
-  // top-level await, that form throws a spurious "Cannot access 'specifier' before
-  // initialization" on Node 26.
-  const loaded = await import(specifier)
-  assertion = loaded.assertSupportedJsonSchema
-  compile = loaded.defineTool
-} catch (error) {
-  console.error(`check-tool-schema: cannot load @deepseek-ai/dsh-tools (${error.message}); see the header of this file`)
+let loadedFrom = ''
+let loadError = null
+for (const specifier of candidates) {
+  try {
+    // Deliberately not the `({ name } = await import(x))` form: inside this module's
+    // top-level await, that form throws a spurious "Cannot access 'specifier' before
+    // initialization" on Node 26.
+    const loaded = await import(specifier)
+    assertion = loaded.assertSupportedJsonSchema
+    compile = loaded.defineTool
+    const resolved = specifier.startsWith('file:') ? specifier.slice(5) : import.meta.resolve(specifier)
+    loadedFrom = resolved.startsWith('file:') ? resolved.slice(5) : resolved
+    loadError = null
+    break
+  } catch (error) {
+    loadError = error
+  }
+}
+if (loadError !== null) {
+  if (optional) {
+    console.log(`check-tool-schema: skipped (no @deepseek-ai/dsh-tools resolvable: ${loadError.message})`)
+    process.exit(0)
+  }
+  console.error(`check-tool-schema: cannot load @deepseek-ai/dsh-tools (${loadError.message}); see the header of this file`)
   process.exit(2)
+}
+
+/** Version of the package that was actually checked, when it can be read. */
+function checkedVersion(entryPath) {
+  let directory = dirname(entryPath)
+  for (let depth = 0; depth < 4; depth += 1) {
+    const manifestPath = join(directory, 'package.json')
+    if (existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+        if (typeof manifest.version === 'string' && typeof manifest.name === 'string' && manifest.name === '@deepseek-ai/dsh-tools') {
+          return `${manifest.name}@${manifest.version}`
+        }
+      } catch {
+        // A manifest that cannot be read only costs the version in the report.
+      }
+    }
+    directory = dirname(directory)
+  }
+  return '@deepseek-ai/dsh-tools (version unreadable)'
 }
 
 const { createStatusTool } = await import(pathToFileURL(built).href)
@@ -113,4 +169,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log(`check-tool-schema: ${definition.name} matches defineTool's compiled shapes and is accepted by the registry assertion (${Object.keys(properties).length} output fields)`)
+console.log(`check-tool-schema: ${definition.name} matches ${checkedVersion(loadedFrom)} via defineTool's compiled shapes and is accepted by the registry assertion (${Object.keys(properties).length} output fields)`)

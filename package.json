@@ -16,10 +16,11 @@
     "test:client": "pnpm gen:typert && vitest run --project client",
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "verify:baseline": "python3 tools/verify-upstream.py --git",
-    "verify": "pnpm verify:baseline && pnpm build && pnpm check:journal && pnpm check:release && pnpm test",
+    "verify": "pnpm verify:baseline && pnpm build && pnpm check:journal && pnpm check:release && pnpm check:tool-schema && pnpm test",
     "check:journal": "node tools/check-journal-unit.mjs",
-    "verify:ci": "python3 tools/verify-upstream.py && pnpm build && pnpm check:journal && pnpm check:release && pnpm test",
-    "check:release": "node tools/check-release-consistency.mjs"
+    "verify:ci": "python3 tools/verify-upstream.py && pnpm build && pnpm check:journal && pnpm check:release && pnpm check:tool-schema && pnpm test",
+    "check:release": "node tools/check-release-consistency.mjs",
+    "check:tool-schema": "node tools/check-tool-schema.mjs --optional"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",

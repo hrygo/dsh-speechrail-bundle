@@ -32,6 +32,17 @@ const KNOWN_LANGUAGES: readonly SpeechRailLanguageMode[] = ['zh', 'en']
 /** BCP-47-ish token shape admitted from the snapshot; anything else is ignored. */
 const LANGUAGE_TOKEN = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/u
 
+/**
+ * Longest language token admitted from the snapshot.
+ *
+ * The shape above admits any number of subtags, so it cannot bound the token on its own, and the
+ * token travels on: it becomes a selector entry and a line in the agent tool's report. Real BCP-47
+ * tags are far shorter than this (`zh-Hans-CN`, `sr-Latn-RS`, `en-US-x-twain`), so the cap only
+ * discards what no selector should ever show. The response body is bounded too, but at 256 KiB -
+ * far more than any report should carry.
+ */
+const LANGUAGE_TOKEN_MAX_LENGTH = 24
+
 /** Read a nested plain object property without trusting the container. */
 function objectAt(value: unknown, key: string): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) return null
@@ -81,7 +92,7 @@ function projectLanguages(transcription: Record<string, unknown>): { readonly st
   for (const entry of raw) {
     if (typeof entry !== 'string') continue
     const token = entry.trim().toLowerCase()
-    if (LANGUAGE_TOKEN.test(token)) values.add(token)
+    if (token.length <= LANGUAGE_TOKEN_MAX_LENGTH && LANGUAGE_TOKEN.test(token)) values.add(token)
     if (values.size >= 32) break
   }
   return values.size === 0 ? { status: 'unknown', values: [] } : { status: 'supported', values: [...values] }

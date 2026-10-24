@@ -484,12 +484,14 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
       if (!shape.settles) await core.acknowledgeUnknown(JSON.stringify({ operationId }))
     }
 
-    // The contrast: a complete 200 the client cannot use ends the operation for good.
+    // The contrast: a 200 the client cannot use ends the operation for good - once it states its own
+    // length, which is the only framing this client can prove.
     const unusable = await engine({
       capabilities: (response) => { response.writeHead(404).end() },
       transcription: (_request, response) => {
-        response.writeHead(200, { 'content-type': 'text/html' })
-        response.end('<html>not a transcript</html>')
+        const body = '<html>not a transcript</html>'
+        response.writeHead(200, { 'content-type': 'text/html', 'content-length': Buffer.byteLength(body) })
+        response.end(body)
       },
     })
     const core = coreOver(unusable)
@@ -498,6 +500,23 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     expect(result.failure?.code).toBe('malformed-response')
     expect(result.failure?.outcome).toBe('failed')
     expect((await core.status()).gate).toBe('ready')
+
+    // The same unusable body without a stated length stays unproven: a chunked statement is reported
+    // trimmed, so a legal `chunked\t` is indistinguishable from a real one and believing it would
+    // settle work the service never confirmed.
+    const chunkedUnusable = await engine({
+      capabilities: (response) => { response.writeHead(404).end() },
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/html' })
+        response.end('<html>not a transcript</html>')
+      },
+    })
+    const chunkedCore = coreOver(chunkedUnusable)
+    await chunkedCore.check()
+    const chunkedResult = await chunkedCore.transcribe(payload('op_0000chunk'))
+    expect(chunkedResult.failure?.code).toBe('malformed-response')
+    expect(chunkedResult.failure?.outcome).toBe('unknown')
+    expect((await chunkedCore.status()).gate).toBe('unknown')
   })
 
   it('keeps the journal, the gate and the acknowledgement for an unproven outcome', async () => {

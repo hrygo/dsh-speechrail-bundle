@@ -240,17 +240,23 @@ export function decodeBase64Audio(value: string): Uint8Array | null {
  * Scanning a near-ceiling take twice costs another ~12 ms of blocked event loop for nothing, and the
  * only in-repo caller passes the parser's own output.
  *
+ * The length is a multiple of four and padding only follows data, so a validated string always
+ * decodes to at least one byte; there is no empty result to report.
+ *
  * @param value - base64 text the caller has validated.
- * @returns the decoded bytes, or null when nothing decoded.
+ * @returns the decoded bytes.
  */
-function decodeValidatedBase64(value: string): Uint8Array | null {
-  const bytes = Buffer.from(value, 'base64')
-  return bytes.byteLength === 0 ? null : new Uint8Array(bytes)
+function decodeValidatedBase64(value: string): Uint8Array {
+  return new Uint8Array(Buffer.from(value, 'base64'))
 }
 
 /** The engine that owns the gate, the cache and the operation lifecycle. */
 export class SpeechRailInputCore {
-  private unprovenFailure: SpeechRailFailure | null = null
+  // Kept against the operation that owns the gate, not as "the most recent failure": when a later
+  // attempt is refused locally and its own settle cannot complete, the gate reopens on *that*
+  // operation, and an unkeyed cause would then be reported as the reason for an attempt that never
+  // reached the network.
+  private unprovenFailure: { readonly operationId: string; readonly failure: SpeechRailFailure } | null = null
   private gateState: SpeechRailGateState = 'ready'
   private pendingOperationId: string | null = null
   private capabilities: SpeechRailCapabilitiesView | null = null
@@ -352,8 +358,12 @@ export class SpeechRailInputCore {
       gate: this.gateState,
       pendingOperationId: this.pendingOperationId,
       // Derived from the gate rather than stored beside it, so an open gate can never report a cause
-      // that no longer applies, however it was opened.
-      unprovenFailure: this.gateState === 'unknown' ? this.unprovenFailure : null,
+      // that no longer applies, however it was opened - and keyed to the pending operation, so a gate
+      // reopened on a different one cannot inherit the previous cause.
+      unprovenFailure: this.gateState === 'unknown' && this.pendingOperationId !== null
+        && this.unprovenFailure?.operationId === this.pendingOperationId
+        ? this.unprovenFailure.failure
+        : null,
       capabilities,
       checkedAt: this.checkedAt,
       revision: this.deps.settingsRevision() ?? 0,
@@ -526,7 +536,9 @@ export class SpeechRailInputCore {
     // *closed* gate hands back ("an earlier attempt is unconfirmed") is its consequence, not its cause.
     const failure = result.failure
     if (result.ok) this.unprovenFailure = null
-    else if (failure !== null && failure.outcome === 'unknown') this.unprovenFailure = failure
+    else if (failure !== null && failure.outcome === 'unknown') {
+      this.unprovenFailure = { operationId: parsed.value.operationId, failure }
+    }
     return result
   }
 
@@ -542,7 +554,6 @@ export class SpeechRailInputCore {
     if (config.endpointRefusal !== null) return await refuse('endpoint-invalid')
 
     const audio = decodeValidatedBase64(request.audioBase64)
-    if (audio === null) return await refuse('audio-invalid')
     // The service stated that it cannot transcribe: refuse before uploading anything.
     // A null snapshot states nothing, so it is not treated as a refusal.
     if (this.capabilities !== null && !this.capabilities.transcriptionSupported) return await refuse('unsupported')
