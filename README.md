@@ -42,15 +42,16 @@ enabled, and it never talks to a remote endpoint: loopback only.
 
 ## Install
 
-The bundle is installed through the Harness plugin manager, which performs package installation and
-bundle selection (do not reproduce those steps by hand):
+No npm package is published. Releases carry the packed bundle as a tarball asset; install it through
+the Harness plugin manager, which performs package installation and bundle selection (do not
+reproduce those steps by hand):
 
 ```
-plugin_manager  action: install_bundle  target: <path to packages/speechrail-input>
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.0/hrygo-dsh-speechrail-bundle-0.1.0.tgz
 ```
 
-Then set the endpoint and credential reference on its settings page. Installation is not performed
-by this repository, and nothing here has been activated in a profile.
+A checkout worktree works the same way (`target: <path to packages/speechrail-input>`). Then set the
+endpoint and credential reference on its settings page. Nothing here has been activated in a profile.
 
 ## Verify
 

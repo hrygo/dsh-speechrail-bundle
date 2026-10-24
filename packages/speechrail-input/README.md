@@ -7,6 +7,18 @@ The bundle is independent: it reuses no `dsh-experimental-*` speech package at r
 talks to one loopback service with one credential. It owns the Host service, the
 authenticated Remote surface and the browser face.
 
+## Install
+
+There is no npm package. Install the released tarball through the Harness plugin manager, which
+performs package installation and bundle selection (do not reproduce those steps by hand):
+
+```
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.1.0/hrygo-dsh-speechrail-bundle-0.1.0.tgz
+```
+
+A checkout worktree works the same way (`target: <path to packages/speechrail-input>`). Then set the
+endpoint and the credential reference on the bundle's settings page.
+
 ## What it does
 
 - Records through the browser microphone, resamples to canonical 16 kHz mono WAV and uploads
@@ -26,7 +38,7 @@ authenticated Remote surface and the browser face.
 
 | Boundary | Behaviour |
 | --- | --- |
-| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. Not proxied, unless the host process was started with Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy`. |
+| Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path. Never proxied: the request pins `agent: false`, so Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy` cannot route the credential or the audio anywhere. |
 | Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. |
 | Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
 | Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |
