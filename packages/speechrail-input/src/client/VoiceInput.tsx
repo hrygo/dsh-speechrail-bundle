@@ -196,9 +196,15 @@ export function VoiceInput({
       const result = await transcribe({ operationId: active.operationId, audioBase64: audioBase64(wave) }, active.abort.signal)
       if (run !== generation.current) return
       if (!result.ok || result.transcript === null) {
-        await refresh()
+        const refreshed = await refresh()
         const failure = result.failure
-        if (failure !== null && failure.outcome === 'unknown') { feedback(t('unknownOutcome')); return }
+        if (failure !== null && failure.outcome === 'unknown') {
+          // "Check the service record" is only true of a service that keeps one. With no capability
+          // snapshot in force the local journal is what recorded the attempt, so say that instead
+          // of sending the user to look for a record that may not exist.
+          feedback(t(refreshed?.capabilities == null ? 'unknownOutcomeLocal' : 'unknownOutcome'))
+          return
+        }
         feedback(failure === null ? t('failure.internal') : failureText(failure))
         return
       }
@@ -234,6 +240,14 @@ export function VoiceInput({
     // Without a credential every upload is refused, so say so before the microphone is
     // opened rather than after a full dictation.
     if (!snapshot.credentialConfigured) { feedback(t('failure.not-configured')); return }
+    // Same reasoning for a snapshot that already reported the operation as unsupported: the host
+    // refuses that upload before the audio leaves this machine, so dictating it first would spend a
+    // recording on a refusal that was known in advance. Only a snapshot can say this - an engine
+    // without one is never blocked here.
+    if (snapshot.capabilities !== null && !snapshot.capabilities.transcriptionSupported) {
+      feedback(t('failure.unsupported'))
+      return
+    }
     const capture = createRecording()
     const active: Active = {
       capture, abort: new AbortController(), span: inputActions.captureInsertion(),

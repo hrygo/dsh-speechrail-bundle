@@ -71,6 +71,29 @@ describe('VoiceInput acknowledge', () => {
     await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: null }) })
   })
 
+  it('refuses before opening the microphone when the snapshot cannot transcribe', async () => {
+    // The snapshot already called the operation unsupported; letting the user dictate the whole
+    // thing would spend a recording on an upload the host refuses before it is sent.
+    const createRecording = vi.fn()
+    const base = props({}, async () => { throw new Error('not used') })
+    const unsupported = {
+      schemaVersion: 'effective_capabilities_v1',
+      transcriptionSupported: false,
+      reason: 'no asr model loaded',
+      languages: { status: 'unknown' as const, values: [] },
+      limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+    }
+    render(<VoiceInput
+      {...base}
+      createRecording={createRecording as never}
+      status={async () => ({ ...STATUS, capabilities: unsupported })}
+    />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    expect(await screen.findByText('failure.unsupported')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+
   it('stops a recording at the limits admitted when it started', async () => {
     // The duration timer closes over the render that scheduled it. Reading the limits
     // from that stale `view` (undefined, for a click before the first status resolves)
