@@ -341,6 +341,11 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **N3（信息，API 层幂等）** 门禁非 `unknown` 时确认请求返回成功且不改动任何状态，属幂等空操作；该组合在已发布的 UI 中不可达（确认按钮仅在门禁 `unknown` 时渲染，而 `unknown` 不会转为 `busy`），已加注释说明而非改行为。
 - **刻意保留的取舍（核验者亦列为 by design）** 若确认时的重读**再次**失败（连续两次读失败）或记录同版本但结构损坏，`null` 确认仍会执行 reset 并清除记录。这是「介质不可读」时唯一的人工逃生口：按钮文案本身就是「我已向服务确认未完成」这一断言，日志接口文档也把 reset 限定为该场景。改成「读失败即拒绝」会在本地存储故障期间永久锁死门禁，代价高于收益，故保留；版本不匹配时存储单元打开失败、reset 返回 false，行为仍是 fail-closed。
 
+## 2026-10-24 决定记录（0.2.6：边界字段不与服务声明同名）
+
+- 0.2.5 给 status 加的三态字段原名 `transcriptionSupported`，与 `SpeechRailCapabilitiesView.transcriptionSupported`（服务自己的布尔声明）**同名不同型**，而两者恰好同处一条 Remote 边界。已改名 `transcriptionSupport`：视图上的布尔是"服务怎么说"，status 上的三态是"插件知道什么"。
+- 新增边界守卫测试：直接对**生成产物**的 JSON Schema 断言 status 携带三态字段、capability 视图保留布尔、且二者不同名。该守卫立即生效——改名后未重新生成时，schema 里仍是旧字段名，测试会失败。
+
 ## 2026-10-24 决定记录（0.2.5：把"报什么"和"做什么"对齐）
 
 - agent 工具此前把**配置的**语言当作"生效语言"报告，且不报告转写操作本身的状态：对一个快照声明 `transcription: unsupported` 的服务，工具输出 `service reachable and authorized; gate ready; limits …`，而 core 会拒绝每一次上传。现在 `status()` 与上传共用同一个 `effectiveLanguageHint()`，工具新增 `languageHint` / `transcriptionSupported` / `languageOptions` 三个字段，并在文本里显式写出"transcription unsupported … every upload is refused before the audio is sent"。
