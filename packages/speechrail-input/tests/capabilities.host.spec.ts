@@ -66,6 +66,11 @@ describe('projectCapabilities', () => {
     const view = projectCapabilities(snapshot({ ...SUPPORTED, languages: { status: 'unknown', values: [] } }))
     expect(view?.languages).toEqual({ status: 'unknown', values: [] })
     expect(languageOptionsFor(view)).toEqual(['auto'])
+    // No snapshot at all is a different statement from a snapshot that names no language: with
+    // nothing in force the user's choice is offered and sent as a hint.
+    expect(languageOptionsFor(null)).toEqual(['auto', 'zh', 'en'])
+    expect(languageIsAdmitted('zh', null)).toBe(true)
+    expect(languageIsAdmitted('en', view)).toBe(false)
     expect(languageIsAdmitted('zh', view)).toBe(false)
   })
 

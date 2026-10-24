@@ -360,6 +360,15 @@ describe('SpeechRailSettings check row verdicts', () => {
     expect(screen.getByText('settings.languageNotInEffect')).toBeTruthy()
   })
 
+  it('says a language is sent as a hint while no snapshot is in force', async () => {
+    const check = checkWith({ reachable: true, authenticated: 'unverified', failure: failure('capabilities-absent', { httpStatus: 404 }) })
+    const status = vi.fn().mockResolvedValue({ ...STATUS, language: 'zh' as const, languageOptions: ['auto', 'zh', 'en'] })
+    render(<SpeechRailSettings {...props({}, { check: check as never })} status={status} />)
+
+    await waitFor(() => { expect(screen.getByText('settings.languageUnverified')).toBeTruthy() })
+    expect(screen.queryByText('settings.languageNotInEffect')).toBeNull()
+  })
+
   it('marks the limits as a package default while no snapshot is in force', async () => {
     const check = checkWith({ reachable: true, authenticated: 'unverified', failure: failure('capabilities-absent', { httpStatus: 404 }) })
     render(<SpeechRailSettings {...props({}, { check: check as never })} />)

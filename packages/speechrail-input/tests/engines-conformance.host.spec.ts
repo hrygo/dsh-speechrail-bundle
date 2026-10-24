@@ -235,7 +235,31 @@ describe('SpeechRail engine: the service keeps deciding', () => {
 })
 
 describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
-  it('transcribes with package defaults and no language the service never admitted', async () => {
+  it('still offers only auto when a snapshot answers but names no language', async () => {
+    // The other "not stated" case: the service did talk about languages and said nothing usable,
+    // so the selector must not invent a domain for it.
+    const service = await engine({
+      capabilities: (response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({
+          schema_version: 'effective_capabilities_v1',
+          operations: { transcription: { status: 'supported', languages: { status: 'unknown' } } },
+        }))
+      },
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ text: 'quiet' }))
+      },
+    })
+    const core = coreOver(service, 'zh')
+    await core.check()
+    expect((await core.status()).languageOptions).toEqual(['auto'])
+
+    await core.transcribe(payload('op_ge0000003'))
+    expect(fieldOf(service.posts[0] ?? '', 'language')).toBeNull()
+  })
+
+  it('transcribes with package defaults while no snapshot is in force', async () => {
     const service = await plainEngine()
     const core = coreOver(service, 'zh')
 
@@ -247,15 +271,16 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
 
     const view = await core.status()
     expect(view.limits).toEqual(DEFAULT_LIMITS)
-    expect(view.languageOptions).toEqual(['auto'])
+    // Nothing spoke about languages, so the user's explicit choice is offered as a hint.
+    expect(view.languageOptions).toEqual(['auto', 'zh', 'en'])
 
     const result = await core.transcribe(payload('op_ge0000001'))
     expect(result.ok).toBe(true)
     expect(result.transcript?.text).toBe('plain engine')
     expect(result.transcript?.inferenceSeconds).toBeNull()
-    // `zh` is configured but nothing admitted it, so the hint is not invented on the wire.
-    expect(fieldOf(service.posts[0] ?? '', 'language')).toBeNull()
-    // And the engine is never asked for a capability snapshot it does not have twice per upload.
+    // `zh` is configured and nothing contradicted it, so it travels as an unverified hint:
+    // Whisper-class engines use it, and an engine that rejects it answers with its own error.
+    expect(fieldOf(service.posts[0] ?? '', 'language')).toBe('zh')
     expect((await core.status()).gate).toBe('ready')
   })
 

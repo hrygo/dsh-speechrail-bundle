@@ -268,9 +268,15 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
             </label>
           ))}
           {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
-            // A saved language the service never admitted is not silently applied, so say so
+            // A saved language a snapshot refused to admit is not silently applied, so say so
             // instead of leaving a checked-but-disabled control to imply that it is.
             <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
+          )}
+          {view !== undefined && language !== 'auto' && view.languageOptions.includes(language)
+            && (capabilities === null || capabilities === undefined) && (
+            // Nothing stated which languages exist, so this choice travels as a hint the service
+            // never confirmed - which is worth saying out loud.
+            <span style={labelStyle}>{t('settings.languageUnverified')}</span>
           )}
         </span>
       </div>

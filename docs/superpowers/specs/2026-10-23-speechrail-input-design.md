@@ -349,7 +349,9 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - 能力端点缺失单列为 `capabilities-absent`（404/405），不再是故障，也不再借 `ok:true, capabilities:null`
   表达——那样会让探针把 404 报成"鉴权通过"。5xx（含 501）保持故障与可重试。
 - 鉴权从布尔改为三态 `accepted/refused/unverified`：只有 200 证明通过、401/403 证明被拒，其余一律"未验证"。
-- 语言仍未在"未声明"时静默应用：界面显式标注"未生效"，上传不发送 language。
+- 语言仍未在"未声明"时静默应用，但"未声明"分两种（**2026-10-24，0.2.2**）：完全没有快照时（从未检测、
+  端点缺失、检测失败）开放全部已知语言并把用户的选择作为未验证提示发送；快照明确回答但语言域 unknown 时只
+  开放 auto，不臆造语言域。快照明确不支持的仍标注"未生效"，上传不发送 language。
 - `agent: false` 对 `NODE_USE_ENV_PROXY`/`--use-env-proxy` 的阻断在 Node 26.11.1 上实测确认（默认 agent 会走
   代理，本调用直连）。
 - 3xx 从 `internal` 改为稳定码 `redirected`：不跟随重定向是本包自己的规则，不是内部错误。

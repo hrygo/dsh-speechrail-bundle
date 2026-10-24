@@ -108,11 +108,19 @@ export function projectCapabilities(snapshot: unknown, previous?: SpeechRailLimi
 
 /**
  * Language modes the selector may offer for one snapshot.
- * @param view - projected capability facts, or null before the first check.
- * @returns `auto` always; `zh` and `en` only when the service enumerated them.
+ *
+ * Two different "not stated" cases are treated differently on purpose:
+ * - no snapshot is in force at all (never probed, endpoint absent, probe failed): nothing has
+ *   spoken about languages, so the user's explicit choice is the only evidence there is and every
+ *   known mode is offered, to be sent as an unverified hint;
+ * - a snapshot that *did* answer but states no language domain: it spoke and said nothing usable,
+ *   so only `auto` is offered, exactly as before.
+ * @param view - projected capability facts, or null when none is in force.
+ * @returns `auto` always, plus every known mode while no snapshot is in force.
  */
 export function languageOptionsFor(view: SpeechRailCapabilitiesView | null): readonly SpeechRailLanguageMode[] {
-  if (view === null || view.languages.status !== 'supported') return ['auto']
+    if (view === null) return ['auto', ...KNOWN_LANGUAGES]
+    if (view.languages.status !== 'supported') return ['auto']
   const admitted = KNOWN_LANGUAGES.filter((mode) => view.languages.values.includes(mode))
   return ['auto', ...admitted]
 }

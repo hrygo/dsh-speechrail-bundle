@@ -650,9 +650,33 @@ describe('successful transcription', () => {
     expect(h.sends[1]?.language).toBe('zh')
   })
 
-  it('falls back to automatic mode when the snapshot does not admit the configured language', async () => {
+  it('sends the configured language as a hint while no snapshot is in force', async () => {
+    // Nothing has stated which languages exist, so the user's explicit choice is the only
+    // evidence available and it is sent; the settings page labels it as unverified.
     const h = harness()
     h.config = { ...CONFIG, language: 'zh' }
+    await h.core.transcribe(payload('op_kkkkkkkk'))
+    expect(h.sends[0]?.language).toBe('zh')
+  })
+
+  it('falls back to automatic mode when a snapshot names no usable language', async () => {
+    // A snapshot that answered "transcription supported, languages unknown" did speak about the
+    // language domain and stated nothing usable, so no hint is invented from it.
+    const h = harness()
+    h.config = { ...CONFIG, language: 'zh' }
+    h.probe = {
+      ok: true,
+      capabilities: {
+        schemaVersion: 'effective_capabilities_v1',
+        transcriptionSupported: true,
+        reason: null,
+        languages: { status: 'unknown', values: [] },
+        limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+      },
+    }
+    await h.core.check()
+    expect((await h.core.status()).languageOptions).toEqual(['auto'])
+
     await h.core.transcribe(payload('op_kkkkkkkk'))
     expect(h.sends[0]?.language).toBeNull()
   })
@@ -848,7 +872,7 @@ describe('unproven outcomes', () => {
     expect(check.capabilities).toBeNull()
 
     const view = await h.core.status()
-    expect(view.languageOptions).toEqual(['auto'])
+    expect(view.languageOptions).toEqual(['auto', 'zh', 'en'])
     expect(view.limits).toEqual({ maxUploadBytes: 4_194_304, maxAudioSeconds: 120 })
 
     const result = await h.core.transcribe(payload('op_cap00001'))

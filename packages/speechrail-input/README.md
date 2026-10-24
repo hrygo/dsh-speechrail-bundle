@@ -23,7 +23,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.1/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.2.2/dsh-speechrail-bundle.tgz
 ```
 
 Then set the endpoint and the credential reference on the bundle's settings page.
@@ -63,11 +63,14 @@ What changes on a non-SpeechRail engine, and what does not:
   driven by locally generated operation ids, not by anything the service returns: an upload that is
   accepted and never answered still ends as an unproven outcome, still holds the gate and still
   needs the acknowledgement before another recording may start.
-- The capability snapshot is the only thing that disappears. With none in force the language
-  selector offers `auto` alone, the enforced limits are the package defaults (4 MiB / 120 s) rather
-  than anything the service stated, and the settings page labels them as such. A saved `zh`/`en` is
-  then **not** silently applied — the upload sends no language, and the settings page says so beside
-  the disabled option.
+- The capability snapshot is the only thing that disappears. With none in force the enforced limits
+  are the package defaults (4 MiB / 120 s) rather than anything the service stated, and the settings
+  page labels them as such.
+- Language is decided by what the service actually said, in three cases: a snapshot that admits the
+  mode sends it; a snapshot that answered but names no usable language domain offers `auto` alone and
+  sends no hint; and **no snapshot at all** offers every known mode and sends the one you chose as an
+  unverified hint, labelled as such on the settings page. Nothing is ever switched silently — a mode a
+  snapshot refuses is shown as "not in effect".
 - Discovery is fixed: only `/v1/speechrail/capabilities` is consulted, never `/v1/models`, so an
   engine without that endpoint is permanently "unstated" by construction. `usage` is likewise no
   longer evidence that the response came from SpeechRail — its absence is accepted on purpose.
