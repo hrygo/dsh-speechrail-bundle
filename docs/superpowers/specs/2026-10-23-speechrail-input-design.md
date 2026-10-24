@@ -344,6 +344,8 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **给"发布"本身加守卫（此前无人审查过的面）。** 发布是手工三步：bump 版本、把三处 README 的安装 URL 指向新 tag、打 tag 并附上 tarball——三处必须一致，而流水线里没有任何东西会发现漏改：`v0.6.0` 的 tag 完全可能挂着 `package.json` 仍写 0.5.0 的包，README 也可能指向从未上传的资产，两者都要等安装后读版本才暴露。新增 `tools/check-release-consistency.mjs`：扫描 `packages/*/package.json` 中声明了 `dsh` 的包（版本须为 `x.y.z`、彼此一致），抽取所有 `releases/download/vX.Y.Z/` 安装 URL 并要求与版本一致；带 tag 参数（或 `GITHUB_REF_NAME`）时再要求 tag 命名该版本，非版本 tag（如 `latest`）按设计跳过。已接入 `pnpm verify` 与 CI 的 `verify:ci`（`check:release`）；同时 CI 从只跑 Node 22 改为**声明范围矩阵** `['22','24']`（`^22.19.0 || >=24.0.0` 的两条分支，`fail-fast: false`），使声明的运行时范围由 CI 持续验证，而不只靠每轮手工测量，并实测三种漂移全部被拒（只 bump 版本、tag 不符、README 单改），报错精确到文件；同时要求英文入口 `README.md` 与包 README **各自带一处**安装 URL（少一处也报错，而非只有零处才报），已实测删掉 README.md 那一行即失败。今后每轮发布都先跑 `node tools/check-release-consistency.mjs vX.Y.Z` 再打 tag。
 
 - **把"按数量断言"换成"精确集合"（同一类问题的第三种表现）。** 边界 schema 测试原先只断言 `toHaveLength(17)`——数量说不出是哪 17 个，改名、少一个、多一个都可能被计数挡住或蒙混。现在断言排序后的**精确字段名集合**，并显式要求 `unprovenFailure` 在 `required` 里（原因必须过界，不能只留在宿主侧）。变异检验：把类型与宿主里的字段改名后重新生成 Typert，测试失败并在 diff 里直接点名 `unprovenFailureX`。
+- **观察项（刻意不动）：两处死导出。** 全仓库（src/tests/tools/scripts）扫描后，`core.ts` 的 `decodeBase64Audio` 与 `journal.ts` 的 `UNAVAILABLE_JOURNAL` 无任何引用——前者是 0.6.0 引入 `decodeValidatedBase64` 后留下的旧入口（它看起来像"仍在校验的安全网"，其实不再被调用）。按"不顺手清理"的约定保留，仅在此记录：它们不影响运行时，但读者可能误以为 `decodeBase64Audio` 仍是校验入口。
+
 ## 2026-10-24 决定记录（0.7.0：把两处"只靠人看"的面变成守卫）
 
 - **词典静态键守卫。** 既有测试只比较两部词典彼此、失败码与捕获类是否齐备，**看不到**源码里 `t('…')` 拼错的键——那会直接把键名渲染给用户，而套件全绿。新用例扫描 `src/client/*.ts`，把每个静态键与两部词典比对，并断言"扫描至少发现 30 个键"（**结构上防止扫描本身失效**，即"变异/检查必须真的跑到东西"那条教训的常驻化）。变异检验：把 `t('gateUnknown')` 改成 `t('gateUnknownTypo')` 后失败并指名 `VoiceInput.tsx: gateUnknownTypo`。
