@@ -91,7 +91,7 @@ Then set the endpoint and credential reference on its settings page.
 ```bash
 pnpm install
 pnpm verify     # baseline check -> Typert generation -> both type checks -> bundles -> tests
-pnpm test       # host and client unit tests (169; all mock or synthetic audio)
+pnpm test       # host and client unit tests (all mock or synthetic audio)
 ```
 
 `pnpm verify` also re-checks the frozen upstream snapshot against
