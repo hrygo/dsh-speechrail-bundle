@@ -35,7 +35,7 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 ## 安全属性
 
 - **仅回环。** 只接受 `http://127.0.0.1:<port>/v1` 与 `http://[::1]:<port>/v1`；其他地址以及带 userinfo 的 URL 在构造请求前就以稳定原因拒绝。
-- **凭据不落盘、不记录、不回传。** 经 DSH credentials 或设置解析引用后作为 bearer 头发送；跨边界只有引用名与布尔值。
+- **凭据不落盘、不记录、不回传。** 经 DSH credentials 或设置解析引用后作为 bearer 头发送；跨边界只有引用名与布尔值。不需要鉴权的本机引擎把引用清空即可，此时请求完全不带 `Authorization` 头。
 - **不持久化音频与转写文本。** 未结案 journal 只存操作 id、阶段与时间戳，因此崩溃或刷新不会静默丢失结局未知的上传。
 - **不会重复上传。** 门禁同一时刻只允许一次操作；结局未知会阻塞后续上传，直到显式确认清除。
 - **只有"被拒绝"才会重新开门。** 到达客户端的状态只有在**证明服务没有处理这次上传**时才结算未结案记录：
@@ -50,7 +50,7 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 - 本机服务提供 OpenAI 形状的 `POST /v1/audio/transcriptions` 并返回 `{"text": ...}`。SpeechRail 是
   参考实现（它的 `usage` 扩展与 `GET /v1/speechrail/capabilities` 能力快照均可选）；其他同形状的
   本机引擎同样可用，缺少能力端点时按 `capabilities-absent` 报告，而不是当作服务故障。
-- Host 可解析的凭据引用，例如 `SPEECHRAIL_API_KEY`。
+- Host 可解析的凭据引用，例如 `SPEECHRAIL_API_KEY`。不需要鉴权的本机引擎则把这个引用清空：请求不再带 `Authorization` 头。见 [ADR-0003](docs/decisions/0003-unauthenticated-loopback-engines.md)。
 
 ## 安装
 

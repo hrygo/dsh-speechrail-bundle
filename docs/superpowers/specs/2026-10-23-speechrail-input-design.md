@@ -139,6 +139,8 @@ requestSeconds 用 Host monotonic clock 测量出站请求开始至响应正文�
 
 读取现有 `ctx.credentials.resolve(credentialRef(apiKeyRef))`；每操作重新解析，缺失则 fail-closed。不会调用 set/unset、自动解析 SpeechRail 私有 .env、生成新 key 或写入普通 Settings。
 
+（**2026-10-25 修订**：fail-closed 现在只适用于**配置了非空引用**却解析不出值的情况；引用被显式清空表示"该引擎不需要鉴权"，请求不带 `Authorization` 头也不再被拒绝。理由、代价与复活条件见 [ADR-0003](../../decisions/0003-unauthenticated-loopback-engines.md)——无鉴权回环引擎是常见形态，而"引用名写错"仍需保持可见。）
+
 **现有 DSH credentials-local 是受限权限的明文文件，不是 Keychain。** 复用既有引用与新增密钥保存不是一回事。若引用尚未配置，设置页只提示用户选择既有 DSH 凭据路径；任何新增落盘都要用户明确决定。本方案不实现新的密钥保存表单，也不更改 credentials provider。
 
 ### 检查状态

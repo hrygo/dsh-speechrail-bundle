@@ -62,10 +62,10 @@ speaks the same shape on loopback:
 
 | Expectation | Detail |
 | --- | --- |
-| Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`. |
+| Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`, or no `Authorization` header at all when the credential reference is cleared for an engine that authenticates nobody. Engines that require a `model` field are the common reason to configure one. |
 | Transcript | A 200 whose JSON body carries a string `text`. The SpeechRail `usage: {type: "duration", seconds}` extension is optional; a `usage` that is present but malformed is still refused as `malformed-response`. |
 | Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404 or 405 the probe reports `capabilities-absent`: the service stays reachable and usable, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, every 5xx (including 501) stays `server-error` with its retryable hint, and an unreachable service stays `unreachable`. |
-| Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused or unconfigured endpoint). The `speechrail_input_status` tool returns the same three strings. |
+| Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused endpoint, or a request that carried no credential at all). The `speechrail_input_status` tool returns the same three strings, plus whether this endpoint was configured to present a credential in the first place. |
 | Agent report | The tool reports the language hint that will **actually travel** (not the configured mode), the endpoint's own statement about transcription (`supported` / `unsupported` / `unknown`), and the language modes the snapshot admits. A service that says it cannot transcribe is named as such instead of reading as usable. |
 
 What changes on a non-SpeechRail engine, and what does not:
@@ -110,7 +110,7 @@ What changes on a non-SpeechRail engine, and what does not:
 | Boundary | Behaviour |
 | --- | --- |
 | Endpoint | Loopback only (`http://127.0.0.1:<port>/v1`, `[::1]`); no query, fragment, credentials or non-`/v1` path, and no DNS. Never proxied: the request pins `agent: false`, so Node's opt-in `NODE_USE_ENV_PROXY` / `--use-env-proxy` cannot route the credential or the audio anywhere (measured on Node 26.11.1: the same call through the default agent did reach the proxy). A redirect answer is refused with the stable `redirected` code and the target never sees the request. |
-| Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. |
+| Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. An empty reference omits the header entirely, and the probe then reports the credential as `unverified` — a 200 with no credential on the wire judged no credential. |
 | Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
 | Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |
 | Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. If the stored record cannot be read at all, acknowledging asserts that nothing is outstanding and clears the slot; a medium that cannot be written refuses instead. |
@@ -126,7 +126,7 @@ The entry `speechrail-input` (inserted by `cordis.patch.yml`) exposes:
 | --- | --- | --- |
 | `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
 | `model` | empty | Empty omits the field and lets the service choose; non-empty values are validated by the service per profile. |
-| `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference; a service without an API key needs none configured. |
+| `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
 | `language` | `auto` | `auto` omits the field entirely; `zh`/`en` are only accepted when the snapshot enumerates them. |
 | `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |
 

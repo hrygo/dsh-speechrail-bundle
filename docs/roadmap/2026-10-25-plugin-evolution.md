@@ -119,12 +119,23 @@
 
 **一处刻意的偏离**：计划原本要在 `dsh.client.inject` 里加 `@deepseek-ai/dsh-client-shortcuts`。实施时改为不加，只保留 `devDependencies`（类型来源）与 `ctx.inject(['shortcuts'], …)`（可选服务）。理由：manifest 的 `inject` 是硬依赖顺序，写进去会让缺少快捷键服务的组合永远等不到挂载，与"缺它就只是没有快捷键"的设计相反；`ctx.inject` 与仓库里 `tools` 服务的既有写法一致。
 
+### 阶段二进展（2026-10-25）
+
+用户对本文档 §1B 的第 1 条（凭据硬性前置）回答"修复"，已交付 [ADR-0003](../decisions/0003-unauthenticated-loopback-engines.md)：**显式清空凭据引用 ⇒ 该引擎不需要鉴权，请求不带 `Authorization` 头**；配了引用却解析不出值仍拒绝 `not-configured`，所以"引用名写错"依然可见。这是纯新增状态，默认值与非空引用的行为一字未变。
+
+阶段 2 因此只剩：
+
+- `model` 字段："总是发送配置好的 model"按引擎数解锁最多（speaches / vLLM / LocalAI / mlx-audio / coro-asr ≈ 6–7 个都要求它），缺字段时的原因也要可读；
+- 端点路径形状：whisper.cpp 用 `--inference-path /v1/audio/transcriptions` 就能规避，属于文档而非代码；
+- 兼容表的 fixture 级证据（真机验证按用户决定不做）。
+
 ## 4. 未核实项
 
 - `ctx.shortcuts` 在**本机这个 profile** 里是否真的可注入（npm 包与类型已确认，客户端 Service 目录不完整，因此尚未在本运行实例上验证）。
 - `ShortcutCommand.modals` 的合法取值：类型注释说"Allowed modal identifiers"，但未给出枚举与空数组语义。
 - 是否存在 keyup 通道；若没有，"按住说话"只能用 `observeFixedInput` 或退回点击。
 - 阶段 2 中 whisper.cpp 究竟读取哪些表单字段（抓到的源码被截断），以及它是否真的忽略未知的 `model`。
+- ADR-0003 的"空引用＝无鉴权"只在 mock 传输层验证过（请求确实不带 `Authorization` 头）；用户已决定不做真机引擎实测，所以没有任何真实无鉴权引擎的端到端结论。
 - 共存问题在真实双插件下的表现（需要激活官方语音 bundle，当前未授权）。
 - 阶段 0 的结论只能由用户产出一一我自己不能录音，也不应替用户判断识别质量。
 

@@ -41,7 +41,8 @@ over real loopback sockets against both kinds of engine and asserts what each on
   any URL carrying userinfo, is refused with a stable reason before a request is built.
 - **The credential is never stored, logged, or returned.** The plugin resolves a reference through
   DSH credentials or settings and sends it as a bearer header; only the reference name and a
-  boolean ever reach a client or the agent tool.
+  boolean ever reach a client or the agent tool. A local engine that authenticates nobody is
+  configured by clearing the reference, and the request then carries no `Authorization` header.
 - **No transcript or audio is persisted.** The pending journal holds an operation id, a phase and a
   timestamp — nothing else — so a crash or reload cannot silently lose an upload whose outcome is
   unknown.
@@ -65,7 +66,9 @@ over real loopback sockets against both kinds of engine and asserts what each on
   `GET /v1/speechrail/capabilities` snapshot are optional); any other loopback engine with the same
   transcription shape works, and a service without the capability endpoint is reported as
   `capabilities-absent` instead of broken.
-- A credential reference usable by the Host, for example `SPEECHRAIL_API_KEY`.
+- A credential reference usable by the Host, for example `SPEECHRAIL_API_KEY`. A local engine that
+  needs no key is configured by clearing this reference instead: requests then carry no
+  `Authorization` header at all. See [ADR-0003](docs/decisions/0003-unauthenticated-loopback-engines.md).
 
 ## Install
 
