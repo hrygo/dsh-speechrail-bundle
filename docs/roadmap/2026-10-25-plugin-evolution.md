@@ -9,7 +9,7 @@
 
 | 事实 | 证据 |
 |---|---|
-| 插件已安装并启用（0.8.1） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle` |
+| 插件已安装并启用（0.9.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.9.0 tag 资产，安装目录内 `package.json` 版本为 0.9.0（2026-10-25 由 plugin_manager 从 0.8.1 升级） |
 | 本机 SpeechRail 活着且要求鉴权 | [实测] `127.0.0.1:8201` LISTEN（python）；零推理探测（不带凭据 GET capabilities）返回 `401` + 完整错误信封 `invalid_api_key` |
 | 凭据引用存在 | [实测] `~/.dsh/.credentials.yaml` 的 `refs` 含 `SPEECHRAIL_API_KEY`（只读名字，未读值） |
 | 门禁干净 | [实测] `~/.dsh/storages/speechrail_input_pending.json` 为空 |
@@ -131,6 +131,8 @@
 **2026-10-25 补记（"首次成功"这一块）**：文档原先写着"随后在设置页填写地址与凭据引用"，而设置页只写语言与请求预算——端点、模型、凭据引用都是条目配置。这是错误指引，已替换为可复制的 `cordis.patch.yml` 补丁写法（含"整段替换、不深度合并"的提醒）；设置页补上此前完全不可见的 `model` 行，并在"没配 model 却被拒绝"时给出提示（只说该检查什么，不臆断原因）。
 
 **该写法的证据（文档级，非实测）**：profile 的 `cordis.patch.yml` 里，`- id: ui-settings-general` + `config:` 这类只有 id 与 config 的行，覆盖的是 `@deepseek-ai/dsh-web-app` bundle 插入的行——即"用 profile patch 给已安装 bundle 的条目写配置"在本机配置里已有既成先例，不依赖额外机制。
+
+**2026-10-25 发布**：0.9.0 已发布（GitHub Release，资产 `dsh-speechrail-bundle.tgz`，39 个文件；下载回的字节与本地打包逐字节一致，sha256 `f1f1dde6…`），并经 `plugin_manager install_bundle` 用 tag 固定 URL 从 0.8.1 升到 0.9.0（pnpm 报告 `0.8.1 → 0.9.0`）。安装目录内可查到本轮的新产物：host bundle 含 `credentialRequired` 与 `length > 200`，client bundle 含新的 404/422/模型提示文案。**尚未发生的是"人在机器前真用一次"**：进程需要重启才会加载新 host 代码，页面需要刷新才换新 client bundle，因此热键是否真的出现在快捷键设置里、默认键是否冲突，仍要等这次真实使用（阶段 0）才能下结论。
 
 **2026-10-25 续（用户"你先做深做实"后完成的两件）**：
 
