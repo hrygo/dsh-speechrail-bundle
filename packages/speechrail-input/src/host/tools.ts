@@ -95,6 +95,14 @@ export interface StatusToolSource {
 export interface StatusToolValue {
   /** Whether the configured credential reference resolves to a non-empty value. */
   readonly credentialConfigured: boolean
+  /**
+   * Whether this endpoint is configured to present a credential at all.
+   *
+   * False only when the reference was deliberately cleared, which is how a local engine that
+   * authenticates nobody is configured. Only this boolean crosses the boundary: the reference name
+   * stays on the Host. See ADR-0003.
+   */
+  readonly credentialRequired: boolean
   /** Effective loopback base URL, or an empty string when it was refused. */
   readonly endpoint: string
   /** Why the configured endpoint is unusable, or an empty string. */
@@ -143,6 +151,7 @@ const OUTPUT_SCHEMA = {
   additionalProperties: false,
   properties: {
     credentialConfigured: { type: 'boolean', description: 'Whether the configured credential reference resolves to a non-empty value.' },
+    credentialRequired: { type: 'boolean', description: 'Whether this endpoint is configured to present a credential at all; false when the reference was deliberately cleared for an engine that authenticates nobody.' },
     endpoint: { type: 'string', description: 'Effective loopback base URL, or an empty string when the configured endpoint was refused.' },
     endpointProblem: { type: 'string', description: 'Why the configured endpoint is unusable, or an empty string when it is fine.' },
     model: { type: 'string', description: 'Configured model id, or an empty string when the service chooses.' },
@@ -177,7 +186,7 @@ const OUTPUT_SCHEMA = {
     unprovenFailureHttpStatus: { type: 'number', description: 'HTTP status that upload received, or 0 when nothing answered.' },
   },
   required: [
-    'credentialConfigured', 'endpoint', 'endpointProblem', 'model', 'language', 'languageHint',
+    'credentialConfigured', 'credentialRequired', 'endpoint', 'endpointProblem', 'model', 'language', 'languageHint',
     'languageOptions', 'transcriptionSupport', 'gate', 'pendingOperationId', 'maxUploadBytes',
     'maxAudioSeconds', 'probed', 'reachable', 'authenticated', 'failureCode',
     'unprovenFailureCode', 'unprovenFailureHttpStatus',
@@ -213,14 +222,16 @@ export function createStatusTool(source: StatusToolSource): HarnessToolDefinitio
       // than an explicit `true` as "do not probe".
       const asked = (args as { readonly probe?: unknown } | null | undefined)?.probe === true
       const check = asked ? await source.check() : null
-      // A check that never left the host (no credential, unusable endpoint) did not ask
-      // the service anything, so reporting it as an unreachable service would be false.
+      // A check that never left the host (an unresolved credential, an unusable endpoint) did not
+      // ask the service anything, so reporting it as an unreachable service would be false. An
+      // endpoint configured to need no credential does leave the host, and is probed normally.
       const probed = check !== null
         && check.failure?.code !== 'not-configured'
         && check.failure?.code !== 'endpoint-invalid'
       const view = await source.status()
       return {
         credentialConfigured: view.credentialConfigured,
+        credentialRequired: view.credentialRef !== '',
         endpoint: view.baseUrl,
         endpointProblem: view.endpointProblem ?? '',
         model: view.model,
@@ -252,7 +263,13 @@ export function describeStatus(value: StatusToolValue): string {
   const parts: string[] = []
   if (value.endpointProblem !== '') parts.push(`endpoint refused: ${value.endpointProblem}`)
   else parts.push(`endpoint ${value.endpoint === '' ? '(unset)' : value.endpoint}`)
-  parts.push(value.credentialConfigured ? 'credential configured' : 'credential missing')
+  // Three states, not two: an endpoint configured without a credential is a working setup, and
+  // reporting it as a missing credential would send the reader after a secret nothing needs.
+  parts.push(!value.credentialRequired
+    ? 'no credential in use: this endpoint is configured to need none'
+    : value.credentialConfigured
+      ? 'credential configured'
+      : 'credential missing: the configured reference resolves to nothing')
   if (value.probed) {
     // Three states, so a report never has to guess between "refused" and "never judged".
     parts.push(value.reachable

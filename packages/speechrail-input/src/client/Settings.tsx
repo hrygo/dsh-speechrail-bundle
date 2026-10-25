@@ -240,9 +240,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       <div style={rowStyle}>
         <span style={labelStyle}>{t('settings.credential')}</span>
         <span style={valueStyle}>
-          {view?.credentialConfigured === true
-            ? t('settings.credentialConfigured', { ref: view.credentialRef })
-            : t('settings.credentialMissing', { ref: view?.credentialRef ?? '—' })}
+          {view?.credentialRef === ''
+            ? t('settings.credentialNone')
+            : view?.credentialConfigured === true
+              ? t('settings.credentialConfigured', { ref: view.credentialRef })
+              : t('settings.credentialMissing', { ref: view?.credentialRef ?? '—' })}
         </span>
       </div>
       <div style={rowStyle}>
@@ -353,7 +355,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                   ? t('settings.authOk')
                   : authentication === 'refused'
                     ? t('settings.authFailed')
-                    : t('settings.authUnverified'),
+                    // With no credential on the wire nothing judged one, so "unverified" is the
+                    // honest verdict; naming the reason keeps it from reading as a failure.
+                    : view?.credentialRef === '' ? t('settings.authNone') : t('settings.authUnverified'),
               })}`
               : t('settings.unreachable')}
         </span>

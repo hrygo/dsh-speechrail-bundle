@@ -62,7 +62,14 @@ describe('entry configuration', () => {
     expect(() => parsed({ requestTimeoutMs: MAX_REQUEST_TIMEOUT_MS + 1 })).toThrow()
   })
 
-  it('treats an empty credential reference as invalid', () => {
-    expect(() => parsed({ credentialRef: '' })).toThrow()
+  it('accepts an empty credential reference as a deliberate no-auth endpoint', () => {
+    // A local engine that authenticates nobody is a supported shape, not a mistake: the empty
+    // reference is what tells it apart from a reference name that resolves to nothing.
+    const values = readConfig(parsed({ credentialRef: '' }))
+    expect(values.credentialRef).toBe('')
+  })
+
+  it('keeps the reference name as the default', () => {
+    expect(readConfig(parsed({})).credentialRef).toBe(DEFAULT_CREDENTIAL_REF)
   })
 })

@@ -312,8 +312,8 @@ export interface TranscribeOptions {
   readonly model: string
   /** Language hint, or null to let the service decide. */
   readonly language: string | null
-  /** Resolved bearer credential. */
-  readonly credential: string
+  /** Resolved bearer credential, or null when the endpoint needs none. */
+  readonly credential: string | null
   /** Canonical WAV bytes. */
   readonly audio: Uint8Array
   /** One request budget. */
@@ -364,7 +364,9 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
     url: `${options.baseUrl}/audio/transcriptions`,
     method: 'POST',
     headers: {
-      authorization: `Bearer ${options.credential}`,
+      // A null credential means this endpoint was configured as needing none: the header is
+      // omitted rather than sent empty, which some servers read as a malformed token.
+      ...(options.credential === null ? {} : { authorization: `Bearer ${options.credential}` }),
       'content-type': `multipart/form-data; boundary=${boundary}`,
       'content-length': String(body.byteLength),
       accept: 'application/json',
@@ -409,8 +411,8 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcribe
 export interface ProbeOptions {
   /** Normalized loopback base URL. */
   readonly baseUrl: string
-  /** Resolved bearer credential. */
-  readonly credential: string
+  /** Resolved bearer credential, or null when the endpoint needs none. */
+  readonly credential: string | null
   /** Probe budget; defaults to the capability timeout. */
   readonly timeoutMs?: number | undefined
   /** Caller cancellation. */
@@ -451,7 +453,10 @@ export async function probeCapabilities(options: ProbeOptions): Promise<ProbeOut
   const result = await performRequest({
     url: `${options.baseUrl}/speechrail/capabilities`,
     method: 'GET',
-    headers: { authorization: `Bearer ${options.credential}`, accept: 'application/json' },
+    headers: {
+      ...(options.credential === null ? {} : { authorization: `Bearer ${options.credential}` }),
+      accept: 'application/json',
+    },
     timeoutMs: options.timeoutMs ?? CAPABILITY_TIMEOUT_MS,
     maxResponseBytes: TRANSCRIPTION_RESPONSE_MAX_BYTES,
     signal: options.signal,

@@ -104,6 +104,28 @@ describe('transcription transport', () => {
     expect(body).toContain('name="file"; filename="recording.wav"')
   })
 
+  it('omits the Authorization header when the endpoint needs no credential', async () => {
+    // Omitted rather than sent empty: a `Bearer ` with nothing after it is read as a malformed
+    // token by servers that would otherwise ignore the header entirely.
+    const server = await start((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ text: '你好世界' }))
+    })
+    const outcome = await transcribe({
+      baseUrl: server.baseUrl,
+      model: '',
+      language: null,
+      credential: null,
+      audio: AUDIO,
+      timeoutMs: 5_000,
+    })
+
+    expect(outcome.ok).toBe(true)
+    const [request] = server.requests
+    expect(request?.headers.authorization).toBeUndefined()
+    expect(request?.headers['content-type']).toContain('multipart/form-data; boundary=')
+  })
+
   it('accepts a transcript that states no usage', async () => {
     // `usage` is SpeechRail's own extension. An OpenAI-compatible engine answers with
     // `{"text": ...}` alone, and nothing downstream reads the duration.

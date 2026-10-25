@@ -55,6 +55,18 @@ export interface ResolvedConfig {
   readonly requestTimeoutMs: number
 }
 
+/**
+ * What this configuration says about the Authorization header.
+ *
+ * An empty reference is a deliberate "this endpoint needs none", and it must stay distinguishable
+ * from a reference that resolves to nothing: one is a working setup and the other is a typo in a
+ * reference name. Only the second is refused. See ADR-0003.
+ */
+export type ResolvedAuth =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'secret'; readonly value: string }
+  | { readonly kind: 'missing' }
+
 /** Transport and platform seams the engine depends on. */
 export interface CoreDependencies {
   /** Current time. */
@@ -70,13 +82,13 @@ export interface CoreDependencies {
     readonly baseUrl: string
     readonly model: string
     readonly language: string | null
-    readonly credential: string
+    readonly credential: string | null
     readonly audio: Uint8Array
     readonly timeoutMs: number
     readonly signal?: AbortSignal | undefined
   }) => Promise<TranscribeOutcome>
   /** Probe the capability snapshot. */
-  readonly probe: (options: { readonly baseUrl: string; readonly credential: string; readonly previousLimits?: SpeechRailLimits | null }) => Promise<ProbeOutcome>
+  readonly probe: (options: { readonly baseUrl: string; readonly credential: string | null; readonly previousLimits?: SpeechRailLimits | null }) => Promise<ProbeOutcome>
   /** Current settings revision for this entry, or null when Settings is unavailable. */
   readonly settingsRevision: () => number | null
   /** Persist the editable subset of this entry. */
@@ -311,6 +323,21 @@ export class SpeechRailInputCore {
   }
 
   /**
+   * Decide what the next request carries.
+   *
+   * An explicitly empty reference means the endpoint needs no credential, so nothing is resolved and
+   * nothing is refused; a reference that is configured but resolves to nothing is a configuration
+   * error and still refuses with `not-configured`.
+   * @param config - effective configuration.
+   * @returns the auth state the wire and the reported status both read.
+   */
+  private async resolveAuth(config: ResolvedConfig): Promise<ResolvedAuth> {
+    if (config.credentialRef === '') return { kind: 'none' }
+    const value = await this.deps.resolveCredential(config.credentialRef)
+    return value === null ? { kind: 'missing' } : { kind: 'secret', value }
+  }
+
+  /**
    * The language hint the next upload will carry, or null when none will.
    *
    * `auto` never sends one, and a language the snapshot in force refused to admit is withheld
@@ -328,14 +355,17 @@ export class SpeechRailInputCore {
    */
   async status(): Promise<SpeechRailInputStatus> {
     const config = this.deps.config()
-    const credential = await this.deps.resolveCredential(config.credentialRef)
+    const auth = await this.resolveAuth(config)
     const capabilities = this.capabilities
     return {
       baseUrl: config.baseUrl,
       endpointProblem: config.endpointRefusal === null ? null : describeRefusal(config.endpointRefusal),
       model: config.model,
       credentialRef: config.credentialRef,
-      credentialConfigured: credential !== null,
+      // Deliberately unchanged: whether a reference resolved to a non-empty secret. An endpoint
+      // configured without one reports false here and is identified by an empty `credentialRef`,
+      // which is what the control, the settings page and the agent tool each branch on.
+      credentialConfigured: auth.kind === 'secret',
       language: config.language,
       // One expression decides both this report and the wire, so the tool can never promise a hint
       // the upload would withhold.
@@ -392,14 +422,14 @@ export class SpeechRailInputCore {
       // A refused endpoint never asked the service anything, so the credential is unjudged.
       return { reachable: false, authenticated: 'unverified', capabilities: this.capabilities, failure: failure('endpoint-invalid'), checkedAt }
     }
-    const credential = await this.deps.resolveCredential(config.credentialRef)
-    if (credential === null) {
+    const auth = await this.resolveAuth(config)
+    if (auth.kind === 'missing') {
       this.checkedAt = checkedAt
       return { reachable: false, authenticated: 'unverified', capabilities: this.capabilities, failure: failure('not-configured'), checkedAt }
     }
     const outcome = await this.deps.probe({
       baseUrl: config.baseUrl,
-      credential,
+      credential: auth.kind === 'secret' ? auth.value : null,
       // A snapshot that recognises the endpoint but states no input limits inherits
       // the limits already in force instead of jumping to the absolute ceilings.
       previousLimits: this.capabilities?.limits ?? null,
@@ -410,8 +440,16 @@ export class SpeechRailInputCore {
       // known limits: falling back to the absolute ceilings would silently widen what
       // this host accepts, and enforce nothing the service ever stated.
       if (outcome.capabilities !== null) this.capabilities = outcome.capabilities
-      // A 200 on an authenticated request is the only evidence of acceptance available.
-      return { reachable: true, authenticated: 'accepted', capabilities: this.capabilities, failure: null, checkedAt }
+      // A 200 on an authenticated request is the only evidence of acceptance available. With no
+      // credential sent, the same 200 proves the service answered and judges nothing about a
+      // credential, so it must not be reported as an acceptance.
+      return {
+        reachable: true,
+        authenticated: auth.kind === 'secret' ? 'accepted' : 'unverified',
+        capabilities: this.capabilities,
+        failure: null,
+        checkedAt,
+      }
     }
     // A failed probe keeps the last snapshot on purpose: falling back to the
     // absolute ceilings here would silently widen what this host accepts after a
@@ -576,15 +614,15 @@ export class SpeechRailInputCore {
     })
     if (!recorded) return await refuse('journal-unavailable')
 
-    const credential = await this.deps.resolveCredential(config.credentialRef)
-    if (credential === null) return await refuse('not-configured')
+    const auth = await this.resolveAuth(config)
+    if (auth.kind === 'missing') return await refuse('not-configured')
 
     const language = this.effectiveLanguageHint(config)
     const outcome = await this.deps.transcribe({
       baseUrl: config.baseUrl,
       model: config.model,
       language,
-      credential,
+      credential: auth.kind === 'secret' ? auth.value : null,
       audio,
       timeoutMs: config.requestTimeoutMs,
       signal,

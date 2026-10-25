@@ -310,7 +310,10 @@ export function VoiceInput({
     if (snapshot.gate === 'busy') { feedback(t('gateBusy')); return }
     // Without a credential every upload is refused, so say so before the microphone is
     // opened rather than after a full dictation.
-    if (!snapshot.credentialConfigured) { feedback(t('failure.not-configured')); return }
+    // A reference that is configured but resolves to nothing will be refused on upload, so say so
+    // before the microphone is opened rather than after a full dictation. An empty reference is the
+    // opposite state: the endpoint needs no credential and nothing is missing.
+    if (snapshot.credentialRef !== '' && !snapshot.credentialConfigured) { feedback(t('failure.not-configured')); return }
     // Same reasoning for a snapshot that already reported the operation as unsupported: the host
     // refuses that upload before the audio leaves this machine, so dictating it first would spend a
     // recording on a refusal that was known in advance. Only a snapshot can say this - an engine

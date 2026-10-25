@@ -517,3 +517,37 @@ describe('VoiceInput dictation trigger', () => {
     await waitFor(() => { expect(dictation.available()).toBe(false) })
   })
 })
+
+describe('VoiceInput credential gate', () => {
+  /** A render whose microphone acquisition is observable. */
+  function view(overrides: Partial<SpeechRailInputStatus>, createRecording: ReturnType<typeof vi.fn>) {
+    return (
+      <VoiceInput
+        {...props(overrides, async () => ({ ok: true, pendingOperationId: null, failure: null }))}
+        createRecording={createRecording as unknown as VoiceInputProps['createRecording']}
+      />
+    )
+  }
+
+  it('opens the microphone when the endpoint is configured without a credential', async () => {
+    // An empty reference means this endpoint needs none, so nothing is missing and the gate must let
+    // the take through; refusing here would report a working setup as broken.
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }))
+    render(view({ credentialRef: '', credentialConfigured: false }, createRecording))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    await waitFor(() => { expect(createRecording).toHaveBeenCalledTimes(1) })
+    expect(screen.queryByText('failure.not-configured')).toBeNull()
+  })
+
+  it('refuses before opening the microphone when a configured reference resolves to nothing', async () => {
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }))
+    render(view({ credentialRef: 'SPEECHRAIL_API_KEY', credentialConfigured: false }, createRecording))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    expect(await screen.findByText('failure.not-configured')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+})

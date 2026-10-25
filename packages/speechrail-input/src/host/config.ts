@@ -27,7 +27,10 @@ import {
 export const Config = z.object({
   baseUrl: z.string().default(DEFAULT_BASE_URL),
   model: z.string().default(''),
-  credentialRef: z.string().min(1).default(DEFAULT_CREDENTIAL_REF),
+  // No `min(1)`: an explicitly empty reference is a supported state meaning "this endpoint needs no
+  // credential" - the request then carries no Authorization header at all. A non-empty reference
+  // that resolves to nothing is still refused as `not-configured`. See ADR-0003.
+  credentialRef: z.string().default(DEFAULT_CREDENTIAL_REF),
   language: z.union(['auto', 'zh', 'en']).default('auto').volatile(),
   requestTimeoutMs: z.natural().min(MIN_REQUEST_TIMEOUT_MS).max(MAX_REQUEST_TIMEOUT_MS).default(DEFAULT_REQUEST_TIMEOUT_MS).volatile(),
 })
@@ -38,7 +41,7 @@ export interface SpeechRailInputConfig {
   baseUrl: string
   /** Optional explicit model id; empty lets the service choose. */
   model: string
-  /** Credential reference resolved for every operation. */
+  /** Credential reference resolved for every operation; empty means the endpoint needs none. */
   credentialRef: string
   /** Volatile language hint handle; read it through {@link readConfig}. */
   language: Volatile<SpeechRailLanguageMode>
@@ -52,7 +55,7 @@ export interface SpeechRailInputConfigValues {
   baseUrl: string
   /** Optional explicit model id; empty lets the service choose. */
   model: string
-  /** Credential reference resolved for every operation. */
+  /** Credential reference resolved for every operation; empty means the endpoint needs none. */
   credentialRef: string
   /** Language hint, or `auto` to omit it. */
   language: SpeechRailLanguageMode

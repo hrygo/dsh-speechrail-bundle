@@ -27,7 +27,7 @@ const CONFIG: ResolvedConfig = {
 interface Send {
   readonly baseUrl: string
   readonly language: string | null
-  readonly credential: string
+  readonly credential: string | null
   readonly audio: Uint8Array
   readonly pendingAtSend: JournalRecord | null
   readonly alreadyRecorded: boolean
@@ -646,6 +646,45 @@ describe('single in-flight gate', () => {
     expect(result.failure?.code).toBe('not-configured')
     expect(h.sends).toHaveLength(0)
     expect((await h.core.status()).gate).toBe('ready')
+  })
+
+  it('uploads with no credential at all when the reference is deliberately empty', async () => {
+    // An empty reference is the supported shape for a local engine that authenticates nobody, which
+    // is the common case; the case above is a reference that resolves to nothing, which stays a
+    // refusal. Both reach `resolveCredential` as null, so only the reference tells them apart.
+    const h = harness()
+    h.config = { ...CONFIG, credentialRef: '' }
+    h.credential = null
+    const result = await h.core.transcribe(payload('op_nnnnnnnn'))
+    expect(result.ok).toBe(true)
+    expect(h.sends).toHaveLength(1)
+    expect(h.sends[0]?.credential).toBeNull()
+    const status = await h.core.status()
+    expect(status.credentialRef).toBe('')
+    // Deliberately unchanged: nothing resolved to a secret. The empty reference identifies the
+    // state, and that is what the control, the settings page and the tool each branch on.
+    expect(status.credentialConfigured).toBe(false)
+    expect(status.gate).toBe('ready')
+  })
+
+  it('probes an unauthenticated endpoint and claims no acceptance for it', async () => {
+    const h = harness()
+    h.config = { ...CONFIG, credentialRef: '' }
+    h.credential = null
+    const result = await h.core.check()
+    expect(h.probeCalls).toBe(1)
+    expect(result.reachable).toBe(true)
+    expect(result.failure).toBeNull()
+    // A 200 with no credential on the wire judged no credential.
+    expect(result.authenticated).toBe('unverified')
+  })
+
+  it('still refuses to probe when a configured reference resolves to nothing', async () => {
+    const h = harness()
+    h.credential = null
+    const result = await h.core.check()
+    expect(h.probeCalls).toBe(0)
+    expect(result.failure?.code).toBe('not-configured')
   })
 
   it('names the real reason when a take is over a ceiling, and never blames the format', async () => {

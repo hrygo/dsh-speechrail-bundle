@@ -73,7 +73,7 @@ describe('speechrail_input_status', () => {
     expect(schema.type).toBe('object')
     expect(schema.additionalProperties).toBe(false)
     const names = Object.keys(schema.properties)
-    expect(names).toHaveLength(18)
+    expect(names).toHaveLength(19)
     expect([...schema.required].sort()).toEqual([...names].sort())
     for (const [name, property] of Object.entries(schema.properties)) {
       // Requiredness belongs to the top-level array only. A per-property `required`
@@ -114,6 +114,7 @@ describe('speechrail_input_status', () => {
     expect(calls).toEqual({ status: 1, check: 0 })
     expect(value).toEqual({
       credentialConfigured: true,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: 'asr-1.7b-q8',
@@ -161,6 +162,20 @@ describe('speechrail_input_status', () => {
     expect(value.pendingOperationId).toBe('op_aaaaaaaa')
     // Nothing sensitive can appear: the canonical value has no free-text carrier.
     expect(JSON.stringify(value)).not.toContain('SPEECHRAIL_API_KEY')
+  })
+
+  it('reports a credential-free endpoint as a working setup, not a missing secret', async () => {
+    // A local engine that authenticates nobody is configured by clearing the reference, so the two
+    // booleans must stay distinguishable: reporting this as a missing credential would send the
+    // reader after a secret nothing needs.
+    const { stub } = source({ credentialRef: '', credentialConfigured: false })
+    const value = await createStatusTool(stub).execute({}) as StatusToolValue
+
+    expect(value.credentialRequired).toBe(false)
+    expect(value.credentialConfigured).toBe(false)
+    const text = describeStatus(value)
+    expect(text).toContain('no credential in use')
+    expect(text).not.toContain('credential missing')
   })
 
   it('does not report a service as unreachable when no request was ever made', async () => {
@@ -229,6 +244,7 @@ describe('speechrail_input_status', () => {
   it('describes an unreachable and unprobed service distinctly', () => {
     const base: StatusToolValue = {
       credentialConfigured: false,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: '',
@@ -256,6 +272,7 @@ describe('speechrail_input_status', () => {
     // The gate line says what to do; without the cause the reader has to guess what the service did.
     const base: StatusToolValue = {
       credentialConfigured: true,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: '',
@@ -289,6 +306,7 @@ describe('speechrail_input_status', () => {
     // the gate, and a hand-built value must not be able to contradict that.
     const base: StatusToolValue = {
       credentialConfigured: true,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: '',
@@ -321,6 +339,7 @@ describe('speechrail_input_status', () => {
     // reader to clear an upload that is still in flight.
     const busy: StatusToolValue = {
       credentialConfigured: true,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: '',
@@ -348,6 +367,7 @@ describe('speechrail_input_status', () => {
     // calling that "authorized" or "rejecting the credential" would both be false.
     const base: StatusToolValue = {
       credentialConfigured: true,
+      credentialRequired: true,
       endpoint: 'http://127.0.0.1:8201/v1',
       endpointProblem: '',
       model: '',

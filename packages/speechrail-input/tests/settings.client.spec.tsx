@@ -505,4 +505,13 @@ describe('SpeechRailSettings capability label', () => {
     })
     expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeNull()
   })
+
+  it('shows a credential-free endpoint as a configuration, not a missing secret', async () => {
+    // The empty reference is how a local engine that authenticates nobody is configured. Rendering
+    // it as an unconfigured credential would report a working setup as a broken one.
+    render(<SpeechRailSettings {...props({ credentialRef: '', credentialConfigured: false })} />)
+
+    await waitFor(() => { expect(screen.getByText('settings.credentialNone')).toBeTruthy() })
+    expect(document.body.textContent).not.toContain('credentialMissing')
+  })
 })
