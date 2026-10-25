@@ -24,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.9.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.10.0/dsh-speechrail-bundle.tgz
 ```
 
 Then point the entry at your engine. The endpoint and the credential reference are entry config, so

@@ -67,7 +67,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.9.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.10.0/dsh-speechrail-bundle.tgz
 ```
 
 随后把条目指向你的引擎。服务地址与凭据引用属于条目配置，通过给 profile 的 `cordis.patch.yml` 打补丁来改；模型名则在插件的设置页里改，和语言、请求预算一起：
