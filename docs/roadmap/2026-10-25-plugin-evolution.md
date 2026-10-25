@@ -125,15 +125,19 @@
 
 阶段 2 因此只剩：
 
-- `model` 字段："总是发送配置好的 model"按引擎数解锁最多（speaches / vLLM / LocalAI / mlx-audio / coro-asr ≈ 6–7 个都要求它），缺字段时的原因也要可读；
 - 端点路径形状：whisper.cpp 用 `--inference-path /v1/audio/transcriptions` 就能规避，属于文档而非代码；
 - 兼容表的 fixture 级证据（真机验证按用户决定不做）。
 
-**2026-10-25 补记（"首次成功"这一块）**：文档原先写着"随后在设置页填写地址与凭据引用"，而设置页只写语言与请求预算——端点、模型、凭据引用都是条目配置。这是错误指引，已替换为可复制的 `cordis.patch.yml` 补丁写法（含"整段替换、不深度合并"的提醒），并把"路径 / `model` / 凭据"三处引擎差异写成检查清单；设置页补上此前完全不可见的 `model` 行，并在"没配 model 却被拒绝"时给出提示（只说该检查什么，不臆断原因）。`model` 的取值落在哪个引擎上仍是文档级结论，未实测。
+**2026-10-25 补记（"首次成功"这一块）**：文档原先写着"随后在设置页填写地址与凭据引用"，而设置页只写语言与请求预算——端点、模型、凭据引用都是条目配置。这是错误指引，已替换为可复制的 `cordis.patch.yml` 补丁写法（含"整段替换、不深度合并"的提醒）；设置页补上此前完全不可见的 `model` 行，并在"没配 model 却被拒绝"时给出提示（只说该检查什么，不臆断原因）。
 
 **该写法的证据（文档级，非实测）**：profile 的 `cordis.patch.yml` 里，`- id: ui-settings-general` + `config:` 这类只有 id 与 config 的行，覆盖的是 `@deepseek-ai/dsh-web-app` bundle 插入的行——即"用 profile patch 给已安装 bundle 的条目写配置"在本机配置里已有既成先例，不依赖额外机制。
 
-**未做（等用户决定）**：让 `model` 从设置页写入。它是三个静态字段中唯一不涉及"把凭据送到哪个地址"的一个，技术上可以改成 volatile 并由设置页持久化；但只让三者之一可编辑会让界面更不一致，且要改 Remote 配置契约。
+**2026-10-25 续（用户"你先做深做实"后完成的两件）**：
+
+1. **[调研](../research/2026-10-25-local-stt-engine-contracts.md)**：逐引擎的文档/源码级契约表（10 个引擎，逐条 URL + 分级 + 未证实项清单，本机未实测）。它把"`model` 猜测"变成了事实：speaches/vLLM/mlx-audio **强制**该字段并拿它与**已加载权重**比对（占位符 404），LocalAI 文档用法也总是带它，coro-asr 忽略它，whisper.cpp 根本没有这个字段；同时确认本插件已有的两处做法是对的——显式 `response_format=json`（mlx-audio 不显式请求会回 ndjson）与把 401/403 都算 `unauthorized`（speaches 403、vLLM 401）。也明确了两处**刻意不支持**：whisper-asr-webservice（`/asr` + `audio_file` + `output` 查询参数）与 LM Studio/Ollama（无该路由）。
+2. **[ADR-0004](../decisions/0004-model-id-writable-from-settings.md)**：`model` 改为易失字段并可从设置页写入（含 Remote 配置契约新增必填字段、`MAX_MODEL_LENGTH` 两侧同界）。`baseUrl`/`credentialRef` 保持静态，理由与复活条件见该 ADR。附带修掉一个真实缺陷：`bad-request` 同时被"服务回 400/422"和"本插件拒绝自己构造的载荷"两种来源使用，而文案一律说"服务端拒绝"——现按 `httpStatus` 区分，两处失败渲染也合并为一个函数（`src/client/failure-text.ts`）。
+
+**仍未做**：`model` 的取值落在哪个引擎上仍是文档级结论；本机没有跑过任何第二个引擎（用户决定），所以"兼容表"没有一行是实测。
 
 ## 4. 未核实项
 
@@ -141,7 +145,8 @@
 - `ShortcutCommand.modals` 的合法取值：类型注释说"Allowed modal identifiers"，但未给出枚举与空数组语义。
 - 是否存在 keyup 通道；若没有，"按住说话"只能用 `observeFixedInput` 或退回点击。
 - 阶段 2 中 whisper.cpp 究竟读取哪些表单字段（抓到的源码被截断），以及它是否真的忽略未知的 `model`。
-- ADR-0003 的"空引用＝无鉴权"只在 mock 传输层验证过（请求确实不带 `Authorization` 头）；用户已决定不做真机引擎实测，所以没有任何真实无鉴权引擎的端到端结论。
+- [兼容性调研](../research/2026-10-25-local-stt-engine-contracts.md)里逐条标为 `unknown` 的项目全部仍未证实（vLLM 完全缺 `model` 的状态码、LocalAI 缺/错模型的错误码与真实默认 `response_format`、coro-asr 是否必需 `model`、whisper.cpp 是否完全不校验 Authorization、speaches/mlx-audio 是否拒绝多余表单字段等）。
+- ADR-0003 的"空引用＝无鉴权"与 ADR-0004 的"设置页写入 model"都只在 mock 与本地回环 HTTP 服务上验证过；用户已决定不做真机引擎实测，所以没有任何真实引擎的端到端结论。
 - 共存问题在真实双插件下的表现（需要激活官方语音 bundle，当前未授权）。
 - 阶段 0 的结论只能由用户产出一一我自己不能录音，也不应替用户判断识别质量。
 

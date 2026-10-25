@@ -27,9 +27,11 @@ bytes.
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.8.1/dsh-speechrail-bundle.tgz
 ```
 
-Then point the entry at your engine: patch the `speechrail-input` entry in the profile's
-`cordis.patch.yml`. A patch replaces that row's `config` wholesale rather than merging it, so restate
-every field the entry relies on; anything omitted falls back to the schema defaults in the
+Then point the entry at your engine. The endpoint and the credential reference are entry config, so
+they are set by patching the `speechrail-input` entry in the profile's `cordis.patch.yml`; the model id
+is editable on the bundle's settings page together with the language and the request budget. A patch
+replaces that row's `config` wholesale rather than merging it, so restate every field the entry relies
+on; anything omitted falls back to the schema defaults in the
 [configuration table](#configuration).
 
 ```yaml
@@ -37,13 +39,13 @@ every field the entry relies on; anything omitted falls back to the schema defau
   name: '@hrygo/dsh-speechrail-bundle'
   config:
     baseUrl: http://127.0.0.1:8201/v1   # loopback only; the path must be /v1
-    model: ''                           # empty lets the service choose
     credentialRef: ''                   # empty: this engine authenticates nobody
 ```
 
-The settings page is not a config editor for those three fields: it **shows** the endpoint, the model
-and the credential reference, and **persists** only the language and the request budget. Changing one
-of the three means editing the entry (and restarting the app if the change does not appear).
+The settings page is not a config editor for the first two fields: it **shows** the endpoint and the
+credential reference and **persists** the model, the language and the request budget. Changing the
+endpoint or the credential reference means editing the entry (and restarting the app if the change does
+not appear).
 
 ## What it does
 
@@ -56,7 +58,7 @@ of the three means editing the entry (and restarting the app if the change does 
   (`/v1/speechrail/capabilities`) to bound upload size and duration and to offer only the
   languages the service enumerates. A service that does not implement that endpoint is used as a
   plain transcription endpoint instead (see [Other engines](#other-engines)).
-- Persists language and request budget through the Harness settings page.
+- Persists language, model and request budget through the Harness settings page.
 - Registers one rebindable keyboard command, `speechrail-input.dictate` (default
   <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd>
   elsewhere), so a dictation can be started and finished without the mouse: one press starts from
@@ -84,16 +86,31 @@ speaks the same shape on loopback:
 | Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused endpoint, or a request that carried no credential at all). The `speechrail_input_status` tool returns the same three strings, plus whether this endpoint was configured to present a credential in the first place. |
 | Agent report | The tool reports the language hint that will **actually travel** (not the configured mode), the endpoint's own statement about transcription (`supported` / `unsupported` / `unknown`), and the language modes the snapshot admits. A service that says it cannot transcribe is named as such instead of reading as usable. |
 
-What varies between engines is configuration here, never code:
+What varies between engines is configuration here, never code. Engines confirmed against their own docs
+and source, with unknown rows left unknown, are in
+[回环 STT 引擎兼容性调研](../../docs/research/2026-10-25-local-stt-engine-contracts.md) (documentation
+and source level, **not measured on this machine**, by decision):
 
-- **Route.** The call is always `<base>/audio/transcriptions`. An engine that serves something else
-  (`/inference`, `/asr`, …) is normally started with a flag that moves it onto the `/v1` shape; this
-  plugin has no per-engine path special case and does not guess.
-- **`model`.** Most OpenAI-shaped servers reject an upload that names no model, which surfaces as
-  `bad-request` (HTTP 400/422) or `model-not-found`. Set `model` to whatever the engine calls its
+- **Route.** The call is always `<base>/audio/transcriptions`. **speaches, vLLM, LocalAI, mlx-audio and
+  coro-asr** serve exactly that; an engine that serves something else (`/inference`, `/asr`, …) is
+  normally started with a flag that moves it onto the `/v1` shape, and this plugin has no per-engine
+  path special case and does not guess.
+- **`model`.** **Required** by speaches, vLLM and mlx-audio (validated against the weights that engine
+  has loaded, so a placeholder 404s), required in LocalAI's documented usage, ignored by coro-asr, and
+  not a field at all in whisper.cpp. Set it on the settings page to whatever the engine calls its
   loaded weights; leaving it empty is only right for an engine that picks its own.
-- **Credential.** A cleared `credentialRef` sends no `Authorization` header at all; a set one is
-  resolved per operation and refused locally with `not-configured` when it resolves to nothing.
+- **Response shape.** `response_format=json` is honoured by speaches, vLLM, mlx-audio and LocalAI.
+  mlx-audio's *default* is `application/x-ndjson`, so it depends on that parameter being sent — this
+  plugin always sends it. whisper.cpp answers `text/html` for its `text` format; this plugin never asks
+  for it and refuses a non-JSON body rather than guessing.
+- **Credential.** No engine requires a bearer token by default. speaches answers **403** and vLLM
+  **401** when the key it was started with is missing or wrong, which this plugin reports as
+  `unauthorized`. A cleared `credentialRef` sends no `Authorization` header at all.
+- **404 has two causes.** vLLM and speaches answer 404 for a model that is not loaded, not only for a
+  wrong route, so a 404 is never reported as "no such endpoint" on its own.
+- **Not supported on purpose.** whisper-asr-webservice (`/asr`, field `audio_file`, `output` query
+  parameter instead of `response_format`) is a different API shape, not a variation of this one; making
+  it fit would take three configuration knobs and stop being the OpenAI contract.
 
 What changes on a non-SpeechRail engine, and what does not:
 
@@ -152,7 +169,7 @@ The entry `speechrail-input` (inserted by `cordis.patch.yml`) exposes:
 | Field | Default | Notes |
 | --- | --- | --- |
 | `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
-| `model` | empty | Empty omits the field and lets the service choose; most OpenAI-shaped engines require it, and the value is validated by the service per engine. |
+| `model` | empty | Empty omits the field and lets the service choose; most OpenAI-shaped engines **require** it and validate the value against the weights they have loaded (so a placeholder 404s). Editable on the settings page ([ADR-0004](../../docs/decisions/0004-model-id-writable-from-settings.md)), bounded at 200 characters. |
 | `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
 | `language` | `auto` | `auto` omits the field entirely; `zh`/`en` are only accepted when the snapshot enumerates them. |
 | `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |

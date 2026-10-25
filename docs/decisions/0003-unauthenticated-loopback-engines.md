@@ -16,7 +16,7 @@
 
 - **[文档]** whisper.cpp 的 server 默认不校验 token（[server.cpp](https://github.com/ggml-org/whisper.cpp/blob/master/examples/server/server.cpp)）。
 - **[文档]** LocalAI 仅在设置 `LOCALAI_API_KEY` 时才要求；vLLM 的 `--api-key` 可选；speaches 本地默认不要求。
-- 汇总见 [本机回环 STT 兼容矩阵](../roadmap/2026-10-25-plugin-evolution.md)（阶段 2 的调研输入；真机验证按用户决定不做）。
+- 汇总见[回环 STT 引擎兼容性调研](../research/2026-10-25-local-stt-engine-contracts.md)（阶段 2 的调研输入；真机验证按用户决定不做）。
 
 ## 选项
 
