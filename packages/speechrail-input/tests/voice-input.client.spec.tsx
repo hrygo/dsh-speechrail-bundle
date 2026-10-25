@@ -7,7 +7,7 @@
  * Host accepts only as the user's assertion that nothing is outstanding.
  */
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
 import { failure, unknownFailure } from '../src/host/failure.ts'
@@ -549,5 +549,131 @@ describe('VoiceInput credential gate', () => {
 
     expect(await screen.findByText('failure.not-configured')).toBeTruthy()
     expect(createRecording).not.toHaveBeenCalled()
+  })
+})
+
+describe('VoiceInput in-place control', () => {
+  /**
+   * One render that can be driven through a whole take, with the composer contract observable.
+   *
+   * The control is the only thing the user clicked, so the tests below pin three things at once:
+   * it stays the row's first element, it keeps one size, and the transcript goes into the draft
+   * without being sent.
+   */
+  function view(options: {
+    readonly transcribe?: VoiceInputProps['transcribe']
+    readonly insertText?: (text: string, span: { start: number, end: number }) => boolean
+    readonly submit?: () => void
+    readonly onActiveChange?: (active: boolean) => void
+  } = {}) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+    }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        inputActions={{
+          captureInsertion: () => ({ start: 0, end: 0 }),
+          insertText: options.insertText ?? (() => true),
+          ...(options.submit === undefined ? {} : { submit: options.submit }),
+        } as unknown as VoiceInputProps['inputActions']}
+        onActiveChange={options.onActiveChange ?? ((): void => undefined)}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  /** The activity row, which exists in every phase so its first element can be asserted. */
+  function rowOf(container: HTMLElement): HTMLElement {
+    const row = container.querySelector('[data-speechrail-activity]')
+    if (row === null) throw new Error('the activity row is not rendered')
+    return row as HTMLElement
+  }
+
+  it('leaves the composer accessory controls alone', async () => {
+    // Reporting `true` makes the composer hide ordinary accessory controls while the activity is
+    // expanded, which slides the whole tool row left. That is the movement the in-place control
+    // exists to avoid, so the row never asks for the width.
+    const onActiveChange = vi.fn()
+    render(view({ onActiveChange }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+
+    expect(onActiveChange).not.toHaveBeenCalled()
+  })
+
+  it('morphs the control that was clicked instead of moving it', async () => {
+    const { container } = render(view())
+    const idle = await screen.findByRole('button', { name: 'start' })
+    const idleSize = [idle.style.width, idle.style.height]
+    expect(rowOf(container).firstElementChild).toBe(idle)
+
+    fireEvent.click(idle)
+
+    const recording = await screen.findByRole('button', { name: 'stop' })
+    // The same node, still first: nothing was inserted to its left, so it cannot have moved.
+    expect(recording).toBe(idle)
+    expect(rowOf(container).firstElementChild).toBe(recording)
+    expect([recording.style.width, recording.style.height]).toEqual(idleSize)
+  })
+
+  it('shows the live waveform inside that control', async () => {
+    const { container } = render(view())
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    const recording = await screen.findByRole('button', { name: 'stop' })
+    expect(within(recording).getByRole('img', { name: 'recording' })).toBeTruthy()
+    // Every extra control is a later sibling: the discard control may not land where the microphone
+    // was, which is what "the row jumped to the left" described.
+    const discard = screen.getByRole('button', { name: 'cancel' })
+    expect(Array.from(rowOf(container).children).indexOf(discard)).toBeGreaterThan(0)
+  })
+
+  it('inserts the transcript into the draft without sending it', async () => {
+    const insertText = vi.fn(() => true)
+    const submit = vi.fn()
+    render(view({
+      insertText,
+      submit,
+      transcribe: async () => ({ ok: true, transcript: { operationId: 'op_tttttttt', text: '你好世界', audioSeconds: 1, requestSeconds: 0.2, inferenceSeconds: null }, failure: null }),
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    await waitFor(() => { expect(insertText).toHaveBeenCalledWith('你好世界', { start: 0, end: 0 }) })
+    // Submission belongs to the user pressing send, never to a transcript arriving.
+    expect(submit).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+  })
+
+  it('offers a refused transcript for insertion instead of dropping it', async () => {
+    // A draft whose revision moved refuses the insertion; the transcript must stay reachable, and
+    // even that path may not send it.
+    const insertText = vi.fn(() => false)
+    const submit = vi.fn()
+    render(view({
+      insertText,
+      submit,
+      transcribe: async () => ({ ok: true, transcript: { operationId: 'op_tttttttt', text: '你好世界', audioSeconds: 1, requestSeconds: 0.2, inferenceSeconds: null }, failure: null }),
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    const insert = await screen.findByRole('button', { name: 'insert' })
+    expect(submit).not.toHaveBeenCalled()
+    insertText.mockReturnValue(true)
+    fireEvent.click(insert)
+
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(submit).not.toHaveBeenCalled()
   })
 })

@@ -3,7 +3,7 @@
  * @module @hrygo/dsh-speechrail-bundle/client/VoiceInput
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TokenSpan } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
@@ -97,6 +97,9 @@ const inlineStyle: CSSProperties = {
   color: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
 }
 
+/** One compact row: the anchor first, then everything a phase adds to its right. */
+const rowStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none', minWidth: 0, maxWidth: '100%' }
+
 const messageStyle: CSSProperties = {
   fontSize: 12, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis',
   whiteSpace: 'nowrap', color: 'var(--dsw-alias-content-secondary, inherit)',
@@ -104,7 +107,7 @@ const messageStyle: CSSProperties = {
 
 /** Render a compact microphone or the expanded capture, transcription or retry row. */
 export function VoiceInput({
-  inputActions, locked, onActiveChange, t,
+  inputActions, locked, t,
   status, acknowledge, transcribe, createRecording, dictation,
 }: VoiceInputProps) {
   const [phase, setPhase] = useState<Phase>('idle')
@@ -114,12 +117,6 @@ export function VoiceInput({
   const [view, setView] = useState<SpeechRailInputStatus | undefined>(undefined)
   const current = useRef<Active | undefined>(undefined)
   const generation = useRef(0)
-  const expanded = phase !== 'idle'
-  useLayoutEffect(() => {
-    onActiveChange(expanded)
-    return () => { onActiveChange(false) }
-  }, [expanded, onActiveChange])
-
   const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
   const statusSeq = useRef(0)
 
@@ -386,96 +383,106 @@ export function VoiceInput({
     }
   }
 
-  const trigger = (
-    <button
-      type="button"
-      title={t('dictate')}
-      aria-label={t('start')}
-      disabled={locked}
-      onMouseDown={(event) => { event.preventDefault() }}
-      onClick={() => { void start() }}
-      style={{ ...triggerStyle, opacity: locked ? 0.5 : 1 }}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <path
-          d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
-          fill="currentColor"
-        />
-      </svg>
-    </button>
-  )
-
-  if (!expanded) {
-    // A blocked gate reports itself through the message row once the user tries to
-    // record, but the control that clears it must be reachable without that attempt.
-    if (view?.gate !== 'unknown' && message === '') return trigger
+  /**
+   * The one control the user clicked, and the row's first element in every phase.
+   *
+   * It keeps its place and its size: `onActiveChange(true)` makes the composer hide its ordinary
+   * accessory controls while an activity is expanded, which slides the whole tool row left - the
+   * movement this control is designed not to make. It therefore never reports itself expanded, and
+   * everything a phase has to add appears to its right. The glyphs morph instead: the microphone
+   * becomes the live waveform (and the control that ends the take), then a dimmed waiting state, then
+   * the microphone again for a retry.
+   */
+  const anchor = ((): ReactNode => {
+    if (phase === 'recording') {
+      return (
+        <button
+          type="button"
+          data-speechrail-anchor="true"
+          title={t('stop')}
+          aria-label={t('stop')}
+          onClick={() => { void finish() }}
+          style={{ ...triggerStyle, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #d3574a)', borderColor: 'var(--dsw-alias-state-error-primary, #d3574a)' }}
+        >
+          <Waveform recording={current.current?.capture} label={t('recording')} bars={5} height={14} color="currentColor" />
+        </button>
+      )
+    }
+    const busy = phase === 'checking' || phase === 'requesting' || phase === 'transcribing'
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {trigger}
-        {view?.gate === 'unknown' && (
-          // Deliberately not disabled while `locked`: clearing an unproven outcome is
-          // recovery, and another plugin holding the composer must not trap the gate.
-          <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
-        )}
-        {message !== ''
-          ? <span role="status" style={messageStyle} title={message}>{message}</span>
-          : view?.gate === 'unknown' && (
-            // The host keeps the failure that left this attempt unproven, so the cause survives a page
-            // reload even though this component's own record of the attempt does not. Without it the
-            // row can only say that something is unconfirmed.
-            <span role="status" style={messageStyle} title={gateCause}>
-              {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`}
-            </span>
-          )}
-      </div>
+      <button
+        type="button"
+        data-speechrail-anchor="true"
+        title={phase === 'feedback' ? t('retryRecording') : t('dictate')}
+        aria-label={phase === 'feedback' ? t('retryRecording') : t('start')}
+        disabled={busy || locked}
+        onMouseDown={(event) => { event.preventDefault() }}
+        onClick={() => { void start() }}
+        style={{ ...triggerStyle, flex: 'none', opacity: busy ? 0.55 : locked ? 0.5 : 1 }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path
+            d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
     )
-  }
+  })()
+
+  const phaseText = phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')
+  const waiting = phase === 'checking' || phase === 'requesting' || phase === 'transcribing'
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} data-speechrail-activity={phase}>
-      <button type="button" aria-label={t(pending === '' ? 'cancel' : 'discard')} onClick={cancel} style={roundStyle}>×</button>
-      {phase === 'recording'
-        ? (
-          <>
-            <Waveform recording={current.current?.capture} label={t('recording')} />
-            {/* A result that arrived while recording must stay visible: the row keeps its stop
-                control, so there is nowhere else to show it. */}
-            {message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
-          </>
-        )
-        : (
-          <span role="status" style={messageStyle} title={pending === '' ? message : pending}>
-            {phase === 'feedback'
-              ? message
-              : (
-                <>
-                  <span>{phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')}</span>
-                  {phase === 'transcribing' && (view?.languageHint ?? '') !== '' && (
-                    // The hint the snapshot in force puts on the wire. The host decides it again when
-                    // the upload starts, so this is the reported value, not a promise about bytes: what
-                    // it is worth saying is which language is in force while dictating, since the
-                    // settings page is not on screen.
-                    <> · <span>{t('languageHintInline', { language: view?.languageHint ?? '' })}</span></>
-                  )}
-                  {message !== '' && <> · <span>{message}</span></>}
-                </>
-              )}
-          </span>
-        )}
-      {phase === 'recording' && (
-        <button type="button" aria-label={t('stop')} onClick={() => { void finish() }} style={roundStyle}>■</button>
+    <div style={rowStyle} data-speechrail-activity={phase}>
+      {anchor}
+      {phase !== 'idle' && (
+        // After the anchor, never before it: a control that lands where the microphone was would be
+        // the movement this layout exists to avoid.
+        <button type="button" aria-label={t(pending === '' ? 'cancel' : 'discard')} onClick={cancel} style={roundStyle}>×</button>
       )}
-      {phase === 'feedback' && (pending !== ''
-        ? (
-          <button type="button" style={inlineStyle} onClick={() => {
-            if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setMessage(''); setPhase('idle') }
-          }}>{t('insert')}</button>
-        )
-        : (
-          <button type="button" style={inlineStyle} disabled={locked} onClick={() => { void start() }}>{t('retryRecording')}</button>
-        ))}
+      {waiting && (
+        <span role="status" style={messageStyle} title={phaseText}>
+          <span>{phaseText}</span>
+          {phase === 'transcribing' && (view?.languageHint ?? '') !== '' && (
+            // The hint the snapshot in force puts on the wire. The host decides it again when
+            // the upload starts, so this is the reported value, not a promise about bytes: what
+            // it is worth saying is which language is in force while dictating, since the
+            // settings page is not on screen.
+            <> · <span>{t('languageHintInline', { language: view?.languageHint ?? '' })}</span></>
+          )}
+          {/* A result that arrived while this take is still running has nowhere else to go. */}
+          {message !== '' && <> · <span>{message}</span></>}
+        </span>
+      )}
+      {phase === 'recording' && message !== '' && (
+        // A result that arrived while recording must stay visible: the row keeps its stop control,
+        // so there is nowhere else to show it.
+        <span role="status" style={messageStyle} title={message}>{message}</span>
+      )}
+      {phase === 'feedback' && (
+        <>
+          <span role="status" style={messageStyle} title={pending === '' ? message : pending}>{message}</span>
+          {pending !== '' && (
+            <button type="button" style={inlineStyle} onClick={() => {
+              if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setMessage(''); setPhase('idle') }
+            }}>{t('insert')}</button>
+          )}
+        </>
+      )}
       {view?.gate === 'unknown' && (
+        // Deliberately not disabled while `locked`: clearing an unproven outcome is recovery, and
+        // another plugin holding the composer must not trap the gate.
         <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
+      )}
+      {phase === 'idle' && message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
+      {phase === 'idle' && message === '' && view?.gate === 'unknown' && (
+        // The host keeps the failure that left this attempt unproven, so the cause survives a page
+        // reload even though this component's own record of the attempt does not. Without it the
+        // row can only say that something is unconfirmed.
+        <span role="status" style={messageStyle} title={gateCause}>
+          {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`}
+        </span>
       )}
     </div>
   )
