@@ -103,6 +103,8 @@ export const zh = {
   'settings.available': '可用',
   'settings.unsupported': '不可用',
   'settings.languages': '服务端声明语言：{values}',
+  'shortcut.dictate': '开始或结束语音输入',
+  'shortcut.unavailable': '当前没有可用的输入框',
 } as const
 
 /** Key union shared by both dictionaries. */
@@ -203,6 +205,8 @@ export const en: Record<SpeechRailKey, string> = {
   'settings.available': 'available',
   'settings.unsupported': 'unsupported',
   'settings.languages': 'Service languages: {values}',
+  'shortcut.dictate': 'Start or finish voice input',
+  'shortcut.unavailable': 'No composer is available right now',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
