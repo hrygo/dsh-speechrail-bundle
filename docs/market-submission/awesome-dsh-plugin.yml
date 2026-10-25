@@ -20,6 +20,12 @@
 #   - `description.en` is quoted because it contains a colon followed by a space.
 #   - `icon` is omitted: the field wants a GitHub-hosted raster image and the package ships an SVG,
 #     so the storefront falls back to the owner avatar.
+#
+# Submitted 2026-10-25 as (one file, 7 lines, CI check passed in 8m21s):
+#   https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9238
+# The fork branch is hrygo/awesome-dsh-plugin:add-speechrail-input. The index regenerates its READMEs
+# and site after merge, so nothing else is edited by hand.
+#
 url: https://github.com/hrygo/dsh-speechrail-bundle/tree/main/packages/speechrail-input
 name: hrygo/dsh-speechrail-bundle#speechrail-input
 category: voice
