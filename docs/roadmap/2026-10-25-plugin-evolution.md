@@ -9,7 +9,7 @@
 
 | 事实 | 证据 |
 |---|---|
-| 插件已安装并启用（0.9.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.9.0 tag 资产，安装目录内 `package.json` 版本为 0.9.0（2026-10-25 由 plugin_manager 从 0.8.1 升级） |
+| 插件已安装并启用（0.10.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.10.0 tag 资产，安装目录内 `package.json` 版本为 0.10.0（2026-10-25 由 plugin_manager 两次升级：0.8.1 → 0.9.0 → 0.10.0） |
 | 本机 SpeechRail 活着且要求鉴权 | [实测] `127.0.0.1:8201` LISTEN（python）；零推理探测（不带凭据 GET capabilities）返回 `401` + 完整错误信封 `invalid_api_key` |
 | 凭据引用存在 | [实测] `~/.dsh/.credentials.yaml` 的 `refs` 含 `SPEECHRAIL_API_KEY`（只读名字，未读值） |
 | 门禁干净 | [实测] `~/.dsh/storages/speechrail_input_pending.json` 为空 |
@@ -157,3 +157,5 @@
 本文件是分析，不是授权。仓库当前允许：编写产品运行源码、安装仓库内 devDependencies、生成 Typert 工件、构建、运行 mock 测试与打包清单检查。**仍需单独批准**：真实录音（阶段 0）、把插件或官方 bundle 安装/激活到任何 profile（阶段 1 的真机验证与阶段 3 验证）、发布。
 
 真实引擎的安装与真机转写验证已由用户决定**不做**（2026-10-25："本机不做其他引擎实测"）：阶段 2 因此只能交付契约改动、fixture 级证据与文档，兼容表的真机结论保持未验证，并如实标注。
+
+**2026-10-25 发布之二**：0.10.0 已发布并同样经 tag 固定 URL 安装（`0.9.0 → 0.10.0`，资产 39 个文件 / 86,710 字节，下载字节 sha256 `be1272a3…` 与本地一致）。它改的是**控件行为**：点击麦克风后原位变色波（不再要求 composer 展开，因而不再隐藏配件控件、不再把工具栏整体左移），取消键移到控件之后，停止方块并入波形按钮；转写结果自动插入草稿且从不提交（新增 5 个测试钉住，其中一并覆盖「草稿拒绝插入时结果仍可插入」）。用户对 0.9.0 的观察正是「点击后声波跑到左侧」，这与该槽位的文档行为一致（`InputActivityOwnerProps.onActiveChange`：活动展开时 composer 隐藏普通配件控件）。是否已修好只能由用户重启并刷新页面后确认。
