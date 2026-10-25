@@ -44,8 +44,6 @@ function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request:
       captureInsertion: () => ({ start: 0, end: 0 }),
       insertText: () => true,
     },
-    locked: false,
-    onActiveChange: () => { /* observation only */ },
     // Interpolating keeps the assertions honest: with `(key) => key` every language renders the
     // same text, so a positive test could not tell `zh` from `en` or from a wrong variable.
     t: (key: string, values?: Record<string, string>) =>
@@ -480,7 +478,7 @@ describe('VoiceInput acknowledge', () => {
 
 describe('VoiceInput dictation trigger', () => {
   /** One render's props: the shared stubs plus the channel, a capturable recording and a spy. */
-  function view(dictation: DictationTrigger, locked: boolean, transcribe: (request: unknown, signal: AbortSignal) => Promise<unknown>) {
+  function view(dictation: DictationTrigger, transcribe: (request: unknown, signal: AbortSignal) => Promise<unknown>) {
     const capture = {
       start: async () => undefined,
       stop: async () => new Uint8Array([0]),
@@ -490,17 +488,19 @@ describe('VoiceInput dictation trigger', () => {
       <VoiceInput
         {...props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))}
         dictation={dictation}
-        locked={locked}
         transcribe={transcribe as VoiceInputProps['transcribe']}
         createRecording={() => capture as unknown as Recording}
       />
     )
   }
 
-  it('starts from idle and finishes a live capture, and stops being available once locked', async () => {
+  it('starts from idle and keeps the command available across a whole take', async () => {
+    // The seat in the model selector's control group reports no composer lock, so the command stays
+    // subscribed for as long as the control is mounted rather than going unavailable on a state this
+    // component cannot see.
     const dictation = createDictationTrigger()
     const transcribe = vi.fn(async (_request: unknown, _signal: AbortSignal) => ({ ok: false, transcript: null, failure: null }))
-    const rendered = render(view(dictation, false, transcribe))
+    render(view(dictation, transcribe))
 
     // Nothing is mounted to accept a press until the control subscribes.
     await waitFor(() => { expect(dictation.available()).toBe(true) })
@@ -513,8 +513,10 @@ describe('VoiceInput dictation trigger', () => {
     await waitFor(() => { expect(transcribe).toHaveBeenCalledTimes(1) })
     expect(transcribe.mock.calls[0]?.[0]).toMatchObject({ operationId: expect.any(String) })
 
-    rendered.rerender(view(dictation, true, transcribe))
-    await waitFor(() => { expect(dictation.available()).toBe(false) })
+    // The take is over and the command is still subscribed: a press is accepted for as long as the
+    // control is mounted, rather than on a composer state this seat cannot observe.
+    await waitFor(() => { expect(screen.queryByRole('button', { name: 'stop' })).toBeNull() })
+    expect(dictation.available()).toBe(true)
   })
 })
 
@@ -564,7 +566,6 @@ describe('VoiceInput in-place control', () => {
     readonly transcribe?: VoiceInputProps['transcribe']
     readonly insertText?: (text: string, span: { start: number, end: number }) => boolean
     readonly submit?: () => void
-    readonly onActiveChange?: (active: boolean) => void
   } = {}) {
     const capture = {
       start: async () => undefined,
@@ -580,7 +581,6 @@ describe('VoiceInput in-place control', () => {
           insertText: options.insertText ?? (() => true),
           ...(options.submit === undefined ? {} : { submit: options.submit }),
         } as unknown as VoiceInputProps['inputActions']}
-        onActiveChange={options.onActiveChange ?? ((): void => undefined)}
         createRecording={() => capture as unknown as Recording}
         transcribe={options.transcribe ?? base.transcribe}
       />
@@ -593,19 +593,6 @@ describe('VoiceInput in-place control', () => {
     if (row === null) throw new Error('the activity row is not rendered')
     return row as HTMLElement
   }
-
-  it('leaves the composer accessory controls alone', async () => {
-    // Reporting `true` makes the composer hide ordinary accessory controls while the activity is
-    // expanded, which slides the whole tool row left. That is the movement the in-place control
-    // exists to avoid, so the row never asks for the width.
-    const onActiveChange = vi.fn()
-    render(view({ onActiveChange }))
-
-    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
-    await screen.findByRole('button', { name: 'stop' })
-
-    expect(onActiveChange).not.toHaveBeenCalled()
-  })
 
   it('morphs the control that was clicked instead of moving it', async () => {
     const { container } = render(view())

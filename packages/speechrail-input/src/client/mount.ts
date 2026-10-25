@@ -32,6 +32,17 @@ import { createDictationTrigger } from './trigger.ts'
 /** Services this client face cannot mount without. */
 export const inject = ['remote', 'slots', 'locale']
 
+/** Cell key of this bundle's composer control inside the model selector's control group. */
+const SEAT_ID = 'speechrail-input'
+
+/**
+ * Position inside that group.
+ *
+ * Entries render ascending, and the shipped `image-provider` control is ordered 10, so 20 lands
+ * between it and the model selector instead of at the far end of the group.
+ */
+const SEAT_ORDER = 20
+
 /** Unwrap one Remote result, throwing the transport error the UI localizes generically. */
 async function unwrap<T>(pending: Promise<RemoteResult<T>>): Promise<T> {
   const result = await pending
@@ -72,8 +83,11 @@ function registerUi(ctx: Context): void {
     },
     dictation,
   }
-  ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
-    name: 'conversation.input.activity', locale: NS, inject: () => actions,
+  // The microphone sits in the model selector's own control group, immediately before it. The activity
+  // seat is deliberately not used: an activity expands across the toolbar, and the composer hides its
+  // ordinary accessory controls while one is expanded - which moved this control away from the click.
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right', id: SEAT_ID, order: SEAT_ORDER, locale: NS, inject: () => actions,
   }, VoiceInput))
   ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
     name: 'plugins.bundle.config', key: PACKAGE_NAME, locale: NS, inject: () => actions,

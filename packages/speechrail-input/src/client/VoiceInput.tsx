@@ -49,8 +49,8 @@ export interface SpeechRailActions {
 /** Entry-injected Host operations. */
 export type SpeechRailInjected = SpeechRailActions
 
-/** Composer-owned expansion and draft actions. */
-export type VoiceInputProps = Pick<PropsRuntime<'conversation.input.activity'>, 'inputActions' | 'locked' | 'onActiveChange'>
+/** Composer-owned draft actions, as the model selector's control group provides them. */
+export type VoiceInputProps = Pick<PropsRuntime<'conversation.input.right'>, 'inputActions'>
   & PropsLocale<typeof NS> & InjectFace<SpeechRailInjected>
 
 type Phase = 'idle' | 'checking' | 'requesting' | 'recording' | 'transcribing' | 'feedback'
@@ -105,9 +105,9 @@ const messageStyle: CSSProperties = {
   whiteSpace: 'nowrap', color: 'var(--dsw-alias-content-secondary, inherit)',
 }
 
-/** Render a compact microphone or the expanded capture, transcription or retry row. */
+/** Render the microphone and, in its place, whatever the current phase has to show. */
 export function VoiceInput({
-  inputActions, locked, t,
+  inputActions, t,
   status, acknowledge, transcribe, createRecording, dictation,
 }: VoiceInputProps) {
   const [phase, setPhase] = useState<Phase>('idle')
@@ -217,11 +217,11 @@ export function VoiceInput({
   })
 
   useEffect(() => {
-    // A locked composer disables its own control and `start` refuses, so not subscribing is what
-    // makes the command report a blocked press instead of claiming one it would drop.
-    if (locked) return
+    // Subscribing in every composer state is deliberate: this seat is told nothing about a composer
+    // that refuses interaction, and a draft that refuses the insertion keeps the transcript in the row
+    // for a later attempt, so a press is never silently dropped.
     return dictation.subscribe(() => { pressRef.current() })
-  }, [dictation, locked])
+  }, [dictation])
 
   const feedback = (text: string): void => { setMessage(text); setPhase('feedback') }
 
@@ -289,7 +289,7 @@ export function VoiceInput({
   }
 
   const start = async (): Promise<void> => {
-    if (locked || current.current) return
+    if (current.current) return
     const run = ++generation.current
     setMessage('')
     setPending('')
@@ -415,10 +415,10 @@ export function VoiceInput({
         data-speechrail-anchor="true"
         title={phase === 'feedback' ? t('retryRecording') : t('dictate')}
         aria-label={phase === 'feedback' ? t('retryRecording') : t('start')}
-        disabled={busy || locked}
+        disabled={busy}
         onMouseDown={(event) => { event.preventDefault() }}
         onClick={() => { void start() }}
-        style={{ ...triggerStyle, flex: 'none', opacity: busy ? 0.55 : locked ? 0.5 : 1 }}
+        style={{ ...triggerStyle, flex: 'none', opacity: busy ? 0.55 : 1 }}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path
@@ -471,8 +471,8 @@ export function VoiceInput({
         </>
       )}
       {view?.gate === 'unknown' && (
-        // Deliberately not disabled while `locked`: clearing an unproven outcome is recovery, and
-        // another plugin holding the composer must not trap the gate.
+        // Never disabled by this control's own phase: clearing an unproven outcome is recovery, and a
+        // recording that ends badly must not leave the gate with no way out.
         <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
       )}
       {phase === 'idle' && message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
