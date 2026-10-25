@@ -15,7 +15,7 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 | 面 | 内容 |
 |---|---|
 | Host | 严格 Typert Remote 面上的 SpeechRail 服务：仅回环上传、凭据**按引用**解析、单在途 gate、非敏感未结案 journal、稳定错误码。 |
-| Client | 输入框麦克风控件：位于模型选择器左侧，点击后**原位**变为实时波形（不重排工具栏，带计时与等待动画），转写结果自动插入草稿而不发送；含设置页；一个可改键的快捷键，用于开始／结束一次转写；中英文本地化；门禁被阻塞时两处都能确认清除。 |
+| Client | 输入框麦克风按钮：独占模型选择器**右侧**一格，点击后**原位**变为实时波形（不重排工具栏）；一次录音的其余信息交给模型选择器**左侧**的控件组——计时、正在做的事、取消、消息，以及被草稿拒绝的转写。从不发送：文本插入草稿。含设置页；一个可改键的快捷键，用于开始／结束一次转写；中英文本地化；门禁被阻塞时两处都能确认清除。 |
 | Agent | 一个只读工具 `speechrail_input_status`，模型无需打开设置页即可解释语音输入为何不可用：端点、凭据三态结论、服务是否声明能转写、**实际会发送**的语言提示、生效限额与门禁；门禁关闭时还会说出**那次未被确认的失败**。 |
 
 ## 两种引擎档位，一套契约
@@ -67,7 +67,7 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.12.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v1.0.0/dsh-speechrail-bundle.tgz
 ```
 
 随后把条目指向你的引擎。服务地址与凭据引用属于条目配置，通过给 profile 的 `cordis.patch.yml` 打补丁来改；模型名则在插件的设置页里改，和语言、请求预算一起：

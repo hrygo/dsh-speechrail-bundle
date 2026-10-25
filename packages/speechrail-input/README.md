@@ -24,7 +24,7 @@ its target string, so the `latest` command above answers `already-installed` ins
 bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.12.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v1.0.0/dsh-speechrail-bundle.tgz
 ```
 
 Then point the entry at your engine. The endpoint and the credential reference are entry config, so
@@ -49,6 +49,12 @@ not appear).
 
 ## What it does
 
+- Draws one control in two seats. The round button registers in the composer's activity seat, after
+  the model selector; everything a press produces - the running-time counter, the phase, the cancel
+  control, the message and a transcript the draft refused - registers in the model selector's own
+  group, before it, so a live take never moves the button out from under the click. One state machine
+  ([`src/client/control.ts`](src/client/control.ts)) backs both halves, and it is disposed with the
+  plugin rather than with a component, so a composer remount cannot drop a take.
 - Records through the browser microphone, resamples to canonical 16 kHz mono WAV and uploads
   it exactly once.
 - Inserts the transcript into the current composer draft without touching the draft's later
@@ -72,6 +78,30 @@ not appear).
   still needs acknowledgement, and, while the gate is closed because of one, the failure that left
   that attempt unconfirmed. It never uploads audio, never changes the gate, and never carries a
   credential or a transcript.
+
+## Stability in 1.x
+
+1.0.0 freezes the contract other things depend on. Through 1.x, without a major version:
+
+- **Seats and keys.** The button stays in `conversation.input.activity` and the report stays in
+  `conversation.input.right` with cell id `speechrail-input-panel`; the settings page stays on
+  `plugins.bundle.config` under `@hrygo/dsh-speechrail-bundle`; the keyboard command id stays
+  `speechrail-input.dictate`; the agent tool stays `speechrail_input_status`. A name change here breaks
+  someone's composition file, so it needs a major version.
+- **Settings fields.** `baseUrl`, `credentialRef`, `language`, `model` and `requestTimeoutMs` keep their
+  names and meanings, and `model` stays the one writable field that the service may validate against the
+  weights it has loaded ([ADR-0004](../../docs/decisions/0004-model-id-writable-from-settings.md)).
+- **Insertion.** A transcript is inserted into the draft through a captured `TokenSpan` and is never
+  submitted; a refused insertion keeps the text for the user to apply.
+- **The wire.** One OpenAI-shaped `POST /v1/audio/transcriptions` per take, one attempt, no silent
+  retry, no cloud fallback; loopback endpoints only
+  ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)).
+- **Theme.** Only colours the Harness declares ([ADR-0005](../../docs/decisions/0005-declared-theme-tokens-only.md)).
+
+What 1.x does **not** promise: a fixed DSH version. This package declares `engines.dsh >= 0.2.1-rc.2`,
+and the release that verified the harness against 0.2.1-rc.3 was 0.8.0; a harness change that removes a
+service this plugin injects is a compatibility break to report, not a promise this README can make.
+Visual presentation (spacing, colours, motion) is deliberately not frozen.
 
 ## Other engines
 
