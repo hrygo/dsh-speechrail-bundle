@@ -233,10 +233,6 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   // check rather than what happened: no `model` is configured, and most engines require the field.
   const failureCode = checked?.failure?.code
   const refusedWithoutModel = view?.model === '' && (failureCode === 'bad-request' || failureCode === 'not-found')
-  // A 404 with a model configured has two documented causes, and they need opposite fixes: the path
-  // is wrong, or the engine has not loaded that model (vLLM and speaches both answer 404 for the
-  // latter). Saying only "no such endpoint" would send the reader to the wrong one.
-  const notFoundWithModel = view !== undefined && view.model !== '' && failureCode === 'not-found'
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -390,7 +386,6 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         </span>
         {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(t, checked.failure)}</span>}
         {refusedWithoutModel && <span style={valueStyle}>{t('settings.modelHint')}</span>}
-        {notFoundWithModel && <span style={valueStyle}>{t('settings.modelNotLoadedHint')}</span>}
       </div>
     </div>
   )

@@ -121,6 +121,7 @@ function coreOver(
   target: Engine,
   language: ResolvedConfig['language'] = 'auto',
   requestTimeoutMs = 5_000,
+  overrides: { readonly model?: string; readonly credentialRef?: string; readonly credential?: string | null } = {},
 ): SpeechRailInputCore {
   let pending: { operationId: string; phase: 'pending' | 'unknown'; createdAt: string } | null = null
   const journal: PendingJournal = {
@@ -136,15 +137,15 @@ function coreOver(
   const config: ResolvedConfig = {
     baseUrl: target.baseUrl,
     endpointRefusal: null,
-    model: '',
-    credentialRef: 'SPEECHRAIL_API_KEY',
+    model: overrides.model ?? '',
+    credentialRef: overrides.credentialRef ?? 'SPEECHRAIL_API_KEY',
     language,
     requestTimeoutMs,
   }
   const deps: CoreDependencies = {
     now: () => new Date('2026-10-24T12:00:00.000Z'),
     config: () => config,
-    resolveCredential: async () => SECRET,
+    resolveCredential: async () => (overrides.credential === undefined ? SECRET : overrides.credential),
     journal,
     transcribe: async (options) => await httpTranscribe(options),
     probe: async (options) => await probeCapabilities(options),
@@ -538,5 +539,157 @@ describe('plain OpenAI-shaped engine: usable without losing the guards', () => {
     const acknowledged = await core.acknowledgeUnknown(JSON.stringify({ operationId: 'op_ge0000002' }))
     expect(acknowledged.ok).toBe(true)
     expect((await core.status()).gate).toBe('ready')
+  })
+})
+
+/**
+ * Documented engine shapes, pinned as fixtures.
+ *
+ * Every body below is the shape the engine's own documentation or source produces (sources and grades:
+ * docs/research/2026-10-25-local-stt-engine-contracts.md). Nothing here was captured from a running
+ * engine - no engine was installed, started or contacted - so this pins the conclusions the
+ * compatibility note draws against the code that has to implement them, and makes any later change
+ * deliberate rather than accidental.
+ */
+describe('documented engine shapes', () => {
+  it('reads speaches 403 as a credential verdict, not as a broken transport', async () => {
+    // speaches with API_KEY set answers 403 {"detail":"Invalid API key"} + WWW-Authenticate: Bearer.
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(403, { 'content-type': 'application/json', 'www-authenticate': 'Bearer' })
+        response.end(JSON.stringify({ detail: 'Invalid API key' }))
+      },
+    })
+
+    const result = await coreOver(service).transcribe(payload('op_ge1000001'))
+    expect(result.ok).toBe(false)
+    expect(result.failure?.code).toBe('unauthorized')
+    expect(result.failure?.httpStatus).toBe(403)
+  })
+
+  it('reads vLLM 401 the same way', async () => {
+    // vLLM with --api-key answers 401 {"error":"Unauthorized"}.
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(401, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ error: 'Unauthorized' }))
+      },
+    })
+
+    const result = await coreOver(service).transcribe(payload('op_ge1000002'))
+    expect(result.failure?.code).toBe('unauthorized')
+    expect(result.failure?.httpStatus).toBe(401)
+  })
+
+  it('keeps vLLM 404 a 404 instead of reading its body as a model verdict', async () => {
+    // vLLM answers 404 for a model it has not served, with `param: "model"` in the body. That body is
+    // untrusted and its shape is engine-specific: only SpeechRail's own declared code on a 400 is
+    // honoured (host/failure.ts), so this stays `not-found` and the copy for that code names both
+    // causes. Parsing one vendor's error body here would be the start of a per-engine parser.
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(404, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({
+          error: { message: 'The model `x` does not exist.', type: 'NotFoundError', param: 'model', code: 404 },
+        }))
+      },
+    })
+
+    const result = await coreOver(service, 'auto', 5_000, { model: 'x' }).transcribe(payload('op_ge1000003'))
+    expect(result.failure?.code).toBe('not-found')
+    expect(result.failure?.httpStatus).toBe(404)
+  })
+
+  it('records the 422 speaches answers when model is missing', async () => {
+    // FastAPI validation error. The status is what the settings page needs: with no model configured
+    // it names the model check, and this pins that the status survives the transport.
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(422, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ detail: [{ loc: ['body', 'model'], msg: 'field required', type: 'value_error.missing' }] }))
+      },
+    })
+
+    const result = await coreOver(service).transcribe(payload('op_ge1000004'))
+    expect(result.failure?.code).toBe('bad-request')
+    expect(result.failure?.httpStatus).toBe(422)
+  })
+
+  it('sends the configured model, and omits the field when none is configured', async () => {
+    const named = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ text: 'ok' }))
+      },
+    })
+    await coreOver(named, 'auto', 5_000, { model: 'Systran/faster-whisper-tiny.en' }).transcribe(payload('op_ge1000005'))
+    expect(fieldOf(named.posts[0] ?? '', 'model')).toBe('Systran/faster-whisper-tiny.en')
+
+    const anonymous = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ text: 'ok' }))
+      },
+    })
+    await coreOver(anonymous).transcribe(payload('op_ge1000006'))
+    expect(fieldOf(anonymous.posts[0] ?? '', 'model')).toBeNull()
+  })
+
+  it('uploads with no credential when the reference is cleared, and refuses when it resolves to nothing', async () => {
+    // ADR-0003 over a real socket. speaches, whisper.cpp and mlx-audio need no key by default, and the
+    // shape that says so is an EMPTY reference: a named reference that resolves to nothing stays
+    // fail-closed, or a typo in a reference name would silently become "no auth".
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ text: 'ok' }))
+      },
+    })
+
+    const cleared = await coreOver(service, 'auto', 5_000, { credentialRef: '', credential: null }).transcribe(payload('op_ge1000007'))
+    expect(cleared.ok).toBe(true)
+    expect(cleared.transcript?.text).toBe('ok')
+
+    const unresolved = await coreOver(service, 'auto', 5_000, { credential: null }).transcribe(payload('op_ge1000008'))
+    expect(unresolved.failure?.code).toBe('not-configured')
+    // Only the cleared reference reached the wire; the transport's own header assertion lives in
+    // http-transport.host.spec.ts.
+    expect(service.posts).toHaveLength(1)
+  })
+
+  it('refuses mlx-audio ndjson while still asking for json', async () => {
+    // mlx-audio's default is application/x-ndjson. The plugin asks for `json` explicitly, and a stream
+    // that arrives anyway is not the single JSON object this contract accepts.
+    const service = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/x-ndjson' })
+        response.end('{"text":"he"}\n{"text":"llo"}\n')
+      },
+    })
+
+    const result = await coreOver(service).transcribe(payload('op_ge1000011'))
+    expect(result.failure?.code).toBe('malformed-response')
+    expect(fieldOf(service.posts[0] ?? '', 'response_format')).toBe('json')
+  })
+
+  it('refuses whisper.cpp text and coro-asr diarized answers', async () => {
+    // whisper.cpp answers `text/html` for its text format (not text/plain), and coro-asr can answer a
+    // diarized document with no top-level `text`. Neither is a transcript this contract accepts, and
+    // accepting `text/plain` or an empty text would be worse than refusing.
+    const html = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end('hello world')
+      },
+    })
+    expect((await coreOver(html).transcribe(payload('op_ge1000009'))).failure?.code).toBe('malformed-response')
+
+    const diarized = await engine({
+      transcription: (_request, response) => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ segments: [{ text: 'hi', speaker: 'SPEAKER_00' }] }))
+      },
+    })
+    expect((await coreOver(diarized).transcribe(payload('op_ge1000010'))).failure?.code).toBe('malformed-response')
   })
 })

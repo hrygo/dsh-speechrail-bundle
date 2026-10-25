@@ -562,18 +562,6 @@ describe('SpeechRailSettings capability label', () => {
     expect((field as HTMLInputElement).value).toBe('typed-but-unsaved')
   })
 
-  it('names the model as a cause of a 404 instead of only blaming the path', async () => {
-    // vLLM and speaches both answer 404 when the named model is not loaded, so with a model
-    // configured the page must not assert that the endpoint does not exist.
-    const check = vi.fn(async () => ({
-      reachable: true, authenticated: 'unverified' as const, capabilities: null,
-      failure: failure('not-found', { httpStatus: 404 }), checkedAt: '2026-10-23T12:00:00.000Z',
-    }))
-    render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' }, { check: check as never })} />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
-    expect(await screen.findByText('settings.modelNotLoadedHint')).toBeTruthy()
-  })
 
   it('points at the model field when a refusal happened without one', async () => {
     // The code alone cannot say why the service refused, so the page states what to check: most
