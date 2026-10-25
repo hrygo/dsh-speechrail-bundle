@@ -308,8 +308,6 @@ export function VoiceInput({
     if (snapshot.endpointProblem !== null) { feedback(t('failure.endpoint-invalid')); return }
     if (snapshot.gate === 'unknown') { feedback(t('gateUnknown')); return }
     if (snapshot.gate === 'busy') { feedback(t('gateBusy')); return }
-    // Without a credential every upload is refused, so say so before the microphone is
-    // opened rather than after a full dictation.
     // A reference that is configured but resolves to nothing will be refused on upload, so say so
     // before the microphone is opened rather than after a full dictation. An empty reference is the
     // opposite state: the endpoint needs no credential and nothing is missing.

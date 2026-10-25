@@ -213,8 +213,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const capabilities = view !== undefined ? view.capabilities : (checked?.capabilities ?? null)
   const limits = view?.limits
   // A probe that ran and produced no snapshot is not the same as one that never ran.
-  // A check the host refused locally (no credential, unusable endpoint) never reached the
-  // service, so it must not blame the service for not stating a capability.
+  // A check the host refused locally (a credential reference that resolves to nothing, an unusable
+  // endpoint) never reached the service, so it must not blame the service for not stating a
+  // capability. An endpoint configured to need no credential does reach it.
   const neverAskedLocally = checked !== undefined
     && (checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid')
   const checkedYet = !neverAskedLocally && (checked !== undefined || (view?.checkedAt ?? null) !== null)
