@@ -9,7 +9,7 @@
 
 | 事实 | 证据 |
 |---|---|
-| 插件已安装并启用（0.10.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.10.0 tag 资产，安装目录内 `package.json` 版本为 0.10.0（2026-10-25 由 plugin_manager 两次升级：0.8.1 → 0.9.0 → 0.10.0） |
+| 插件已安装并启用（0.11.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.11.0 tag 资产，安装目录内 `package.json` 版本为 0.11.0（2026-10-25 由 plugin_manager 三次升级：0.8.1 → 0.9.0 → 0.10.0 → 0.11.0） |
 | 本机 SpeechRail 活着且要求鉴权 | [实测] `127.0.0.1:8201` LISTEN（python）；零推理探测（不带凭据 GET capabilities）返回 `401` + 完整错误信封 `invalid_api_key` |
 | 凭据引用存在 | [实测] `~/.dsh/.credentials.yaml` 的 `refs` 含 `SPEECHRAIL_API_KEY`（只读名字，未读值） |
 | 门禁干净 | [实测] `~/.dsh/storages/speechrail_input_pending.json` 为空 |
@@ -159,3 +159,5 @@
 真实引擎的安装与真机转写验证已由用户决定**不做**（2026-10-25："本机不做其他引擎实测"）：阶段 2 因此只能交付契约改动、fixture 级证据与文档，兼容表的真机结论保持未验证，并如实标注。
 
 **2026-10-25 发布之二**：0.10.0 已发布并同样经 tag 固定 URL 安装（`0.9.0 → 0.10.0`，资产 39 个文件 / 86,710 字节，下载字节 sha256 `be1272a3…` 与本地一致）。它改的是**控件行为**：点击麦克风后原位变色波（不再要求 composer 展开，因而不再隐藏配件控件、不再把工具栏整体左移），取消键移到控件之后，停止方块并入波形按钮；转写结果自动插入草稿且从不提交（新增 5 个测试钉住，其中一并覆盖「草稿拒绝插入时结果仍可插入」）。用户对 0.9.0 的观察正是「点击后声波跑到左侧」，这与该槽位的文档行为一致（`InputActivityOwnerProps.onActiveChange`：活动展开时 composer 隐藏普通配件控件）。是否已修好只能由用户重启并刷新页面后确认。
+
+**2026-10-25 发布之三**：0.11.0 把麦克风席位从 `conversation.input.activity` 移到 `conversation.input.right`（`id: speechrail-input`，`order: 20`），渲染在模型选择器所在控件组内、模型选择器左侧。live Slots 目录实测：`input.right` 是 list 席位、`replaceRisk: none`，已装条目只有官方 `image-provider`（`order: 10`），故 20 落在它与模型之间；而 activity 是 single 席位且展开时 composer 会隐藏普通配件控件（`standardControls` 的 `hidden={activity}`），正是「点击后声波跑到左侧」的机制。副作用两条，均已写进设计文档 §4 的 2026-10-25 修订：① 与占用 activity 的官方 bundle 不再争同一格，但两个麦克风可以同屏；官方 bundle 录制时 `standardControls` 整组隐藏，本包控件随之消失（本包自己从不报告展开）。② 该席位不提供 `locked`，故按钮不再因「composer 拒绝交互」而变灰、快捷键也不再因此报 blocked；权威判定仍是插入时刻的 `insertText` 返回 false（草稿 revision 变了或编辑器被锁），结果保留为可插入，已有测试覆盖。`mount.client.spec.ts`（3 个用例）钉住席位、cell id、order 与「不碰其他席位」。
