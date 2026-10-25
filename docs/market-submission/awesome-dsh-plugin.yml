@@ -18,8 +18,10 @@
 #   - `tarball` uses `latest/download/` with a version-free asset name, which is the form the guide
 #     recommends because it never rots as releases are cut.
 #   - `description.en` is quoted because it contains a colon followed by a space.
-#   - `icon` is omitted: the field wants a GitHub-hosted raster image and the package ships an SVG,
-#     so the storefront falls back to the owner avatar.
+#   - `icon` stays omitted in this file: the field wants a GitHub-hosted raster, and the shipped
+#     `icon.svg` is the source. `docs/market-submission/icon-256.png` is that source rendered at 256px
+#     (rsvg-convert -w 256 -h 256), so a follow-up PR can add the field once the accepted URL form is
+#     verified; until then the storefront falls back to the owner avatar.
 #
 # Submitted 2026-10-25 as (one file, 7 lines, CI check passed in 8m21s):
 #   https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9238
