@@ -70,7 +70,24 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.8.1/dsh-speechrail-bundle.tgz
 ```
 
-随后在设置页填写地址与凭据引用。
+随后把条目指向你的引擎。设置页**展示**生效的服务地址、模型与凭据引用，**可改**的只有语言与请求预算；服务地址、模型与凭据引用属于条目配置，通过给 profile 的 `cordis.patch.yml` 打补丁来改：
+
+```yaml
+- id: speechrail-input
+  name: '@hrygo/dsh-speechrail-bundle'
+  config:
+    baseUrl: http://127.0.0.1:8201/v1   # 仅回环；路径必须为 /v1
+    model: ''                           # 留空由服务选择
+    credentialRef: ''                   # 留空：该引擎不做鉴权
+```
+
+补丁会**整段替换**该行的 `config`，不做深度合并，所以要把该条目依赖的字段一并写全；省略的字段回落到包 README 配置表里的 schema 默认值。改动没生效就重启应用。
+
+引擎之间有三处差异，本插件都当作配置而不是代码：
+
+- **路径。** 有些引擎的服务路径不同（`/inference`、`/asr` 等）；通常用启动参数把它们摆成 `/v1` 形状，而不是在这里特判。
+- **`model` 字段。** 多数 OpenAI 形状的服务会拒绝不带模型名的上传，所以要配一个；值就是该引擎对已加载权重使用的名字。
+- **凭据。** 不做鉴权的服务把引用清空即可（见上文 ADR-0003）；需要 bearer token 的则要一个 Host 能解析的引用。
 
 ## 已知限制
 

@@ -91,7 +91,32 @@ dependency by its target string, so re-running the command above on an installed
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.8.1/dsh-speechrail-bundle.tgz
 ```
 
-Then set the endpoint and credential reference on its settings page.
+Then point the entry at your engine. The settings page **shows** the effective endpoint, model and
+credential reference and **edits** the language and request budget; the endpoint, model and credential
+reference themselves are entry config, so they are changed by patching the entry in the profile's
+`cordis.patch.yml`:
+
+```yaml
+- id: speechrail-input
+  name: '@hrygo/dsh-speechrail-bundle'
+  config:
+    baseUrl: http://127.0.0.1:8201/v1   # loopback only; the path must be /v1
+    model: ''                           # empty lets the service choose
+    credentialRef: ''                   # empty: this engine authenticates nobody
+```
+
+A patch replaces the row's `config` wholesale instead of merging it, so restate every field the entry
+relies on; anything omitted falls back to the schema defaults in the package README's configuration
+table. If the change does not appear, restart the app.
+
+Three things vary between engines, and all three are configuration here rather than code:
+
+- **The path.** Some engines serve a different route (`/inference`, `/asr`, …); those are normally
+  pointed at the `/v1` shape with a start-up flag rather than handled specially here.
+- **The `model` field.** Most OpenAI-shaped servers reject an upload that names no model, so set one.
+  Its value is whatever the engine calls its loaded weights.
+- **The credential.** A service that authenticates nobody is configured by clearing the reference (see
+  ADR-0003 above); one that wants a bearer token needs a reference the Host can resolve.
 
 ## Known limitations
 

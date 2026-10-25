@@ -27,7 +27,23 @@ bytes.
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v0.8.1/dsh-speechrail-bundle.tgz
 ```
 
-Then set the endpoint and the credential reference on the bundle's settings page.
+Then point the entry at your engine: patch the `speechrail-input` entry in the profile's
+`cordis.patch.yml`. A patch replaces that row's `config` wholesale rather than merging it, so restate
+every field the entry relies on; anything omitted falls back to the schema defaults in the
+[configuration table](#configuration).
+
+```yaml
+- id: speechrail-input
+  name: '@hrygo/dsh-speechrail-bundle'
+  config:
+    baseUrl: http://127.0.0.1:8201/v1   # loopback only; the path must be /v1
+    model: ''                           # empty lets the service choose
+    credentialRef: ''                   # empty: this engine authenticates nobody
+```
+
+The settings page is not a config editor for those three fields: it **shows** the endpoint, the model
+and the credential reference, and **persists** only the language and the request budget. Changing one
+of the three means editing the entry (and restarting the app if the change does not appear).
 
 ## What it does
 
@@ -67,6 +83,17 @@ speaks the same shape on loopback:
 | Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404 or 405 the probe reports `capabilities-absent`: the service stays reachable and usable, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, every 5xx (including 501) stays `server-error` with its retryable hint, and an unreachable service stays `unreachable`. |
 | Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused endpoint, or a request that carried no credential at all). The `speechrail_input_status` tool returns the same three strings, plus whether this endpoint was configured to present a credential in the first place. |
 | Agent report | The tool reports the language hint that will **actually travel** (not the configured mode), the endpoint's own statement about transcription (`supported` / `unsupported` / `unknown`), and the language modes the snapshot admits. A service that says it cannot transcribe is named as such instead of reading as usable. |
+
+What varies between engines is configuration here, never code:
+
+- **Route.** The call is always `<base>/audio/transcriptions`. An engine that serves something else
+  (`/inference`, `/asr`, …) is normally started with a flag that moves it onto the `/v1` shape; this
+  plugin has no per-engine path special case and does not guess.
+- **`model`.** Most OpenAI-shaped servers reject an upload that names no model, which surfaces as
+  `bad-request` (HTTP 400/422) or `model-not-found`. Set `model` to whatever the engine calls its
+  loaded weights; leaving it empty is only right for an engine that picks its own.
+- **Credential.** A cleared `credentialRef` sends no `Authorization` header at all; a set one is
+  resolved per operation and refused locally with `not-configured` when it resolves to nothing.
 
 What changes on a non-SpeechRail engine, and what does not:
 
@@ -125,7 +152,7 @@ The entry `speechrail-input` (inserted by `cordis.patch.yml`) exposes:
 | Field | Default | Notes |
 | --- | --- | --- |
 | `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
-| `model` | empty | Empty omits the field and lets the service choose; non-empty values are validated by the service per profile. |
+| `model` | empty | Empty omits the field and lets the service choose; most OpenAI-shaped engines require it, and the value is validated by the service per engine. |
 | `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
 | `language` | `auto` | `auto` omits the field entirely; `zh`/`en` are only accepted when the snapshot enumerates them. |
 | `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |
