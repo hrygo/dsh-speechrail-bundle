@@ -768,3 +768,144 @@ describe('VoiceInput progress and feedback', () => {
   })
 })
 
+describe('VoiceInput motion and glyphs', () => {
+  /** Restores whatever matchMedia the environment had (jsdom has none). */
+  const originalMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia')
+
+  function withReducedMotion(reduced: boolean): void {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({ matches: reduced && query.includes('prefers-reduced-motion'), media: query, addEventListener: () => {}, removeEventListener: () => {} }),
+    })
+  }
+
+  afterEach(() => {
+    if (originalMatchMedia === undefined) delete (window as { matchMedia?: unknown }).matchMedia
+    else Object.defineProperty(window, 'matchMedia', originalMatchMedia)
+  })
+
+  function view(options: { readonly transcribe?: VoiceInputProps['transcribe'] } = {}) {
+    const capture = { start: async () => undefined, stop: async () => new Uint8Array([1]), dispose: async () => undefined, amplitude: () => 0.1 }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  it('eases the hover surface instead of snapping it', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.style.transition).toContain('background 120ms')
+  })
+
+  it('holds still when the system asks for less motion', async () => {
+    withReducedMotion(true)
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    // A surface that fades is decoration; with the preference set it must not fade.
+    expect(mic.style.transition).toBe('')
+  })
+
+  /**
+   * Hold the transcription open, so the waiting glyph is still on screen when it is read.
+   *
+   * React reuses the anchor's single `<svg>` as the phase changes, so a transient waiting glyph cannot
+   * be inspected afterwards: the same node has become the microphone again.
+   * @returns the function that lets the transcription finish.
+   */
+  async function waiting(): Promise<() => void> {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await screen.findByRole('img', { name: 'transcribingShort' })
+    return () => { release?.() }
+  }
+
+  it('spins while a take is transcribed', async () => {
+    const release = await waiting()
+    const spinner = screen.getByRole('img', { name: 'transcribingShort' })
+    expect(spinner.querySelector('animateTransform')).not.toBeNull()
+    expect(spinner.getAttribute('width')).toBe('16')
+    release()
+  })
+
+  it('shows a still ring when motion is not welcome', async () => {
+    withReducedMotion(true)
+    const release = await waiting()
+
+    // The phase is still named; only the rotation is gone.
+    const spinner = screen.getByRole('img', { name: 'transcribingShort' })
+    expect(spinner.querySelector('animateTransform')).toBeNull()
+    expect(spinner.querySelector('circle')).not.toBeNull()
+    release()
+  })
+
+  it('draws the microphone and the spinner at the same size', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.querySelector('svg')?.getAttribute('width')).toBe('16')
+  })
+
+  it('centres the small cancel glyph in its round button', async () => {
+    render(view())
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    const cancel = await screen.findByRole('button', { name: 'cancel' })
+    expect(cancel.textContent).toBe('×')
+    expect(cancel.style.fontSize).toBe('13px')
+    expect(cancel.style.lineHeight).toBe('1')
+  })
+})
+
+describe('VoiceInput contrast', () => {
+  function view(options: { readonly transcribe?: VoiceInputProps['transcribe'] } = {}) {
+    const capture = { start: async () => undefined, stop: async () => new Uint8Array([1]), dispose: async () => undefined, amplitude: () => 0.1 }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return <VoiceInput {...base} createRecording={() => capture as unknown as Recording} transcribe={options.transcribe ?? base.transcribe} />
+  }
+
+  it('outlines the round controls with the stronger border', async () => {
+    // `border-l1` is the divider weight; a control the user is meant to press needs more than that,
+    // and the glyph uses the primary text token so it is the strongest thing in the row.
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.style.borderColor).toContain('border-l2')
+    expect(mic.style.color).toContain('label-primary')
+
+    fireEvent.click(mic)
+    const cancel = await screen.findByRole('button', { name: 'cancel' })
+    expect(cancel.style.borderColor).toContain('border-l2')
+  })
+
+  it('never dims the glyph that is reporting progress', async () => {
+    // A spinner at 55% opacity on a light toolbar is barely there; the phase glyph is content, not a
+    // disabled control, so only its pressability is off.
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    const spinner = await screen.findByRole('img', { name: 'transcribingShort' })
+    expect(spinner.closest('button')?.style.opacity).toBe('1')
+    expect(spinner.closest('button')?.disabled).toBe(true)
+    release?.()
+  })
+})
+

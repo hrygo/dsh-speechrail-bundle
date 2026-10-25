@@ -23,8 +23,9 @@ import {
   type SpeechRailTranscriptionResult,
 } from '../contracts.ts'
 import { registerDictateCommand } from './command.ts'
+import { SpeechRailControl } from './control.ts'
 import { SpeechRailSettings } from './Settings.tsx'
-import { VoiceInput, type SpeechRailInjected } from './VoiceInput.tsx'
+import { createAnchorSeat, createPanelSeat, type SpeechRailInjected } from './VoiceInput.tsx'
 import { NS, en, zh } from './locales.ts'
 import { Recording } from './recording.ts'
 import { createDictationTrigger } from './trigger.ts'
@@ -32,16 +33,21 @@ import { createDictationTrigger } from './trigger.ts'
 /** Services this client face cannot mount without. */
 export const inject = ['remote', 'slots', 'locale']
 
-/** Cell key of this bundle's composer control inside the model selector's control group. */
-const SEAT_ID = 'speechrail-input'
+/**
+ * Cell key of the reporting half.
+ *
+ * The button needs none: it registers in a single seat, where a registration is chosen by `priority`
+ * rather than addressed by id.
+ */
+const PANEL_ID = 'speechrail-input-panel'
 
 /**
- * Position inside that group.
+ * Position of the reporting half inside the model selector's group.
  *
- * Entries render ascending, and the shipped `image-provider` control is ordered 10, so 20 lands
- * between it and the model selector instead of at the far end of the group.
+ * Entries render ascending, and the shipped `image-provider` control is ordered 10, so 20 lands between
+ * it and the model selector instead of at the far end of the group.
  */
-const SEAT_ORDER = 20
+const PANEL_ORDER = 20
 
 /** Unwrap one Remote result, throwing the transport error the UI localizes generically. */
 async function unwrap<T>(pending: Promise<RemoteResult<T>>): Promise<T> {
@@ -83,12 +89,22 @@ function registerUi(ctx: Context): void {
     },
     dictation,
   }
-  // The microphone sits in the model selector's own control group, immediately before it. The activity
-  // seat is deliberately not used: an activity expands across the toolbar, and the composer hides its
-  // ordinary accessory controls while one is expanded - which moved this control away from the click.
+  // One microphone, drawn by two seats: the round button after the model selector, and what a press
+  // produces - the timer, the cancel control, the message and the pending transcript - inside the model
+  // selector's own control group, immediately before it. State that two slots share cannot live in a
+  // component, so it lives in this control, disposed with the plugin.
+  const control = new SpeechRailControl()
+  ctx.effect(() => () => { control.dispose() })
+  // The button's seat: a compact action after the model selector. Its occupant is expected to expand
+  // across the toolbar, and the composer hides its ordinary accessory controls while one is expanded -
+  // which is why this half never reports expansion, and why only its own glyph changes on a press.
+  ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
+    name: 'conversation.input.activity', locale: NS, inject: () => actions,
+  }, createAnchorSeat(control)))
+  // The reporting half: the list seat whose entries render inside the model selector's group.
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
-    name: 'conversation.input.right', id: SEAT_ID, order: SEAT_ORDER, locale: NS, inject: () => actions,
-  }, VoiceInput))
+    name: 'conversation.input.right', id: PANEL_ID, order: PANEL_ORDER, locale: NS, inject: () => actions,
+  }, createPanelSeat(control)))
   ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
     name: 'plugins.bundle.config', key: PACKAGE_NAME, locale: NS, inject: () => actions,
   }, SpeechRailSettings))

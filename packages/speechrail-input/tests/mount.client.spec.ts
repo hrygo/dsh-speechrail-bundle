@@ -1,13 +1,13 @@
 /**
- * The seat the microphone occupies, and the wiring around it.
+ * The seats the control occupies, and the wiring around them.
  *
- * Where the control sits is product behaviour rather than an implementation detail. An earlier
- * version occupied `conversation.input.activity`, and the composer hides its ordinary accessory
- * controls while an activity reports itself expanded - which slid the whole tool row, and the
- * microphone with it, away from where the user clicked. The `conversation.input.right` entries render
- * inside the model selector's own group, immediately before it, so an entry ordered after the shipped
- * `image-provider` control (order 10 at the time of writing, read from the live Slots catalogue)
- * lands immediately left of the model.
+ * Where the control sits is product behaviour rather than an implementation detail, and it is now two
+ * places: the round button registers in the composer's activity seat - a compact action rendered after
+ * the model selector, which is where the user asked for it - and everything a press produces registers
+ * in the `conversation.input.right` list, whose entries render inside the model selector's own group,
+ * immediately before it. An earlier version had the whole control in the activity seat; the composer
+ * hides its ordinary accessory controls while an activity reports itself expanded, which slid the tool
+ * row away from the click, so the button half never reports expansion.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -71,30 +71,33 @@ function fakeContext(): { ctx: Context, seats: Seat[], targeted: string[], injec
   return { ctx: ctx as unknown as Context, seats, targeted, injected }
 }
 
-describe('SpeechRail composer seat', () => {
-  it('registers immediately left of the model selector', async () => {
+describe('SpeechRail composer seats', () => {
+  it('puts the button after the model selector', async () => {
     const { ctx, seats } = fakeContext()
     await mountSpeechRailInput(ctx, {} as never)
 
-    expect(seats).toContainEqual(expect.objectContaining({
-      name: 'conversation.input.right',
-      id: 'speechrail-input',
-      order: 20,
-    }))
-    // The shipped control in that slot is ordered 10, so a larger order is what puts this control
-    // between it and the model selector rather than at the far end of the group.
-    const seat = seats.find((candidate) => candidate.name === 'conversation.input.right')
-    expect(seat?.order).toBeGreaterThan(10)
+    // A single seat, so it is chosen by priority and carries no cell id.
+    const button = seats.find((candidate) => candidate.name === 'conversation.input.activity')
+    expect(button).toBeDefined()
+    expect(button?.id).toBeUndefined()
   })
 
-  it('targets no seat other than those two', async () => {
-    // In particular not `conversation.input.activity`: an activity expands across the toolbar and hides
-    // the ordinary accessory controls while it does, which is what used to move this control out from
-    // under the click.
+  it('keeps what a press produces before the model selector', async () => {
+    const { ctx, seats } = fakeContext()
+    await mountSpeechRailInput(ctx, {} as never)
+
+    const panel = seats.find((candidate) => candidate.name === 'conversation.input.right')
+    expect(panel).toEqual(expect.objectContaining({ id: 'speechrail-input-panel', order: 20 }))
+    // The shipped control in that slot is ordered 10, so a larger order is what puts this one between
+    // it and the model selector rather than at the far end of the group.
+    expect(panel?.order).toBeGreaterThan(10)
+  })
+
+  it('targets those two seats and the settings page, and nothing else', async () => {
     const { ctx, targeted } = fakeContext()
     await mountSpeechRailInput(ctx, {} as never)
 
-    expect(targeted).toEqual(['conversation.input.right', 'plugins.bundle.config'])
+    expect(targeted).toEqual(['conversation.input.activity', 'conversation.input.right', 'plugins.bundle.config'])
   })
 
   it('registers the settings page and asks for the keyboard service', async () => {

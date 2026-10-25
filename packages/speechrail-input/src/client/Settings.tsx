@@ -15,6 +15,7 @@ import {
   type SpeechRailLanguageMode,
 } from '../contracts.ts'
 import { failureText } from './failure-text.ts'
+import { prefersReducedMotion } from './motion.ts'
 import { RowButton } from './RowButton.tsx'
 import { NS } from './locales.ts'
 import type { SpeechRailInjected } from './VoiceInput.tsx'
@@ -40,9 +41,11 @@ const fieldStyle: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2, transparent)',
   border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)',
 }
+// Longhands throughout: the field's focus state overrides only `borderColor`.
 const buttonStyle: CSSProperties = {
   fontSize: 12, padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap',
-  border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)', color: 'var(--dsw-alias-label-primary, inherit)',
+  borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--dsw-alias-border-l1, #d0d0d5)',
+  color: 'var(--dsw-alias-label-primary, inherit)',
 }
 
 /**
@@ -82,6 +85,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [modelText, setModelText] = useState('')
   const [note, setNote] = useState('')
   const [noteKind, setNoteKind] = useState<NoteKind>('error')
+  const [focusedField, setFocusedField] = useState('')
   const [busy, setBusy] = useState(false)
   // A refresh must replace the fields the user has not touched, or the page would keep a
   // stale value while adopting the fresh revision and write it back over someone else's
@@ -112,6 +116,20 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
 
   /** Show the one line under the actions; a note reads as a failure unless it says otherwise. */
   const showNote = (text: string, kind: NoteKind = 'error'): void => { setNote(text); setNoteKind(kind) }
+
+  /**
+   * Which field has the keyboard, and the border that says so.
+   *
+   * Additive only: the browser's own focus ring is left in place, because it is the one affordance that
+   * survives a stylesheet this bundle does not control.
+   * @param id - the field's id.
+   * @returns the field's style.
+   */
+  const fieldStyleFor = (id: string): CSSProperties => ({
+    ...fieldStyle,
+    borderColor: focusedField === id ? 'var(--dsw-alias-brand-primary, #4a7dff)' : 'var(--dsw-alias-border-l1, #d0d0d5)',
+    transition: prefersReducedMotion() ? undefined : 'border-color 120ms ease',
+  })
 
   const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
   const statusSeq = useRef(0)
@@ -292,8 +310,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
             value={modelText}
             placeholder={t('settings.modelAuto')}
             onChange={(event) => { setModelText(event.currentTarget.value); modelDirty.current = true; modelEdits.current += 1; clearSavedNote() }}
-            onBlur={() => { setModelText((current) => current.trim()) }}
-            style={{ ...fieldStyle, width: 260 }}
+            onFocus={() => { setFocusedField('model') }}
+            onBlur={() => { setFocusedField(''); setModelText((current) => current.trim()) }}
+            style={{ ...fieldStyleFor('model'), width: 260 }}
           />
           <span style={labelStyle}>{t('settings.modelNote')}</span>
         </div>
@@ -315,7 +334,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           <span style={labelStyle}>{t('settings.language')}</span>
           <div role="radiogroup" aria-label={t('settings.language')} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             {(['auto', 'zh', 'en'] as const).map((mode) => (
-              <label key={mode} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <label key={mode} style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
                 <input
                   type="radio"
                   name="speechrail-language"
@@ -326,18 +345,19 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
               </label>
             ))}
-            {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
-              // A language the service states no support for is not silently applied, so say so
-              // instead of leaving a checked-but-disabled control to imply that it is.
-              <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
-            )}
-            {view !== undefined && language !== 'auto' && view.languageOptions.includes(language)
-              && !(capabilities?.transcriptionSupported === true && capabilities.languages.status === 'supported') && (
-              // The service did not enumerate its languages, so this choice travels as a hint it
-              // never confirmed - which is worth saying out loud.
-              <span style={labelStyle}>{t('settings.languageUnverified')}</span>
-            )}
           </div>
+          {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
+            // A language the service states no support for is not silently applied, so say so instead
+            // of leaving a checked-but-disabled control to imply that it is. Outside the group: a
+            // caveat inside it reads as one more option.
+            <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
+          )}
+          {view !== undefined && language !== 'auto' && view.languageOptions.includes(language)
+            && !(capabilities?.transcriptionSupported === true && capabilities.languages.status === 'supported') && (
+            // The service did not enumerate its languages, so this choice travels as a hint it never
+            // confirmed - which is worth saying out loud.
+            <span style={labelStyle}>{t('settings.languageUnverified')}</span>
+          )}
         </div>
         <div style={rowStyle}>
           <label htmlFor="speechrail-input-budget" style={labelStyle}>{t('settings.budget')}</label>
@@ -349,8 +369,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
             step={1000}
             value={budgetText}
             onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; clearSavedNote() }}
-            onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
-            style={{ ...fieldStyle, width: 120 }}
+            onFocus={() => { setFocusedField('budget') }}
+            onBlur={() => { setFocusedField(''); setBudgetText(String(clampBudget(budgetText))) }}
+            style={{ ...fieldStyleFor('budget'), width: 120 }}
           />
         </div>
       </section>
@@ -413,13 +434,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           )}
         </div>
         <div style={rowStyle}>
-          <span style={labelStyle}>{t('settings.transcriptionStatus', {
-            state: capabilities === null || capabilities === undefined
-              ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
-              : capabilities.transcriptionSupported
-                ? t('settings.available')
-                : t('settings.unsupported'),
-          })}</span>
+          <span style={labelStyle}>{t('settings.transcription')}</span>
           <span style={valueStyle}>
             {capabilities === null || capabilities === undefined
               ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
@@ -427,11 +442,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
                 ? t('settings.supported')
                 : `${t('settings.unsupported')}${capabilities.reason === null ? '' : ` (${capabilities.reason})`}`}
           </span>
-          <span style={labelStyle}>
-            {capabilities === null || capabilities === undefined
-              ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
-              : t('settings.languages', { values: capabilities.languages.values.length === 0 ? '—' : capabilities.languages.values.join(', ') })}
-          </span>
+          {capabilities !== null && capabilities !== undefined && (
+            <span style={labelStyle}>
+              {t('settings.languages', { values: capabilities.languages.values.length === 0 ? '—' : capabilities.languages.values.join(', ') })}
+            </span>
+          )}
         </div>
         <div style={rowStyle}>
           <span style={valueStyle}>

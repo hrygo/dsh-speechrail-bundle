@@ -249,9 +249,9 @@ describe('SpeechRailSettings check row verdicts', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
     await waitFor(() => {
-      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeTruthy()
+      expect(screen.getByText('settings.never')).toBeTruthy()
     })
-    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.undetermined"}')).toBeNull()
+    expect(screen.queryByText('settings.undetermined')).toBeNull()
   })
 
   it('keeps an edit made while the check was still in flight', async () => {
@@ -490,9 +490,9 @@ describe('SpeechRailSettings capability label', () => {
     render(<SpeechRailSettings {...props({ capabilities: null })} />)
 
     await waitFor(() => {
-      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeTruthy()
+      expect(screen.getByText('settings.never')).toBeTruthy()
     })
-    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.unsupported"}')).toBeNull()
+    expect(screen.queryByText('settings.unsupported')).toBeNull()
   })
 
   it('distinguishes a check that ran without a snapshot from one that never ran', async () => {
@@ -501,9 +501,9 @@ describe('SpeechRailSettings capability label', () => {
     render(<SpeechRailSettings {...props({ capabilities: null, checkedAt: '2026-10-23T12:00:00.000Z' })} />)
 
     await waitFor(() => {
-      expect(screen.getByText('settings.transcriptionStatus:{"state":"settings.undetermined"}')).toBeTruthy()
+      expect(screen.getByText('settings.undetermined')).toBeTruthy()
     })
-    expect(screen.queryByText('settings.transcriptionStatus:{"state":"settings.never"}')).toBeNull()
+    expect(screen.queryByText('settings.never')).toBeNull()
   })
 
   it('shows a credential-free endpoint as a configuration, not a missing secret', async () => {
@@ -626,6 +626,40 @@ describe('SpeechRailSettings presentation', () => {
     const saved = await screen.findByText('settings.saved')
     expect(saved.dataset.speechrailNote).toBe('success')
     expect(saved.style.color).toContain('state-success-primary')
+  })
+})
+
+describe('SpeechRailSettings affordances', () => {
+  it('answers the keyboard on its fields without taking the focus ring away', async () => {
+    render(<SpeechRailSettings {...props({})} />)
+    const field = await screen.findByLabelText('settings.model')
+
+    expect(field.style.borderColor).toContain('border-l1')
+    fireEvent.focus(field)
+    expect(field.style.borderColor).toContain('brand-primary')
+    fireEvent.blur(field)
+    expect(field.style.borderColor).toContain('border-l1')
+    // The native ring is the accessibility guarantee; this only adds to it.
+    expect(field.style.outline).toBe('')
+  })
+
+  it('keeps the language caveats outside the radio group', async () => {
+    render(<SpeechRailSettings {...props({ language: 'zh', languageOptions: ['auto', 'zh'] })} />)
+    const group = await screen.findByRole('radiogroup', { name: 'settings.language' })
+
+    // A caveat inside the group reads as one more option; it belongs under the choice it qualifies.
+    const caveat = screen.getByText('settings.languageUnverified')
+    expect(group.contains(caveat)).toBe(false)
+    expect(group.nextElementSibling?.contains(caveat)).toBe(true)
+    for (const label of group.querySelectorAll('label')) expect(label.style.cursor).toBe('pointer')
+  })
+
+  it('labels the transcription row once instead of repeating its state', async () => {
+    render(<SpeechRailSettings {...props({ capabilities: null })} />)
+
+    expect(await screen.findByText('settings.transcription')).toBeTruthy()
+    // The row used to read "state: never" above "never" - the same word twice.
+    expect(screen.getAllByText('settings.never')).toHaveLength(1)
   })
 })
 

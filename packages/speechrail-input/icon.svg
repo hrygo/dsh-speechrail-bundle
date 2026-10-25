@@ -1,6 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="SpeechRail voice input">
-  <rect x="9" y="2.5" width="6" height="11" rx="3" />
-  <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
-  <path d="M12 18v3.5" />
-  <path d="M8.5 21.5h7" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="SpeechRail voice input">
+  <title>SpeechRail voice input</title>
+  <!--
+    Self-contained on purpose. A glyph drawn with `currentColor` only matches the card when the Harness
+    inlines this file; loaded as an image - which is how the market listing carries it - there is nothing
+    to inherit and it paints near-black, invisible on a dark card. So the icon carries its own tile, and
+    its own colours: `#1b6e9e` against `#f3f9fd` is 5.6:1, and the tile itself stays 5.6:1 on a white page
+    and 3.4:1 on a near-black one. No `prefers-color-scheme`: the app's theme switch need not follow the
+    system's, so a media query here could answer the wrong question. Guarded by tests/icon.host.spec.ts.
+  -->
+  <rect width="64" height="64" rx="14" fill="#1b6e9e"/>
+  <g fill="none" stroke="#f3f9fd" stroke-width="3.2" stroke-linecap="round">
+    <path d="M32 46v6"/>
+    <path d="M26.5 52h11"/>
+    <path d="M20 34a12 12 0 0 0 24 0"/>
+  </g>
+  <rect x="26" y="12" width="12" height="22" rx="6" fill="#f3f9fd"/>
 </svg>
