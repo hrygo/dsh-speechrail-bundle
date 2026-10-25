@@ -41,6 +41,14 @@ Then set the endpoint and the credential reference on the bundle's settings page
   languages the service enumerates. A service that does not implement that endpoint is used as a
   plain transcription endpoint instead (see [Other engines](#other-engines)).
 - Persists language and request budget through the Harness settings page.
+- Registers one rebindable keyboard command, `speechrail-input.dictate` (default
+  <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd>
+  elsewhere), so a dictation can be started and finished without the mouse: one press starts from
+  idle, the next ends the capture and transcribes it. Cancelling stays on <kbd>Esc</kbd> and on the
+  row's own control, so a mis-press never discards a take. The chord is editable in the Harness
+  keyboard shortcut settings and is arbitrated by that registry: a composition without it simply has
+  no command, and a rejected registration (a duplicate id or an overlapping default) costs the
+  shortcut rather than the microphone.
 - Registers one read-only agent tool, `speechrail_input_status`, that reports the effective
   endpoint, credential and service state, the limits in force, and whether an earlier recording
   still needs acknowledgement, and, while the gate is closed because of one, the failure that left

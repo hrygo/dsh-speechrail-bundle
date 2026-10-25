@@ -18,7 +18,7 @@ files are byte-compared against the repository build.
 | Face | What it does |
 |---|---|
 | Host | A SpeechRail service over a Strict Typert Remote surface: loopback-only uploads, credential **by reference**, a single in-flight gate, a non-sensitive pending journal, and stable failure codes. |
-| Client | A composer microphone control with waveform, draft-insertion protection, and a settings page; zh/en localisation; a blocked gate can be cleared from either. |
+| Client | A composer microphone control with waveform, draft-insertion protection, and a settings page; one rebindable keyboard command for starting and finishing a dictation; zh/en localisation; a blocked gate can be cleared from either. |
 | Agent | One read-only tool, `speechrail_input_status`, so a model can explain *why* voice input is unusable without opening settings: the endpoint, the credential's three-state verdict, whether the endpoint states it can transcribe, the language hint that will actually travel, the limits in force, the gate, and — when the gate is closed — the failure that left the attempt unconfirmed. |
 
 ## Two engine profiles, one contract
