@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@hrygo/dsh-speechrail-bundle/remote'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-shortcuts/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
@@ -21,10 +22,12 @@ import {
   type SpeechRailTranscribeRequest,
   type SpeechRailTranscriptionResult,
 } from '../contracts.ts'
+import { registerDictateCommand } from './command.ts'
 import { SpeechRailSettings } from './Settings.tsx'
 import { VoiceInput, type SpeechRailInjected } from './VoiceInput.tsx'
 import { NS, en, zh } from './locales.ts'
 import { Recording } from './recording.ts'
+import { createDictationTrigger } from './trigger.ts'
 
 /** Services this client face cannot mount without. */
 export const inject = ['remote', 'slots', 'locale']
@@ -46,6 +49,13 @@ function registerUi(ctx: Context): void {
   ctx.effect(() => async () => {
     await Promise.all([...recordings].map(async (recording) => { await recording.dispose().catch(() => undefined) }))
   })
+  const dictation = createDictationTrigger()
+  // Optional service: a composition without the keyboard registry keeps a working microphone and
+  // simply has no command. Registering through the service is what makes the chord rebindable and
+  // conflict-checked, instead of a raw `window` listener this bundle would own alone.
+  ctx.inject(['shortcuts'], (shortcutCtx) => {
+    shortcutCtx.effect(() => registerDictateCommand(shortcutCtx.shortcuts, shortcutCtx.locale.bind(NS), dictation))
+  })
   const actions: SpeechRailInjected = {
     status: async (): Promise<SpeechRailInputStatus> => await unwrap(ctx.remote.speechrailInput.status()),
     check: async (): Promise<SpeechRailCheckResult> => await unwrap(ctx.remote.speechrailInput.check()),
@@ -60,6 +70,7 @@ function registerUi(ctx: Context): void {
       recordings.add(recording)
       return recording
     },
+    dictation,
   }
   ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
     name: 'conversation.input.activity', locale: NS, inject: () => actions,
