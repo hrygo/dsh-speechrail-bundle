@@ -1,7 +1,7 @@
 {
   "name": "@hrygo/dsh-speechrail-bundle",
   "description": "Local voice input for the DeepSeek Harness composer: record in the browser, transcribe through your own loopback SpeechRail service or any OpenAI-compatible engine, and insert the text into the draft.",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "icon": "./icon.svg",
   "type": "module",
   "main": "lib/index.js",
