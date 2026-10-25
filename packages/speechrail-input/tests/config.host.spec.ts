@@ -13,6 +13,7 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_CREDENTIAL_REF,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
 } from '../src/contracts.ts'
@@ -28,7 +29,11 @@ describe('entry configuration', () => {
     // Documents the hazard the reader exists for: these are objects at runtime.
     expect(typeof (config.language as unknown as { get?: unknown }).get).toBe('function')
     expect(typeof (config.requestTimeoutMs as unknown as { get?: unknown }).get).toBe('function')
+    // The model id is volatile too, so a settings write applies to the next upload without a reload;
+    // the endpoint and the credential reference stay static on purpose (ADR-0004).
+    expect(typeof (config.model as unknown as { get?: unknown }).get).toBe('function')
     expect(typeof config.baseUrl).toBe('string')
+    expect(typeof config.credentialRef).toBe('string')
   })
 
   it('reads every default as a plain value', () => {
@@ -60,6 +65,13 @@ describe('entry configuration', () => {
     expect(() => parsed({ language: 'fr' })).toThrow()
     expect(() => parsed({ requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS - 1 })).toThrow()
     expect(() => parsed({ requestTimeoutMs: MAX_REQUEST_TIMEOUT_MS + 1 })).toThrow()
+  })
+
+  it('bounds the model id at load time as well as at write time', () => {
+    // A configuration the settings page would refuse must not activate from the patch file either,
+    // or the two paths disagree about what a valid entry is.
+    expect(readConfig(parsed({ model: 'm'.repeat(MAX_MODEL_LENGTH) })).model).toHaveLength(MAX_MODEL_LENGTH)
+    expect(() => parsed({ model: 'm'.repeat(MAX_MODEL_LENGTH + 1) })).toThrow()
   })
 
   it('accepts an empty credential reference as a deliberate no-auth endpoint', () => {

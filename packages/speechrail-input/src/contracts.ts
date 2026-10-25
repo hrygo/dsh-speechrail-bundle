@@ -31,6 +31,15 @@ export const MIN_REQUEST_TIMEOUT_MS = 1_000
 /** Largest accepted request budget. */
 export const MAX_REQUEST_TIMEOUT_MS = 180_000
 
+/**
+ * Largest accepted model id.
+ *
+ * A model id is a short name the engine recognises (a served name, a file stem), never a path or a
+ * token, so this is a sanity bound on a value that reaches a multipart field - not a length any real
+ * engine reaches.
+ */
+export const MAX_MODEL_LENGTH = 200
+
 /** Absolute upload ceiling this package enforces regardless of the advertised service limit. */
 export const ABSOLUTE_MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 

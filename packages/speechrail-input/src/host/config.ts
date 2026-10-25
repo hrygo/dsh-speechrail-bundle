@@ -9,6 +9,7 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_CREDENTIAL_REF,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
   type SpeechRailLanguageMode,
@@ -17,16 +18,21 @@ import {
 /**
  * Entry schema rendered by the settings page.
  *
- * `language` and `requestTimeoutMs` are volatile so a settings write applies to
+ * `language`, `model` and `requestTimeoutMs` are volatile so a settings write applies to
  * the next operation without reloading the plugin. A volatile field parses to a
  * `{ get() }` handle rather than a plain value, so it must never be read directly:
- * {@link readConfig} is the only sanctioned reader. The endpoint, model and
- * credential reference stay static because changing them re-points where a local
- * secret is sent and is applied by a reload.
+ * {@link readConfig} is the only sanctioned reader.
+ *
+ * The endpoint and the credential reference stay static because changing either re-points
+ * where a local secret is sent; the model id does not go anywhere near that decision - it
+ * names weights on an endpoint that was already chosen - so it is editable where it is most
+ * often the one thing standing between a user and a working second engine. See ADR-0004.
  */
 export const Config = z.object({
   baseUrl: z.string().default(DEFAULT_BASE_URL),
-  model: z.string().default(''),
+  // Bounded for the same reason the write path bounds it: the value is user input that reaches a
+  // multipart field, and an engine that accepted a 200-character model id would be the first one.
+  model: z.string().max(MAX_MODEL_LENGTH).default('').volatile(),
   // No `min(1)`: an explicitly empty reference is a supported state meaning "this endpoint needs no
   // credential" - the request then carries no Authorization header at all. A non-empty reference
   // that resolves to nothing is still refused as `not-configured`. See ADR-0003.
@@ -40,7 +46,7 @@ export interface SpeechRailInputConfig {
   /** Loopback SpeechRail base URL ending in `/v1`. */
   baseUrl: string
   /** Optional explicit model id; empty lets the service choose. */
-  model: string
+  model: Volatile<string>
   /** Credential reference resolved for every operation; empty means the endpoint needs none. */
   credentialRef: string
   /** Volatile language hint handle; read it through {@link readConfig}. */
@@ -77,7 +83,7 @@ export function readConfig(config: SpeechRailInputConfig): SpeechRailInputConfig
   const language = config.language.get()
   return {
     baseUrl: config.baseUrl,
-    model: config.model,
+    model: config.model.get(),
     credentialRef: config.credentialRef,
     language: language === 'zh' || language === 'en' ? language : 'auto',
     requestTimeoutMs: config.requestTimeoutMs.get(),

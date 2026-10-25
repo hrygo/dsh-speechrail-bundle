@@ -10,6 +10,7 @@
  */
 
 import {
+  MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
   CONFIG_PAYLOAD_MAX_BYTES,
@@ -93,7 +94,7 @@ export interface CoreDependencies {
   readonly settingsRevision: () => number | null
   /** Persist the editable subset of this entry. */
   readonly writeSettings: (
-    patch: { readonly language: SpeechRailLanguageMode; readonly requestTimeoutMs: number },
+    patch: { readonly language: SpeechRailLanguageMode; readonly requestTimeoutMs: number; readonly model: string },
     expectedRevision: number,
   ) => Promise<'ok' | 'conflict' | 'failed'>
 }
@@ -206,10 +207,11 @@ export function parseTranscribeRequest(text: string): ParseResult<SpeechRailTran
  * @returns the validated request, or a refusal.
  */
 export function parseConfigureRequest(text: string): ParseResult<SpeechRailConfigureRequest> {
-  const record = strictRecord(decodeCarrier(text, CONFIG_PAYLOAD_MAX_BYTES), ['language', 'requestTimeoutMs', 'expectedRevision'])
+  const record = strictRecord(decodeCarrier(text, CONFIG_PAYLOAD_MAX_BYTES), ['language', 'requestTimeoutMs', 'model', 'expectedRevision'])
   if (record === null) return refuse('bad-request')
   const language = record.language
   const timeout = record.requestTimeoutMs
+  const model = record.model
   const revision = record.expectedRevision
   if (language !== 'auto' && language !== 'zh' && language !== 'en') return refuse('bad-request')
   // The schema bound is the only other place this range exists, and `settings.write`
@@ -218,8 +220,12 @@ export function parseConfigureRequest(text: string): ParseResult<SpeechRailConfi
   if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < MIN_REQUEST_TIMEOUT_MS || timeout > MAX_REQUEST_TIMEOUT_MS) {
     return refuse('bad-request')
   }
+  // The same bound the Loader schema applies, so a value the page accepts cannot fail activation
+  // later. Nothing else about the id is constrained: which names an engine recognises is the
+  // engine's business, and this Host does not keep a list of them.
+  if (typeof model !== 'string' || model.length > MAX_MODEL_LENGTH) return refuse('bad-request')
   if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return refuse('bad-request')
-  return { ok: true, value: { language, requestTimeoutMs: timeout, expectedRevision: revision } }
+  return { ok: true, value: { language, requestTimeoutMs: timeout, model, expectedRevision: revision } }
 }
 
 /**
@@ -479,6 +485,7 @@ export class SpeechRailInputCore {
     const written = await this.deps.writeSettings({
       language: parsed.value.language,
       requestTimeoutMs: parsed.value.requestTimeoutMs,
+      model: parsed.value.model,
     }, revision)
     if (written === 'conflict') return { ok: false, revision: this.deps.settingsRevision() ?? revision, failure: failure('conflict') }
     if (written === 'failed') return { ok: false, revision, failure: failure('internal') }

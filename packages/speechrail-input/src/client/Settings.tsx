@@ -7,14 +7,15 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
+  MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
   type SpeechRailCheckResult,
-  type SpeechRailFailure,
   type SpeechRailInputStatus,
   type SpeechRailLanguageMode,
 } from '../contracts.ts'
-import { NS, type SpeechRailKey } from './locales.ts'
+import { failureText } from './failure-text.ts'
+import { NS } from './locales.ts'
 import type { SpeechRailInjected } from './VoiceInput.tsx'
 
 /** Full props of the bundle configuration page. */
@@ -50,6 +51,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [checked, setChecked] = useState<SpeechRailCheckResult | undefined>(undefined)
   const [language, setLanguage] = useState<SpeechRailLanguageMode>('auto')
   const [budgetText, setBudgetText] = useState(String(MIN_REQUEST_TIMEOUT_MS))
+  const [modelText, setModelText] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   // A refresh must replace the fields the user has not touched, or the page would keep a
@@ -59,12 +61,14 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   // was in flight would still be overwritten.
   const languageDirty = useRef(false)
   const budgetDirty = useRef(false)
+  const modelDirty = useRef(false)
   // Counters, not booleans: a field edited while a request is in flight was not part of that
   // request, so it has to stay dirty after the request adopts the server's answer.
   const languageEdits = useRef(0)
   const budgetEdits = useRef(0)
+  const modelEdits = useRef(0)
 
-  const editEpoch = (): { language: number, budget: number } => ({ language: languageEdits.current, budget: budgetEdits.current })
+  const editEpoch = (): { language: number, budget: number, model: number } => ({ language: languageEdits.current, budget: budgetEdits.current, model: modelEdits.current })
 
   /**
    * Drop a "saved" note once the user edits again.
@@ -101,17 +105,14 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     setView(next)
     if (!languageDirty.current) setLanguage(next.language)
     if (!budgetDirty.current) setBudgetText(String(next.requestTimeoutMs))
+    if (!modelDirty.current) setModelText(next.model)
   }
 
-  const adopt = (next: SpeechRailInputStatus, epoch: { language: number, budget: number }): void => {
+  const adopt = (next: SpeechRailInputStatus, epoch: { language: number, budget: number, model: number }): void => {
     applyStatus(next)
     languageDirty.current = languageEdits.current !== epoch.language
     budgetDirty.current = budgetEdits.current !== epoch.budget
-  }
-
-  const failureText = (failure: SpeechRailFailure): string => {
-    const text = t(`failure.${failure.code}` as SpeechRailKey)
-    return failure.requestId === null ? text : `${text} (${failure.requestId})`
+    modelDirty.current = modelEdits.current !== epoch.model
   }
 
   useEffect(() => {
@@ -152,20 +153,24 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     try {
       const timeout = clampBudget(budgetText)
       setBudgetText(String(timeout))
+      // Trimmed, not normalized otherwise: a model id is the engine's own name for its weights, and
+      // the only edit this page can safely make to a pasted one is dropping surrounding whitespace.
+      const model = modelText.trim()
+      setModelText(model)
       const epoch = editEpoch()
-      const result = await configure({ language, requestTimeoutMs: timeout, expectedRevision: view.revision })
+      const result = await configure({ language, requestTimeoutMs: timeout, model, expectedRevision: view.revision })
       if (result.ok) {
         const next = await readStatus()
         if (next !== undefined) adopt(next, epoch)
         // An edit made while the save was in flight is still unsaved; saying "saved" beside it
         // is the one message the page must never show.
-        setNote(languageDirty.current || budgetDirty.current ? '' : t('settings.saved'))
+        setNote(languageDirty.current || budgetDirty.current || modelDirty.current ? '' : t('settings.saved'))
         return
       }
       const failure = result.failure
       if (failure !== null && failure.code === 'conflict') { setNote(t('settings.conflict')); return }
       if (failure !== null && failure.code === 'internal') { setNote(t('settings.unavailable')); return }
-      setNote(failure === null ? t('failure.internal') : failureText(failure))
+      setNote(failure === null ? t('failure.internal') : failureText(t, failure))
     } catch {
       setNote(t('failure.internal'))
     } finally {
@@ -185,7 +190,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         // reporting so a second attempt sends that id instead of a stale null.
         const next = await readStatus()
         if (next !== undefined) applyStatus(next)
-        setNote(result.failure === null ? t('failure.internal') : failureText(result.failure))
+        setNote(result.failure === null ? t('failure.internal') : failureText(t, result.failure))
         return
       }
       const fresh = await readStatus()
@@ -228,6 +233,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   // check rather than what happened: no `model` is configured, and most engines require the field.
   const failureCode = checked?.failure?.code
   const refusedWithoutModel = view?.model === '' && (failureCode === 'bad-request' || failureCode === 'not-found')
+  // A 404 with a model configured has two documented causes, and they need opposite fixes: the path
+  // is wrong, or the engine has not loaded that model (vLLM and speaches both answer 404 for the
+  // latter). Saying only "no such endpoint" would send the reader to the wrong one.
+  const notFoundWithModel = view !== undefined && view.model !== '' && failureCode === 'not-found'
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -244,7 +253,15 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       </div>
       <div style={rowStyle}>
         <span style={labelStyle}>{t('settings.model')}</span>
-        <span style={valueStyle}>{view === undefined || view.model === '' ? t('settings.modelAuto') : view.model}</span>
+        <input
+          type="text"
+          maxLength={MAX_MODEL_LENGTH}
+          value={modelText}
+          placeholder={t('settings.modelAuto')}
+          onChange={(event) => { setModelText(event.currentTarget.value); modelDirty.current = true; modelEdits.current += 1; clearSavedNote() }}
+          onBlur={() => { setModelText((current) => current.trim()) }}
+          style={{ ...valueStyle, width: 260 }}
+        />
         <span style={labelStyle}>{t('settings.modelNote')}</span>
       </div>
       <div style={rowStyle}>
@@ -263,7 +280,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           {view !== undefined && view.gate === 'unknown'
             // The host remembers the failure that left this attempt unproven, so the page can name
             // the cause even after a reload cleared everything this component knew about it.
-            ? (view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`)
+            ? (view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`)
             : view?.gate === 'busy' ? t('gateBusy') : t('gateReady')}
         </span>
         {view?.pendingOperationId !== null && view?.pendingOperationId !== undefined && (
@@ -371,8 +388,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
               })}`
               : t('settings.unreachable')}
         </span>
-        {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(checked.failure)}</span>}
+        {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(t, checked.failure)}</span>}
         {refusedWithoutModel && <span style={valueStyle}>{t('settings.modelHint')}</span>}
+        {notFoundWithModel && <span style={valueStyle}>{t('settings.modelNotLoadedHint')}</span>}
       </div>
     </div>
   )

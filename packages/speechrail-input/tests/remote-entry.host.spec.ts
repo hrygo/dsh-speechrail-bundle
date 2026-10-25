@@ -129,7 +129,7 @@ describe('generated Remote contribution', () => {
 
   it('refuses a carrier with an unknown field on every mutating endpoint', () => {
     const cases = [
-      [parseConfigureRequest, JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, expectedRevision: 0, model: 'x' })],
+      [parseConfigureRequest, JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, model: 'x', expectedRevision: 0, extra: 1 })],
       [parseAcknowledgeRequest, JSON.stringify({ operationId: null, extra: 1 })],
     ] as const
     for (const [parse, carrier] of cases) {
@@ -141,7 +141,7 @@ describe('generated Remote contribution', () => {
   it('accepts the exact carriers the client builds', () => {
     const accepted = [
       [parseTranscribeRequest, JSON.stringify({ operationId: 'op_mmmmmmmm', audioBase64: 'AA==' })],
-      [parseConfigureRequest, JSON.stringify({ language: 'zh', requestTimeoutMs: 30_000, expectedRevision: 7 })],
+      [parseConfigureRequest, JSON.stringify({ language: 'zh', requestTimeoutMs: 30_000, model: '', expectedRevision: 7 })],
       [parseAcknowledgeRequest, JSON.stringify({ operationId: 'op_nnnnnnnn' })],
       [parseAcknowledgeRequest, JSON.stringify({ operationId: null })],
     ] as const

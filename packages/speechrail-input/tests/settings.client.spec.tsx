@@ -129,7 +129,7 @@ describe('SpeechRailSettings budget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
 
     await waitFor(() => {
-      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, expectedRevision: 1 })
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', expectedRevision: 1 })
     })
   })
 
@@ -143,7 +143,7 @@ describe('SpeechRailSettings budget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
 
     await waitFor(() => {
-      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, expectedRevision: 1 })
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', expectedRevision: 1 })
     })
   })
 })
@@ -240,7 +240,7 @@ describe('SpeechRailSettings check row verdicts', () => {
     await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('60000') })
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
-    await waitFor(() => { expect(configure).toHaveBeenCalledWith({ language: 'en', requestTimeoutMs: 60_000, expectedRevision: 2 }) })
+    await waitFor(() => { expect(configure).toHaveBeenCalledWith({ language: 'en', requestTimeoutMs: 60_000, model: '', expectedRevision: 2 }) })
   })
 
   it('blames no service for a capability when the check never left the host', async () => {
@@ -517,11 +517,62 @@ describe('SpeechRailSettings capability label', () => {
 
   it('shows the model in force, and names an unset one as the service choosing', async () => {
     render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' })} />)
-    await waitFor(() => { expect(screen.getByText('asr-1.7b-q8')).toBeTruthy() })
+    const field = await screen.findByRole('textbox')
+    await waitFor(() => { expect((field as HTMLInputElement).value).toBe('asr-1.7b-q8') })
 
     cleanup()
     render(<SpeechRailSettings {...props({ model: '' })} />)
-    await waitFor(() => { expect(screen.getByText('settings.modelAuto')).toBeTruthy() })
+    await waitFor(() => { expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('') })
+    expect((screen.getByRole('textbox') as HTMLInputElement).placeholder).toBe('settings.modelAuto')
+  })
+
+  it('saves the model the user typed, trimmed', async () => {
+    // The model id is the one value most engines validate against loaded weights, so it has to be
+    // writable without editing the composition and reloading. Pasted names carry stray whitespace.
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
+    render(<SpeechRailSettings {...props({ model: '' }, { configure: configure as never })} />)
+
+    const field = await screen.findByRole('textbox')
+    fireEvent.change(field, { target: { value: ' Systran/faster-whisper-tiny.en ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: 150_000, model: 'Systran/faster-whisper-tiny.en', expectedRevision: 1 })
+    })
+  })
+
+  it('does not let a refresh overwrite a model the user has typed but not saved', async () => {
+    // Same rule the other two fields follow: a refresh moves the revision, and adopting it wholesale
+    // would discard the edit and then write the stale value back.
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, model: 'old-model', revision: 1 })
+      .mockResolvedValue({ ...STATUS, model: 'someone-elses-model', revision: 2 })
+    const check = vi.fn(async () => ({
+      reachable: true, authenticated: 'unverified' as const, capabilities: null,
+      failure: null, checkedAt: '2026-10-23T12:00:00.000Z',
+    }))
+    render(<SpeechRailSettings {...props({}, { check: check as never })} status={status} />)
+
+    const field = await screen.findByRole('textbox')
+    await waitFor(() => { expect((field as HTMLInputElement).value).toBe('old-model') })
+    fireEvent.change(field, { target: { value: 'typed-but-unsaved' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))
+
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    expect((field as HTMLInputElement).value).toBe('typed-but-unsaved')
+  })
+
+  it('names the model as a cause of a 404 instead of only blaming the path', async () => {
+    // vLLM and speaches both answer 404 when the named model is not loaded, so with a model
+    // configured the page must not assert that the endpoint does not exist.
+    const check = vi.fn(async () => ({
+      reachable: true, authenticated: 'unverified' as const, capabilities: null,
+      failure: failure('not-found', { httpStatus: 404 }), checkedAt: '2026-10-23T12:00:00.000Z',
+    }))
+    render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' }, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    expect(await screen.findByText('settings.modelNotLoadedHint')).toBeTruthy()
   })
 
   it('points at the model field when a refusal happened without one', async () => {

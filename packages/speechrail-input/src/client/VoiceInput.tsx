@@ -12,12 +12,12 @@ import type {
   SpeechRailCheckResult,
   SpeechRailConfigureRequest,
   SpeechRailConfigureResult,
-  SpeechRailFailure,
   SpeechRailInputStatus,
   SpeechRailLimits,
   SpeechRailTranscribeRequest,
   SpeechRailTranscriptionResult,
 } from '../contracts.ts'
+import { failureText } from './failure-text.ts'
 import { NS } from './locales.ts'
 import { RecordingError, audioBase64, type Recording } from './recording.ts'
 import type { DictationTrigger } from './trigger.ts'
@@ -228,16 +228,11 @@ export function VoiceInput({
 
   const feedback = (text: string): void => { setMessage(text); setPhase('feedback') }
 
-  const failureText = (failure: SpeechRailFailure): string => {
-    const text = t(`failure.${failure.code}`)
-    return failure.requestId === null ? text : `${text} (${failure.requestId})`
-  }
-
   // What the closed gate is waiting for, plus the cause when the host knows one: the host keeps the
   // failure that left the attempt unproven, so the reason survives a page reload that forgets this
   // component's own record of it.
   const gateCause = view !== undefined && view.gate === 'unknown' && view.unprovenFailure !== null
-    ? `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`
+    ? `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`
     : t('gateUnknown')
 
   const captureText = (error: unknown): string => {
@@ -272,11 +267,11 @@ export function VoiceInput({
           // 500, a 504, a 202, a redirect) and that it never confirmed finishing. Reporting only the
           // second would hide the first, so the failure text travels with the message.
           feedback(t(refreshed?.capabilities == null ? 'unknownOutcomeLocal' : 'unknownOutcome', {
-            detail: failureText(failure),
+            detail: failureText(t, failure),
           }))
           return
         }
-        feedback(failure === null ? t('failure.internal') : failureText(failure))
+        feedback(failure === null ? t('failure.internal') : failureText(t, failure))
         return
       }
       if (result.transcript.text === '') { feedback(t('empty')); return }
@@ -370,7 +365,7 @@ export function VoiceInput({
         // A refusal can carry the id this host discovered on a re-read; refresh before
         // reporting so a second attempt sends that id instead of a stale null.
         await refresh()
-        report(result.failure === null ? t('failure.internal') : failureText(result.failure))
+        report(result.failure === null ? t('failure.internal') : failureText(t, result.failure))
         return
       }
       await refresh()
@@ -429,7 +424,7 @@ export function VoiceInput({
             // reload even though this component's own record of the attempt does not. Without it the
             // row can only say that something is unconfirmed.
             <span role="status" style={messageStyle} title={gateCause}>
-              {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(view.unprovenFailure)}`}
+              {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`}
             </span>
           )}
       </div>

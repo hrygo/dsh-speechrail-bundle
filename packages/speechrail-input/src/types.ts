@@ -191,6 +191,14 @@ export interface SpeechRailConfigureRequest {
   readonly language: SpeechRailLanguageMode
   /** Request budget to persist. */
   readonly requestTimeoutMs: number
+  /**
+   * Model id to persist; an empty string clears it so the service chooses.
+   *
+   * Required rather than optional: an omitted field and a deliberately cleared one would otherwise
+   * be the same message, and a client that dropped the field would silently keep the old model
+   * instead of being refused.
+   */
+  readonly model: string
   /** Revision the writer read; a mismatch fails the write. */
   readonly expectedRevision: number
 }

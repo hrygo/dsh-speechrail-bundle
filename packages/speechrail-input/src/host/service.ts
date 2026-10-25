@@ -162,7 +162,7 @@ export default class SpeechRailInput extends Service {
 
   /** Persist the editable subset of this entry. */
   private async writeSettings(
-    patch: { readonly language: SpeechRailLanguageMode; readonly requestTimeoutMs: number },
+    patch: { readonly language: SpeechRailLanguageMode; readonly requestTimeoutMs: number; readonly model: string },
     expectedRevision: number,
   ): Promise<'ok' | 'conflict' | 'failed'> {
     const settings = this.ctx.get('settings')
