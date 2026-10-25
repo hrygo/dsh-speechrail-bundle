@@ -21,6 +21,7 @@ import { failureText } from './failure-text.ts'
 import { NS } from './locales.ts'
 import { RecordingError, audioBase64, type Recording } from './recording.ts'
 import type { DictationTrigger } from './trigger.ts'
+import { RowButton } from './RowButton.tsx'
 import { Waveform } from './Waveform.tsx'
 
 /** Host calls injected without exposing a Cordis Context to React. */
@@ -85,25 +86,60 @@ async function disposeRecording(capture: Recording): Promise<void> {
 
 const triggerStyle: CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
-  border: '1px solid var(--dsw-alias-border-secondary, #d0d0d5)', borderRadius: 14,
-  background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0,
+  border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)', borderRadius: 14,
+  color: 'var(--dsw-alias-label-primary, inherit)', padding: 0,
 }
 
 const roundStyle: CSSProperties = { ...triggerStyle, width: 22, height: 22 }
 
 const inlineStyle: CSSProperties = {
-  fontSize: 12, padding: '2px 8px', borderRadius: 6,
-  border: '1px solid var(--dsw-alias-border-secondary, #d0d0d5)', background: 'transparent',
-  color: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+  fontSize: 12, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap',
+  border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)', color: 'var(--dsw-alias-label-primary, inherit)',
+}
+
+/** The live take's elapsed time: a fixed width so the row does not twitch every second. */
+const timerStyle: CSSProperties = {
+  fontSize: 12, minWidth: 30, fontVariantNumeric: 'tabular-nums',
+  color: 'var(--dsw-alias-label-secondary, #8a8a8e)',
 }
 
 /** One compact row: the anchor first, then everything a phase adds to its right. */
 const rowStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none', minWidth: 0, maxWidth: '100%' }
 
 const messageStyle: CSSProperties = {
-  fontSize: 12, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap', color: 'var(--dsw-alias-content-secondary, inherit)',
+  fontSize: 12, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
+
+/**
+ * How a message reads.
+ *
+ * One grey for a refusal and for "working on it" made the row's worst states look like its best ones,
+ * so the kind travels with the text and picks the colour.
+ */
+type MessageKind = 'info' | 'warn' | 'error' | 'success'
+
+/** Declared theme tokens only; each carries a light and a dark value. */
+const MESSAGE_COLOR: Record<MessageKind, string> = {
+  info: 'var(--dsw-alias-label-secondary, #8a8a8e)',
+  warn: 'var(--dsw-alias-state-warn-primary, #a06a00)',
+  error: 'var(--dsw-alias-state-error-primary, #d3574a)',
+  success: 'var(--dsw-alias-state-success-primary, #2e7d32)',
+}
+
+/** Whole seconds a take has run, as the `m:ss` a person reads. */
+function formatElapsed(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+/** The waiting phases share one label and one spinner. */
+const SPINNER = (label: string): ReactNode => (
+  <svg width="15" height="15" viewBox="0 0 16 16" role="img" aria-label={label} focusable="false">
+    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+    <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="0.9s" repeatCount="indefinite" />
+    </path>
+  </svg>
+)
 
 /** Render the microphone and, in its place, whatever the current phase has to show. */
 export function VoiceInput({
@@ -113,6 +149,8 @@ export function VoiceInput({
   const [phase, setPhase] = useState<Phase>('idle')
   const [ackBusy, setAckBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageKind, setMessageKind] = useState<MessageKind>('info')
+  const [elapsed, setElapsed] = useState(0)
   const [pending, setPending] = useState('')
   const [view, setView] = useState<SpeechRailInputStatus | undefined>(undefined)
   const current = useRef<Active | undefined>(undefined)
@@ -223,7 +261,17 @@ export function VoiceInput({
     return dictation.subscribe(() => { pressRef.current() })
   }, [dictation])
 
-  const feedback = (text: string): void => { setMessage(text); setPhase('feedback') }
+  const show = (text: string, kind: MessageKind = 'error'): void => { setMessage(text); setMessageKind(kind) }
+  const feedback = (text: string, kind: MessageKind = 'error'): void => { show(text, kind); setPhase('feedback') }
+
+  // A take is capped by the service's own duration limit, and until now nothing on screen said how
+  // long it had been running. The count restarts with every take.
+  useEffect(() => {
+    if (phase !== 'recording') { setElapsed(0); return }
+    const startedAt = Date.now()
+    const ticker = setInterval(() => { setElapsed(Math.floor((Date.now() - startedAt) / 1000)) }, 1000)
+    return () => { clearInterval(ticker) }
+  }, [phase])
 
   // What the closed gate is waiting for, plus the cause when the host knows one: the host keeps the
   // failure that left the attempt unproven, so the reason survives a page reload that forgets this
@@ -274,7 +322,8 @@ export function VoiceInput({
       if (result.transcript.text === '') { feedback(t('empty')); return }
       if (!inputActions.insertText(result.transcript.text, active.span)) {
         setPending(result.transcript.text)
-        feedback(t('conflict'))
+        // The transcript is kept and offered for insertion, so this is a caution rather than a loss.
+        feedback(t('conflict'), 'warn')
         return
       }
       setMessage('')
@@ -298,8 +347,8 @@ export function VoiceInput({
     if (run !== generation.current) return
     if (snapshot === undefined) { feedback(t('failure.internal')); return }
     if (snapshot.endpointProblem !== null) { feedback(t('failure.endpoint-invalid')); return }
-    if (snapshot.gate === 'unknown') { feedback(t('gateUnknown')); return }
-    if (snapshot.gate === 'busy') { feedback(t('gateBusy')); return }
+    if (snapshot.gate === 'unknown') { feedback(t('gateUnknown'), 'warn'); return }
+    if (snapshot.gate === 'busy') { feedback(t('gateBusy'), 'warn'); return }
     // A reference that is configured but resolves to nothing will be refused on upload, so say so
     // before the microphone is opened rather than after a full dictation. An empty reference is the
     // opposite state: the endpoint needs no credential and nothing is missing.
@@ -342,11 +391,11 @@ export function VoiceInput({
     setAckBusy(true)
     // A result may arrive after the user has started recording again; reporting it must not
     // collapse the row then, or the stop button of a live microphone disappears with it.
-    const report = (text: string): void => {
+    const report = (text: string, kind: MessageKind = 'error'): void => {
       // An owned capture keeps its phase: feedback would hide the transcribing indicator and
       // offer a retry that `start` refuses because the capture is still in flight.
-      if (current.current !== undefined) setMessage(text)
-      else feedback(text)
+      if (current.current !== undefined) show(text, kind)
+      else feedback(text, kind)
     }
     // A null id means the stored record could not be read at all; the Host accepts it
     // only as the user's explicit assertion that nothing of theirs is outstanding.
@@ -355,7 +404,7 @@ export function VoiceInput({
       if (result.ok && result.pendingOperationId !== null) {
         // The host accepted the request but something else still holds the gate.
         await refresh()
-        report(t('gateBusy'))
+        report(t('gateBusy'), 'warn')
         return
       }
       if (!result.ok) {
@@ -370,11 +419,11 @@ export function VoiceInput({
       // is a reason to keep the control expanded: an attempt that aborted without recording
       // (a still-closed gate) must not swallow the acknowledgement's own success.
       if (current.current !== undefined) {
-        setMessage(t('acknowledged'))
+        show(t('acknowledged'), 'success')
         return
       }
       setPending('')
-      setMessage(t('acknowledged'))
+      show(t('acknowledged'), 'success')
       setPhase('idle')
     } catch {
       report(t('failure.internal'))
@@ -393,56 +442,78 @@ export function VoiceInput({
    * becomes the live waveform (and the control that ends the take), then a dimmed waiting state, then
    * the microphone again for a retry.
    */
-  const anchor = ((): ReactNode => {
-    if (phase === 'recording') {
-      return (
-        <button
-          type="button"
-          data-speechrail-anchor="true"
-          title={t('stop')}
-          aria-label={t('stop')}
-          onClick={() => { void finish() }}
-          style={{ ...triggerStyle, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #d3574a)', borderColor: 'var(--dsw-alias-state-error-primary, #d3574a)' }}
-        >
-          <Waveform recording={current.current?.capture} label={t('recording')} bars={5} height={14} color="currentColor" />
-        </button>
-      )
-    }
-    const busy = phase === 'checking' || phase === 'requesting' || phase === 'transcribing'
-    return (
-      <button
-        type="button"
-        data-speechrail-anchor="true"
-        title={phase === 'feedback' ? t('retryRecording') : t('dictate')}
-        aria-label={phase === 'feedback' ? t('retryRecording') : t('start')}
-        disabled={busy}
-        onMouseDown={(event) => { event.preventDefault() }}
-        onClick={() => { void start() }}
-        style={{ ...triggerStyle, flex: 'none', opacity: busy ? 0.55 : 1 }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path
-            d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
-            fill="currentColor"
-          />
-        </svg>
-      </button>
-    )
-  })()
-
   const phaseText = phase === 'transcribing' ? t('transcribingShort') : phase === 'checking' ? t('checking') : t('requesting')
   const waiting = phase === 'checking' || phase === 'requesting' || phase === 'transcribing'
+
+  /**
+   * The one control the user clicked, and the row's first element in every phase.
+   *
+   * It keeps its place and its size: this seat is not the composer's activity seat, so recording never
+   * rearranges the toolbar, and everything a phase has to add appears to its right. The glyph changes
+   * instead - the microphone becomes the live waveform (and the control that ends the take), then a
+   * spinner that says which work is in progress, then the microphone again for a retry.
+   */
+  const anchor = phase === 'recording'
+    ? (
+      <RowButton
+        label={t('stop')}
+        title={t('stop')}
+        keepFocus
+        onClick={() => { void finish() }}
+        style={{
+          ...triggerStyle, flex: 'none',
+          color: 'var(--dsw-alias-state-error-primary, #d3574a)',
+          borderColor: 'var(--dsw-alias-state-error-primary, #d3574a)',
+        }}
+      >
+        <Waveform recording={current.current?.capture} label={t('recording')} bars={5} height={14} color="currentColor" />
+      </RowButton>
+    )
+    : (
+      <RowButton
+        label={waiting ? phaseText : phase === 'feedback' ? t('retryRecording') : t('start')}
+        title={phase === 'feedback' ? t('retryRecording') : t('dictate')}
+        disabled={waiting}
+        keepFocus
+        onClick={() => { void start() }}
+        style={{ ...triggerStyle, flex: 'none' }}
+      >
+        {waiting
+          ? SPINNER(phaseText)
+          : (
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4.5 6a.75.75 0 0 1 .75.75 3.75 3.75 0 0 0 7.5 0 .75.75 0 0 1 1.5 0 5.25 5.25 0 0 1-4.5 5.2v1.3h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5H7.25v-1.3a5.25 5.25 0 0 1-4.5-5.2A.75.75 0 0 1 3.5 7.5Z"
+                fill="currentColor"
+              />
+            </svg>
+          )}
+      </RowButton>
+    )
+
+  /** One message line, coloured by what it says. */
+  const messageLine = (text: string, kind: MessageKind, title: string): ReactNode => (
+    <span role="status" data-speechrail-message={kind} style={{ ...messageStyle, color: MESSAGE_COLOR[kind] }} title={title}>{text}</span>
+  )
 
   return (
     <div style={rowStyle} data-speechrail-activity={phase}>
       {anchor}
+      {phase === 'recording' && (
+        // The service caps a take, and the running time is the one number worth having while dictating.
+        <span role="timer" data-speechrail-elapsed={elapsed} style={timerStyle}>{formatElapsed(elapsed)}</span>
+      )}
       {phase !== 'idle' && (
         // After the anchor, never before it: a control that lands where the microphone was would be
         // the movement this layout exists to avoid.
-        <button type="button" aria-label={t(pending === '' ? 'cancel' : 'discard')} onClick={cancel} style={roundStyle}>×</button>
+        <RowButton
+          label={t(pending === '' ? 'cancel' : 'discard')}
+          onClick={cancel}
+          style={roundStyle}
+        >×</RowButton>
       )}
       {waiting && (
-        <span role="status" style={messageStyle} title={phaseText}>
+        <span role="status" data-speechrail-message="info" style={{ ...messageStyle, color: MESSAGE_COLOR.info }} title={phaseText}>
           <span>{phaseText}</span>
           {phase === 'transcribing' && (view?.languageHint ?? '') !== '' && (
             // The hint the snapshot in force puts on the wire. The host decides it again when
@@ -451,38 +522,47 @@ export function VoiceInput({
             // settings page is not on screen.
             <> · <span>{t('languageHintInline', { language: view?.languageHint ?? '' })}</span></>
           )}
-          {/* A result that arrived while this take is still running has nowhere else to go. */}
-          {message !== '' && <> · <span>{message}</span></>}
         </span>
       )}
-      {phase === 'recording' && message !== '' && (
-        // A result that arrived while recording must stay visible: the row keeps its stop control,
-        // so there is nowhere else to show it.
-        <span role="status" style={messageStyle} title={message}>{message}</span>
+      {(waiting || phase === 'recording') && message !== '' && (
+        // A result that arrived while this take is still running has nowhere else to go: the row keeps
+        // its own control, so the message sits beside it with its own colour.
+        messageLine(message, messageKind, message)
       )}
       {phase === 'feedback' && (
         <>
-          <span role="status" style={messageStyle} title={pending === '' ? message : pending}>{message}</span>
+          {messageLine(message, messageKind, pending === '' ? message : pending)}
           {pending !== '' && (
-            <button type="button" style={inlineStyle} onClick={() => {
-              if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setMessage(''); setPhase('idle') }
-            }}>{t('insert')}</button>
+            <RowButton
+              label={t('insert')}
+              title={t('insert')}
+              onClick={() => {
+                if (inputActions.insertText(pending, inputActions.captureInsertion())) { setPending(''); setMessage(''); setPhase('idle') }
+              }}
+              style={inlineStyle}
+            >{t('insert')}</RowButton>
           )}
         </>
       )}
       {view?.gate === 'unknown' && (
         // Never disabled by this control's own phase: clearing an unproven outcome is recovery, and a
         // recording that ends badly must not leave the gate with no way out.
-        <button type="button" style={inlineStyle} disabled={ackBusy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
+        <RowButton
+          label={t('acknowledge')}
+          title={t('acknowledge')}
+          disabled={ackBusy}
+          onClick={() => { void acknowledgeUnknown() }}
+          style={inlineStyle}
+        >{t('acknowledge')}</RowButton>
       )}
-      {phase === 'idle' && message !== '' && <span role="status" style={messageStyle} title={message}>{message}</span>}
-      {phase === 'idle' && message === '' && view?.gate === 'unknown' && (
+      {phase === 'idle' && message !== '' && messageLine(message, messageKind, message)}
+      {phase === 'idle' && message === '' && view?.gate === 'unknown' && messageLine(
         // The host keeps the failure that left this attempt unproven, so the cause survives a page
         // reload even though this component's own record of the attempt does not. Without it the
         // row can only say that something is unconfirmed.
-        <span role="status" style={messageStyle} title={gateCause}>
-          {view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`}
-        </span>
+        view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`,
+        'warn',
+        gateCause,
       )}
     </div>
   )

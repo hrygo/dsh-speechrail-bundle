@@ -664,3 +664,107 @@ describe('VoiceInput in-place control', () => {
     expect(submit).not.toHaveBeenCalled()
   })
 })
+
+describe('VoiceInput progress and feedback', () => {
+  /** A render whose stubs can be held open and whose snapshot can be overridden. */
+  function view(options: {
+    readonly status?: Partial<SpeechRailInputStatus>
+    readonly transcribe?: VoiceInputProps['transcribe']
+  } = {}) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+      // The live waveform samples this every 80 ms, and this suite advances fake timers.
+      amplitude: () => 0.1,
+    }
+    const base = props(options.status ?? {}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  /** Start a take and stop it, leaving whatever the transcription does next. */
+  async function record(): Promise<void> {
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+  }
+
+  it('counts the seconds of a live take', async () => {
+    // The service caps a take at a duration the row never used to show, so the one number a person
+    // dictating wants is how long they have been talking.
+    vi.useFakeTimers()
+    try {
+      render(view())
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'start' })) })
+      expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+      expect(screen.getByRole('timer').textContent).toBe('0:00')
+
+      await act(async () => { vi.advanceTimersByTime(3000) })
+      expect(screen.getByRole('timer').textContent).toBe('0:03')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows progress in place of the microphone while a take is being transcribed', async () => {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+
+    await record()
+
+    // The control names the work instead of showing a microphone nobody can press.
+    expect(await screen.findByRole('img', { name: 'transcribingShort' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'transcribingShort' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'start' })).toBeNull()
+    release?.()
+  })
+
+  it('paints a refusal with the error token, not with the caption grey', async () => {
+    render(view({ status: { credentialRef: 'SPEECHRAIL_API_KEY', credentialConfigured: false } }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    const message = (await screen.findByText('failure.not-configured')).closest('[data-speechrail-message]') as HTMLElement | null
+    expect(message?.dataset.speechrailMessage).toBe('error')
+    expect(message?.style.color).toContain('state-error-primary')
+  })
+
+  it('keeps a progress line in the secondary text colour', async () => {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+
+    await record()
+
+    const progress = (await screen.findByText('transcribingShort')).closest('[data-speechrail-message]') as HTMLElement | null
+    expect(progress?.dataset.speechrailMessage).toBe('info')
+    expect(progress?.style.color).toContain('label-secondary')
+    release?.()
+  })
+
+  it('gives the microphone a hover surface so it reads as pressable', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+
+    expect(mic.style.background).toBe('transparent')
+    fireEvent.mouseEnter(mic)
+    expect(mic.style.background).toContain('bg-layer-2')
+    fireEvent.mouseLeave(mic)
+    expect(mic.style.background).toBe('transparent')
+  })
+})
+

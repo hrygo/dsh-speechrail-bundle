@@ -588,3 +588,44 @@ describe('SpeechRailSettings capability label', () => {
     expect(screen.queryByText('settings.modelHint')).toBeNull()
   })
 })
+
+describe('SpeechRailSettings presentation', () => {
+  it('names every field and the language group for assistive technology', async () => {
+    render(<SpeechRailSettings {...props({})} />)
+
+    // A placeholder is not a name: without these associations the page reads as unnamed text boxes.
+    expect(await screen.findByLabelText('settings.model')).toBeTruthy()
+    expect(screen.getByLabelText('settings.budget')).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'settings.language' })).toBeTruthy()
+  })
+
+  it('groups its rows under named regions', async () => {
+    render(<SpeechRailSettings {...props({})} />)
+    await screen.findByText('settings.description')
+
+    // Eleven undifferentiated rows read as one flat list; the sections are what makes the page
+    // scannable for the two things a person comes here to do - point it at an engine, and read what
+    // that engine said.
+    expect(screen.getByRole('region', { name: 'settings.sectionConnection' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'settings.sectionDictation' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'settings.sectionService' })).toBeTruthy()
+  })
+
+  it('colours a refused save apart from a saved note', async () => {
+    const refused = render(
+      <SpeechRailSettings {...props({}, { configure: (async () => ({ ok: false, revision: 1, failure: failure('conflict') })) as never })} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.save' }))
+    const note = await screen.findByText('settings.conflict')
+    expect(note.dataset.speechrailNote).toBe('error')
+    expect(note.style.color).toContain('state-error-primary')
+    refused.unmount()
+
+    render(<SpeechRailSettings {...props({})} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.save' }))
+    const saved = await screen.findByText('settings.saved')
+    expect(saved.dataset.speechrailNote).toBe('success')
+    expect(saved.style.color).toContain('state-success-primary')
+  })
+})
+

@@ -15,19 +15,47 @@ import {
   type SpeechRailLanguageMode,
 } from '../contracts.ts'
 import { failureText } from './failure-text.ts'
+import { RowButton } from './RowButton.tsx'
 import { NS } from './locales.ts'
 import type { SpeechRailInjected } from './VoiceInput.tsx'
 
 /** Full props of the bundle configuration page. */
 export type SpeechRailSettingsProps = PropsRuntime<'plugins.bundle.config'> & PropsLocale<typeof NS> & InjectFace<SpeechRailInjected>
 
-const rowStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }
-const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--dsw-alias-content-secondary, #6b6b70)' }
-const valueStyle: CSSProperties = { fontSize: 13 }
+/** One labelled row. Rows stack their label above their value so any panel width works. */
+const rowStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
+
+/** One group of rows: the page has three things to say, not eleven. */
+const sectionStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }
+
+const sectionTitleStyle: CSSProperties = {
+  fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, inherit)',
+}
+
+const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b6b70)' }
+const valueStyle: CSSProperties = { fontSize: 13, color: 'var(--dsw-alias-label-primary, inherit)' }
+const fieldStyle: CSSProperties = {
+  fontSize: 13, padding: '4px 8px', borderRadius: 6,
+  color: 'var(--dsw-alias-label-primary, inherit)',
+  background: 'var(--dsw-alias-bg-layer-2, transparent)',
+  border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)',
+}
 const buttonStyle: CSSProperties = {
-  fontSize: 12, padding: '3px 10px', borderRadius: 6,
-  border: '1px solid var(--dsw-alias-border-secondary, #d0d0d5)', background: 'transparent',
-  color: 'inherit', cursor: 'pointer',
+  fontSize: 12, padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap',
+  border: '1px solid var(--dsw-alias-border-l1, #d0d0d5)', color: 'var(--dsw-alias-label-primary, inherit)',
+}
+
+/**
+ * How a note reads.
+ *
+ * Every note used to be the same caption grey, which made a refused save look like a successful one.
+ */
+type NoteKind = 'warn' | 'error' | 'success'
+
+const NOTE_COLOR: Record<NoteKind, string> = {
+  warn: 'var(--dsw-alias-state-warn-primary, #a06a00)',
+  error: 'var(--dsw-alias-state-error-primary, #d3574a)',
+  success: 'var(--dsw-alias-state-success-primary, #2e7d32)',
 }
 
 /**
@@ -53,6 +81,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [budgetText, setBudgetText] = useState(String(MIN_REQUEST_TIMEOUT_MS))
   const [modelText, setModelText] = useState('')
   const [note, setNote] = useState('')
+  const [noteKind, setNoteKind] = useState<NoteKind>('error')
   const [busy, setBusy] = useState(false)
   // A refresh must replace the fields the user has not touched, or the page would keep a
   // stale value while adopting the fresh revision and write it back over someone else's
@@ -80,6 +109,9 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
    * page: if in-place switching is ever added, store which note is shown rather than its text.
    */
   const clearSavedNote = (): void => { setNote((current) => (current === t('settings.saved') ? '' : current)) }
+
+  /** Show the one line under the actions; a note reads as a failure unless it says otherwise. */
+  const showNote = (text: string, kind: NoteKind = 'error'): void => { setNote(text); setNoteKind(kind) }
 
   const viewRef = useRef<SpeechRailInputStatus | undefined>(undefined)
   const statusSeq = useRef(0)
@@ -122,7 +154,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         const next = await readStatus()
         if (next !== undefined) adopt(next, epoch)
       } catch {
-        setNote(t('failure.internal'))
+        showNote(t('failure.internal'))
       }
     })()
     // The page reads once per mount; every write refreshes explicitly.
@@ -140,7 +172,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       const next = await readStatus()
       if (next !== undefined) applyStatus(next)
     } catch {
-      setNote(t('failure.internal'))
+      showNote(t('failure.internal'))
     } finally {
       setBusy(false)
     }
@@ -164,15 +196,16 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         if (next !== undefined) adopt(next, epoch)
         // An edit made while the save was in flight is still unsaved; saying "saved" beside it
         // is the one message the page must never show.
-        setNote(languageDirty.current || budgetDirty.current || modelDirty.current ? '' : t('settings.saved'))
+        if (languageDirty.current || budgetDirty.current || modelDirty.current) setNote('')
+        else showNote(t('settings.saved'), 'success')
         return
       }
       const failure = result.failure
-      if (failure !== null && failure.code === 'conflict') { setNote(t('settings.conflict')); return }
-      if (failure !== null && failure.code === 'internal') { setNote(t('settings.unavailable')); return }
-      setNote(failure === null ? t('failure.internal') : failureText(t, failure))
+      if (failure !== null && failure.code === 'conflict') { showNote(t('settings.conflict')); return }
+      if (failure !== null && failure.code === 'internal') { showNote(t('settings.unavailable')); return }
+      showNote(failure === null ? t('failure.internal') : failureText(t, failure))
     } catch {
-      setNote(t('failure.internal'))
+      showNote(t('failure.internal'))
     } finally {
       setBusy(false)
     }
@@ -190,7 +223,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         // reporting so a second attempt sends that id instead of a stale null.
         const next = await readStatus()
         if (next !== undefined) applyStatus(next)
-        setNote(result.failure === null ? t('failure.internal') : failureText(t, result.failure))
+        showNote(result.failure === null ? t('failure.internal') : failureText(t, result.failure))
         return
       }
       const fresh = await readStatus()
@@ -199,12 +232,12 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       if (result.pendingOperationId !== null || (now?.pendingOperationId ?? null) !== null) {
         // The Host accepted the request but something still holds the gate (now, or as the
         // refreshed status reports), so claiming success here would be false.
-        setNote(t('gateBusy'))
+        showNote(t('gateBusy'), 'warn')
         return
       }
-      setNote(t('acknowledged'))
+      showNote(t('acknowledged'), 'success')
     } catch {
-      setNote(t('failure.internal'))
+      showNote(t('failure.internal'))
     } finally {
       setBusy(false)
     }
@@ -235,158 +268,197 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const refusedWithoutModel = view?.model === '' && (failureCode === 'bad-request' || failureCode === 'not-found')
 
   return (
-    <div style={{ fontSize: 13 }}>
+    <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', maxWidth: 560 }}>
       <div style={rowStyle}>
         <span style={valueStyle}>{t('settings.description')}</span>
       </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.endpoint')}</span>
-        <span style={valueStyle}>{view?.baseUrl ?? '—'}</span>
-        <span style={labelStyle}>{t('settings.endpointNote')}</span>
-        {view?.endpointProblem !== null && view?.endpointProblem !== undefined && (
-          <span style={{ ...valueStyle, color: 'var(--dsw-alias-content-error, #c0392b)' }}>{t('failure.endpoint-invalid')}</span>
-        )}
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.model')}</span>
-        <input
-          type="text"
-          maxLength={MAX_MODEL_LENGTH}
-          value={modelText}
-          placeholder={t('settings.modelAuto')}
-          onChange={(event) => { setModelText(event.currentTarget.value); modelDirty.current = true; modelEdits.current += 1; clearSavedNote() }}
-          onBlur={() => { setModelText((current) => current.trim()) }}
-          style={{ ...valueStyle, width: 260 }}
-        />
-        <span style={labelStyle}>{t('settings.modelNote')}</span>
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.credential')}</span>
-        <span style={valueStyle}>
-          {view?.credentialRef === ''
-            ? t('settings.credentialNone')
-            : view?.credentialConfigured === true
-              ? t('settings.credentialConfigured', { ref: view.credentialRef })
-              : t('settings.credentialMissing', { ref: view?.credentialRef ?? '—' })}
-        </span>
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.gate')}</span>
-        <span style={valueStyle}>
-          {view !== undefined && view.gate === 'unknown'
-            // The host remembers the failure that left this attempt unproven, so the page can name
-            // the cause even after a reload cleared everything this component knew about it.
-            ? (view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`)
-            : view?.gate === 'busy' ? t('gateBusy') : t('gateReady')}
-        </span>
-        {view?.pendingOperationId !== null && view?.pendingOperationId !== undefined && (
-          <span style={valueStyle}>{t('settings.pendingOperation', { id: view.pendingOperationId })}</span>
-        )}
-        {view?.gate === 'unknown' && (
-          <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void acknowledgeUnknown() }}>{t('acknowledge')}</button>
-        )}
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.language')}</span>
-        <span style={{ display: 'flex', gap: 12 }}>
-          {(['auto', 'zh', 'en'] as const).map((mode) => (
-            <label key={mode} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input
-                type="radio"
-                name="speechrail-language"
-                checked={language === mode}
-                disabled={view !== undefined && !view.languageOptions.includes(mode)}
-                onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1; clearSavedNote() }}
-              />
-              {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
-            </label>
-          ))}
-          {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
-            // A language the service states no support for is not silently applied, so say so
-            // instead of leaving a checked-but-disabled control to imply that it is.
-            <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
+
+      <section aria-label={t('settings.sectionConnection')} style={sectionStyle}>
+        <span aria-hidden="true" style={sectionTitleStyle}>{t('settings.sectionConnection')}</span>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.endpoint')}</span>
+          <span style={valueStyle}>{view?.baseUrl ?? '—'}</span>
+          <span style={labelStyle}>{t('settings.endpointNote')}</span>
+          {view?.endpointProblem !== null && view?.endpointProblem !== undefined && (
+            <span style={{ ...valueStyle, color: 'var(--dsw-alias-state-error-primary, #d3574a)' }}>{t('failure.endpoint-invalid')}</span>
           )}
-          {view !== undefined && language !== 'auto' && view.languageOptions.includes(language)
-            && !(capabilities?.transcriptionSupported === true && capabilities.languages.status === 'supported') && (
-            // The service did not enumerate its languages, so this choice travels as a hint it
-            // never confirmed - which is worth saying out loud.
-            <span style={labelStyle}>{t('settings.languageUnverified')}</span>
-          )}
-        </span>
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.budget')}</span>
-        <input
-          type="number"
-          min={MIN_REQUEST_TIMEOUT_MS}
-          max={MAX_REQUEST_TIMEOUT_MS}
-          step={1000}
-          value={budgetText}
-          onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; clearSavedNote() }}
-          onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
-          style={{ ...valueStyle, width: 120 }}
-        />
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-        <button type="button" style={buttonStyle} disabled={busy || view === undefined} onClick={() => { void save() }}>{t('settings.save')}</button>
-        <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void runCheck() }}>{busy ? t('settings.checking') : t('settings.check')}</button>
-        {note !== '' && <span style={labelStyle}>{note}</span>}
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.limits')}</span>
-        {limits !== undefined && (
+        </div>
+        <div style={rowStyle}>
+          <label htmlFor="speechrail-input-model" style={labelStyle}>{t('settings.model')}</label>
+          <input
+            id="speechrail-input-model"
+            type="text"
+            maxLength={MAX_MODEL_LENGTH}
+            value={modelText}
+            placeholder={t('settings.modelAuto')}
+            onChange={(event) => { setModelText(event.currentTarget.value); modelDirty.current = true; modelEdits.current += 1; clearSavedNote() }}
+            onBlur={() => { setModelText((current) => current.trim()) }}
+            style={{ ...fieldStyle, width: 260 }}
+          />
+          <span style={labelStyle}>{t('settings.modelNote')}</span>
+        </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.credential')}</span>
           <span style={valueStyle}>
-            {t('settings.limitUpload', { mb: Math.round(limits.maxUploadBytes / 1024 / 1024) })}
-            {' · '}
-            {t('settings.limitDuration', { seconds: limits.maxAudioSeconds })}
-            {capabilities === null || capabilities === undefined
-              ? ` ${t('settings.limitsDefault')}`
-              : ''}
+            {view?.credentialRef === ''
+              ? t('settings.credentialNone')
+              : view?.credentialConfigured === true
+                ? t('settings.credentialConfigured', { ref: view.credentialRef })
+                : t('settings.credentialMissing', { ref: view?.credentialRef ?? '—' })}
           </span>
+        </div>
+      </section>
+
+      <section aria-label={t('settings.sectionDictation')} style={sectionStyle}>
+        <span aria-hidden="true" style={sectionTitleStyle}>{t('settings.sectionDictation')}</span>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.language')}</span>
+          <div role="radiogroup" aria-label={t('settings.language')} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(['auto', 'zh', 'en'] as const).map((mode) => (
+              <label key={mode} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  name="speechrail-language"
+                  checked={language === mode}
+                  disabled={view !== undefined && !view.languageOptions.includes(mode)}
+                  onChange={() => { setLanguage(mode); languageDirty.current = true; languageEdits.current += 1; clearSavedNote() }}
+                />
+                {t(mode === 'auto' ? 'settings.languageAuto' : mode === 'zh' ? 'settings.languageZh' : 'settings.languageEn')}
+              </label>
+            ))}
+            {view !== undefined && language !== 'auto' && !view.languageOptions.includes(language) && (
+              // A language the service states no support for is not silently applied, so say so
+              // instead of leaving a checked-but-disabled control to imply that it is.
+              <span style={labelStyle}>{t('settings.languageNotInEffect')}</span>
+            )}
+            {view !== undefined && language !== 'auto' && view.languageOptions.includes(language)
+              && !(capabilities?.transcriptionSupported === true && capabilities.languages.status === 'supported') && (
+              // The service did not enumerate its languages, so this choice travels as a hint it
+              // never confirmed - which is worth saying out loud.
+              <span style={labelStyle}>{t('settings.languageUnverified')}</span>
+            )}
+          </div>
+        </div>
+        <div style={rowStyle}>
+          <label htmlFor="speechrail-input-budget" style={labelStyle}>{t('settings.budget')}</label>
+          <input
+            id="speechrail-input-budget"
+            type="number"
+            min={MIN_REQUEST_TIMEOUT_MS}
+            max={MAX_REQUEST_TIMEOUT_MS}
+            step={1000}
+            value={budgetText}
+            onChange={(event) => { setBudgetText(event.currentTarget.value); budgetDirty.current = true; budgetEdits.current += 1; clearSavedNote() }}
+            onBlur={() => { setBudgetText(String(clampBudget(budgetText))) }}
+            style={{ ...fieldStyle, width: 120 }}
+          />
+        </div>
+      </section>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 18 }}>
+        <RowButton
+          label={t('settings.save')}
+          title={t('settings.save')}
+          disabled={busy || view === undefined}
+          onClick={() => { void save() }}
+          style={buttonStyle}
+        >{t('settings.save')}</RowButton>
+        <RowButton
+          label={busy ? t('settings.checking') : t('settings.check')}
+          title={t('settings.check')}
+          disabled={busy}
+          onClick={() => { void runCheck() }}
+          style={buttonStyle}
+        >{busy ? t('settings.checking') : t('settings.check')}</RowButton>
+        {note !== '' && (
+          <span data-speechrail-note={noteKind} style={{ ...labelStyle, color: NOTE_COLOR[noteKind] }}>{note}</span>
         )}
       </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>{t('settings.transcriptionStatus', {
-          state: capabilities === null || capabilities === undefined
-            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
-            : capabilities.transcriptionSupported
-              ? t('settings.available')
-              : t('settings.unsupported'),
-        })}</span>
-        <span style={valueStyle}>
-          {capabilities === null || capabilities === undefined
-            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
-            : capabilities.transcriptionSupported
-              ? t('settings.supported')
-              : `${t('settings.unsupported')}${capabilities.reason === null ? '' : ` (${capabilities.reason})`}`}
-        </span>
-        <span style={labelStyle}>
-          {capabilities === null || capabilities === undefined
-            ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
-            : t('settings.languages', { values: capabilities.languages.values.length === 0 ? '—' : capabilities.languages.values.join(', ') })}
-        </span>
-      </div>
-      <div style={rowStyle}>
-        <span style={labelStyle}>
-          {checked === undefined || checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid'
-            // A check that never reached the service must not be reported as a failed
-            // connection to a healthy one.
-            ? t('settings.lastCheck', { time: lastCheckTime })
-            : checked.reachable
-              ? `${t('settings.connected')} · ${t('settings.authentication', {
-                state: authentication === 'accepted'
-                  ? t('settings.authOk')
-                  : authentication === 'refused'
-                    ? t('settings.authFailed')
-                    // With no credential on the wire nothing judged one, so "unverified" is the
-                    // honest verdict; naming the reason keeps it from reading as a failure.
-                    : view?.credentialRef === '' ? t('settings.authNone') : t('settings.authUnverified'),
-              })}`
-              : t('settings.unreachable')}
-        </span>
-        {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(t, checked.failure)}</span>}
-        {refusedWithoutModel && <span style={valueStyle}>{t('settings.modelHint')}</span>}
-      </div>
+
+      <section aria-label={t('settings.sectionService')} style={sectionStyle}>
+        <span aria-hidden="true" style={sectionTitleStyle}>{t('settings.sectionService')}</span>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.gate')}</span>
+          <span style={valueStyle}>
+            {view !== undefined && view.gate === 'unknown'
+              // The host remembers the failure that left this attempt unproven, so the page can name
+              // the cause even after a reload cleared everything this component knew about it.
+              ? (view.unprovenFailure === null ? t('gateUnknown') : `${t('gateUnknown')} ${failureText(t, view.unprovenFailure)}`)
+              : view?.gate === 'busy' ? t('gateBusy') : t('gateReady')}
+          </span>
+          {view?.pendingOperationId !== null && view?.pendingOperationId !== undefined && (
+            <span style={valueStyle}>{t('settings.pendingOperation', { id: view.pendingOperationId })}</span>
+          )}
+          {view?.gate === 'unknown' && (
+            <RowButton
+              label={t('acknowledge')}
+              title={t('acknowledge')}
+              disabled={busy}
+              onClick={() => { void acknowledgeUnknown() }}
+              style={{ ...buttonStyle, alignSelf: 'flex-start' }}
+            >{t('acknowledge')}</RowButton>
+          )}
+        </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.limits')}</span>
+          {limits !== undefined && (
+            <span style={valueStyle}>
+              {t('settings.limitUpload', { mb: Math.round(limits.maxUploadBytes / 1024 / 1024) })}
+              {' · '}
+              {t('settings.limitDuration', { seconds: limits.maxAudioSeconds })}
+              {capabilities === null || capabilities === undefined
+                ? ` ${t('settings.limitsDefault')}`
+                : ''}
+            </span>
+          )}
+        </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>{t('settings.transcriptionStatus', {
+            state: capabilities === null || capabilities === undefined
+              ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
+              : capabilities.transcriptionSupported
+                ? t('settings.available')
+                : t('settings.unsupported'),
+          })}</span>
+          <span style={valueStyle}>
+            {capabilities === null || capabilities === undefined
+              ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
+              : capabilities.transcriptionSupported
+                ? t('settings.supported')
+                : `${t('settings.unsupported')}${capabilities.reason === null ? '' : ` (${capabilities.reason})`}`}
+          </span>
+          <span style={labelStyle}>
+            {capabilities === null || capabilities === undefined
+              ? t(checkedYet ? 'settings.undetermined' : 'settings.never')
+              : t('settings.languages', { values: capabilities.languages.values.length === 0 ? '—' : capabilities.languages.values.join(', ') })}
+          </span>
+        </div>
+        <div style={rowStyle}>
+          <span style={valueStyle}>
+            {checked === undefined || checked.failure?.code === 'not-configured' || checked.failure?.code === 'endpoint-invalid'
+              // A check that never reached the service must not be reported as a failed
+              // connection to a healthy one.
+              ? t('settings.lastCheck', { time: lastCheckTime })
+              : checked.reachable
+                ? `${t('settings.connected')} · ${t('settings.authentication', {
+                  state: authentication === 'accepted'
+                    ? t('settings.authOk')
+                    : authentication === 'refused'
+                      ? t('settings.authFailed')
+                      // With no credential on the wire nothing judged one, so "unverified" is the
+                      // honest verdict; naming the reason keeps it from reading as a failure.
+                      : view?.credentialRef === '' ? t('settings.authNone') : t('settings.authUnverified'),
+                })}`
+                : t('settings.unreachable')}
+          </span>
+          {checked?.failure !== null && checked?.failure !== undefined && (
+            <span style={{ ...valueStyle, color: 'var(--dsw-alias-state-error-primary, #d3574a)' }}>{failureText(t, checked.failure)}</span>
+          )}
+          {refusedWithoutModel && (
+            <span style={{ ...valueStyle, color: 'var(--dsw-alias-state-warn-primary, #a06a00)' }}>{t('settings.modelHint')}</span>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

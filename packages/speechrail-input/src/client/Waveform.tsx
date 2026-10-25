@@ -10,7 +10,7 @@ const BARS = 24
  * @param props - recording owner, accessible label, and the strip's shape.
  * @returns the bar strip.
  */
-export function Waveform({ recording, label, bars = BARS, height = 16, color = 'var(--dsw-alias-content-secondary, #8a8a8e)' }: {
+export function Waveform({ recording, label, bars = BARS, height = 16, color = 'var(--dsw-alias-label-secondary, #8a8a8e)' }: {
   readonly recording: Recording | undefined
   readonly label: string
   /** How many bars to draw; the newest samples are kept. */
