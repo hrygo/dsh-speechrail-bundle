@@ -514,4 +514,38 @@ describe('SpeechRailSettings capability label', () => {
     await waitFor(() => { expect(screen.getByText('settings.credentialNone')).toBeTruthy() })
     expect(document.body.textContent).not.toContain('credentialMissing')
   })
+
+  it('shows the model in force, and names an unset one as the service choosing', async () => {
+    render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' })} />)
+    await waitFor(() => { expect(screen.getByText('asr-1.7b-q8')).toBeTruthy() })
+
+    cleanup()
+    render(<SpeechRailSettings {...props({ model: '' })} />)
+    await waitFor(() => { expect(screen.getByText('settings.modelAuto')).toBeTruthy() })
+  })
+
+  it('points at the model field when a refusal happened without one', async () => {
+    // The code alone cannot say why the service refused, so the page states what to check: most
+    // engines require `model`, and none is configured here.
+    const check = vi.fn(async () => ({
+      reachable: true, authenticated: 'unverified' as const, capabilities: null,
+      failure: failure('bad-request', { httpStatus: 422 }), checkedAt: '2026-10-23T12:00:00.000Z',
+    }))
+    render(<SpeechRailSettings {...props({ model: '' }, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    expect(await screen.findByText('settings.modelHint')).toBeTruthy()
+  })
+
+  it('does not blame the model when one was configured', async () => {
+    const check = vi.fn(async () => ({
+      reachable: true, authenticated: 'unverified' as const, capabilities: null,
+      failure: failure('bad-request', { httpStatus: 422 }), checkedAt: '2026-10-23T12:00:00.000Z',
+    }))
+    render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' }, { check: check as never })} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'settings.check' }))
+    await waitFor(() => { expect(screen.getByText(/failure\.bad-request/)).toBeTruthy() })
+    expect(screen.queryByText('settings.modelHint')).toBeNull()
+  })
 })

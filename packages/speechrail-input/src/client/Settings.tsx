@@ -224,6 +224,10 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   // judged the credential" (no response, a missing endpoint, a server error) and is never
   // shown as a refusal.
   const authentication = checked?.authenticated ?? 'unverified'
+  // Why a service refused an upload cannot be read from the status code alone, so this says what to
+  // check rather than what happened: no `model` is configured, and most engines require the field.
+  const failureCode = checked?.failure?.code
+  const refusedWithoutModel = view?.model === '' && (failureCode === 'bad-request' || failureCode === 'not-found')
 
   return (
     <div style={{ fontSize: 13 }}>
@@ -237,6 +241,11 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
         {view?.endpointProblem !== null && view?.endpointProblem !== undefined && (
           <span style={{ ...valueStyle, color: 'var(--dsw-alias-content-error, #c0392b)' }}>{t('failure.endpoint-invalid')}</span>
         )}
+      </div>
+      <div style={rowStyle}>
+        <span style={labelStyle}>{t('settings.model')}</span>
+        <span style={valueStyle}>{view === undefined || view.model === '' ? t('settings.modelAuto') : view.model}</span>
+        <span style={labelStyle}>{t('settings.modelNote')}</span>
       </div>
       <div style={rowStyle}>
         <span style={labelStyle}>{t('settings.credential')}</span>
@@ -363,6 +372,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
               : t('settings.unreachable')}
         </span>
         {checked?.failure !== null && checked?.failure !== undefined && <span style={valueStyle}>{failureText(checked.failure)}</span>}
+        {refusedWithoutModel && <span style={valueStyle}>{t('settings.modelHint')}</span>}
       </div>
     </div>
   )
