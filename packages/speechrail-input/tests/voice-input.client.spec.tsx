@@ -7,11 +7,12 @@
  * Host accepts only as the user's assertion that nothing is outstanding.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
 import { failure, unknownFailure } from '../src/host/failure.ts'
 import type { Recording } from '../src/client/recording.ts'
+import { createDictationTrigger, type DictationTrigger } from '../src/client/trigger.ts'
 import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailInputStatus } from '../src/types.ts'
 
 afterEach(() => { cleanup() })
@@ -55,6 +56,9 @@ function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request:
     acknowledge,
     transcribe: async () => ({ ok: false, transcript: null, failure: null }),
     createRecording: () => ({ preview: async () => { throw new Error('not used') } }),
+    // A channel with no subscriber, so every existing case keeps the command reportable as
+    // blocked while asserting only the behaviour it is about.
+    dictation: createDictationTrigger(),
   } as unknown as VoiceInputProps
 }
 
@@ -471,5 +475,45 @@ describe('VoiceInput acknowledge', () => {
     await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
     expect(screen.queryByRole('button', { name: 'acknowledge' })).toBeNull()
     expect(acknowledge).not.toHaveBeenCalled()
+  })
+})
+
+describe('VoiceInput dictation trigger', () => {
+  /** One render's props: the shared stubs plus the channel, a capturable recording and a spy. */
+  function view(dictation: DictationTrigger, locked: boolean, transcribe: (request: unknown, signal: AbortSignal) => Promise<unknown>) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([0]),
+      dispose: async () => undefined,
+    }
+    return (
+      <VoiceInput
+        {...props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))}
+        dictation={dictation}
+        locked={locked}
+        transcribe={transcribe as VoiceInputProps['transcribe']}
+        createRecording={() => capture as unknown as Recording}
+      />
+    )
+  }
+
+  it('starts from idle and finishes a live capture, and stops being available once locked', async () => {
+    const dictation = createDictationTrigger()
+    const transcribe = vi.fn(async (_request: unknown, _signal: AbortSignal) => ({ ok: false, transcript: null, failure: null }))
+    const rendered = render(view(dictation, false, transcribe))
+
+    // Nothing is mounted to accept a press until the control subscribes.
+    await waitFor(() => { expect(dictation.available()).toBe(true) })
+
+    act(() => { dictation.toggle() })
+    // `start` opened the capture, so the row now offers the control that ends it.
+    await screen.findByRole('button', { name: 'stop' })
+
+    act(() => { dictation.toggle() })
+    await waitFor(() => { expect(transcribe).toHaveBeenCalledTimes(1) })
+    expect(transcribe.mock.calls[0]?.[0]).toMatchObject({ operationId: expect.any(String) })
+
+    rendered.rerender(view(dictation, true, transcribe))
+    await waitFor(() => { expect(dictation.available()).toBe(false) })
   })
 })

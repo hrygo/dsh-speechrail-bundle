@@ -20,6 +20,7 @@ import type {
 } from '../contracts.ts'
 import { NS } from './locales.ts'
 import { RecordingError, audioBase64, type Recording } from './recording.ts'
+import type { DictationTrigger } from './trigger.ts'
 import { Waveform } from './Waveform.tsx'
 
 /** Host calls injected without exposing a Cordis Context to React. */
@@ -36,6 +37,13 @@ export interface SpeechRailActions {
   transcribe: (request: SpeechRailTranscribeRequest, signal: AbortSignal) => Promise<SpeechRailTranscriptionResult>
   /** Own one microphone acquisition for the plugin lifecycle. */
   createRecording: () => Recording
+  /**
+   * Channel opened by the keyboard command this bundle registers.
+   *
+   * The command is registered outside React, so it cannot hold this component; it asks the channel
+   * whether a control would accept a press, and this component subscribes only while it would.
+   */
+  dictation: DictationTrigger
 }
 
 /** Entry-injected Host operations. */
@@ -97,7 +105,7 @@ const messageStyle: CSSProperties = {
 /** Render a compact microphone or the expanded capture, transcription or retry row. */
 export function VoiceInput({
   inputActions, locked, onActiveChange, t,
-  status, acknowledge, transcribe, createRecording,
+  status, acknowledge, transcribe, createRecording, dictation,
 }: VoiceInputProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [ackBusy, setAckBusy] = useState(false)
@@ -192,6 +200,31 @@ export function VoiceInput({
     // The input facade is stable per Session: a new facade invalidates the captured draft span.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputActions])
+
+  /**
+   * The latest press handler, refreshed after every render.
+   *
+   * The subscription below must not be rebuilt whenever a phase changes, and a press must read the
+   * phase of the render that is on screen rather than the one it was subscribed in.
+   */
+  const pressRef = useRef<() => void>(() => undefined)
+
+  useEffect(() => {
+    pressRef.current = () => {
+      // The same two actions the row's own controls offer: a press starts from idle and finishes a
+      // live capture. Cancelling stays on Escape and on the row's own cancel, so a mis-press can
+      // never discard a take.
+      if (current.current?.phase === 'recording') { void finish(); return }
+      if (current.current === undefined && phase === 'idle') { void start(); return }
+    }
+  })
+
+  useEffect(() => {
+    // A locked composer disables its own control and `start` refuses, so not subscribing is what
+    // makes the command report a blocked press instead of claiming one it would drop.
+    if (locked) return
+    return dictation.subscribe(() => { pressRef.current() })
+  }, [dictation, locked])
 
   const feedback = (text: string): void => { setMessage(text); setPhase('feedback') }
 
