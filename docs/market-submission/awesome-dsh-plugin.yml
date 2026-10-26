@@ -27,11 +27,10 @@
 #     (rsvg-convert -w 256 -h 256), so a follow-up PR can add the field once the accepted URL form is
 #     verified; until then the storefront falls back to the owner avatar.
 #
-# Submitted 2026-10-25 as (one file, 7 lines, CI check passed in 8m21s):
-#   https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9238
-# Still OPEN on 2026-10-26, and stale after the 2.0.0 rename: its file is named ...--packages-
-# speechrail-input.yml, points at that old subdirectory, and names the asset dsh-speechrail-bundle.tgz.
-# Updating it means renaming the file and replacing the body (see pull-request.md).
+# Submitted 2026-10-25 as pull/9238 (one file, 7 lines, CI check passed in 8m21s) and CLOSED
+# 2026-10-26, because the 2.0.0 rename left it pointing at packages/speechrail-input and an asset name
+# that no longer exists. Resubmitted as pull/9545 with the corrected subdirectory path and the
+# optional `icon` field; that PR is the one to watch.
 #
 # The index already lists two other entries named `dsh-voice-input` (owners 0nt-one and NewDaNew,
 # both browser Web Speech API). Keeping the name is a recorded decision - see ADR-0006 - and the

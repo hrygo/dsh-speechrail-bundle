@@ -7,6 +7,8 @@
 - [x] Description states what the plugin does, no superlatives
 - [x] My repo has the `dsh-plugin` topic
 
+**Submitted as [pull/9545](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9545)** (2026-10-26). The earlier pull/9238 was closed: the rename to `dsh-voice-input` made its `url` and asset name stale, and a file rename on a reviewed diff is harder to follow than a fresh entry.
+
 Notes for the reviewer:
 
 - **Not published to npm.** The repository ships prebuilt tarballs on GitHub Releases, so the entry carries a `tarball:` pointing at `releases/latest/download/dsh-voice-input.tgz` — the version-free asset name the guide recommends, so it does not rot as releases are cut.
