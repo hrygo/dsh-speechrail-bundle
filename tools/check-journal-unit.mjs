@@ -20,7 +20,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const built = join(root, 'packages/speechrail-input/lib/types/host/journal.js')
+const built = join(root, 'packages/voice-input/lib/types/host/journal.js')
 
 if (!existsSync(built)) {
   console.error(`check-journal-unit: ${built} is missing; run the host build first`)
@@ -32,7 +32,7 @@ try {
   ({ UNIT_NAME_RE: unitNameRe } = await import('@deepseek-ai/dsh-storage'))
 } catch {
   // The dependency belongs to the workspace package, so resolve it from there.
-  const fromPackage = join(root, 'packages/speechrail-input/node_modules/@deepseek-ai/dsh-storage/lib/index.js')
+  const fromPackage = join(root, 'packages/voice-input/node_modules/@deepseek-ai/dsh-storage/lib/index.js')
   try {
     ({ UNIT_NAME_RE: unitNameRe } = await import(pathToFileURL(fromPackage).href))
   } catch (error) {

@@ -2,9 +2,9 @@
 #
 # Not part of the published package (`files` does not include docs/). Kept in the repository so the
 # submission is reviewable and reproducible. The file that goes into that repository must be named
-# according to its monorepo rule - this package lives in packages/speechrail-input, so:
+# according to its monorepo rule - this package lives in packages/voice-input, so:
 #
-#   data/plugins/hrygo__dsh-speechrail-bundle--packages-speechrail-input.yml
+#   data/plugins/hrygo__dsh-speechrail-bundle--packages-voice-input.yml
 #
 # Submission, once the repository is at least one day old (CI checks that automatically):
 #
@@ -14,7 +14,7 @@
 #
 # Field choices, per contributing.md:
 #   - `url` points at the subdirectory, because this repository's own package.json declares no
-#     `dsh.bundle`; packages/speechrail-input does.
+#     `dsh.bundle`; packages/voice-input does.
 #   - `tarball` uses `latest/download/` with a version-free asset name, which is the form the guide
 #     recommends because it never rots as releases are cut.
 #   - `description.en` is quoted because it contains a colon followed by a space.
@@ -25,13 +25,13 @@
 #
 # Submitted 2026-10-25 as (one file, 7 lines, CI check passed in 8m21s):
 #   https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9238
-# The fork branch is hrygo/awesome-dsh-plugin:add-speechrail-input. The index regenerates its READMEs
+# The fork branch is hrygo/awesome-dsh-plugin:add-voice-input. The index regenerates its READMEs
 # and site after merge, so nothing else is edited by hand.
 #
-url: https://github.com/hrygo/dsh-speechrail-bundle/tree/main/packages/speechrail-input
-name: hrygo/dsh-speechrail-bundle#speechrail-input
+url: https://github.com/hrygo/dsh-speechrail-bundle/tree/main/packages/voice-input
+name: hrygo/dsh-speechrail-bundle#voice-input
 category: voice
-tarball: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
+tarball: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-voice-input.tgz
 description:
   en: "Local voice input for the DeepSeek Harness composer: record in the browser, transcribe through your own loopback SpeechRail service or any other OpenAI-compatible engine, and insert the text into the draft. It reads the service capability snapshot for upload and duration limits, languages and the credential verdict, keeps a fail-closed gate for an upload whose outcome is unknown, and gives agents a read-only status tool."
   zh: "在 DSH 输入框里直接说话：浏览器录音，交由本机 SpeechRail 服务（或回环上的任意 OpenAI 兼容引擎）转写并插入草稿。读取服务能力快照（上传与时长限额、语言、鉴权判定），对结局未知的上传保持未确认门禁，并给 Agent 一个只读状态工具。只连回环地址，不激活配置、不写凭据、不做真实录音。"

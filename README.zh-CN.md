@@ -4,7 +4,7 @@
 经**本机**服务按 OpenAI-compatible 文件转写协议转写——SpeechRail 参考实现，或其他同形状的本机引擎。
 无需启用官方语音 bundle，且只连接回环地址。
 
-[English](README.md) · [包说明](packages/speechrail-input/README.md) · [设计与审查记录](docs/superpowers/specs/2026-10-23-speechrail-input-design.md)
+[English](README.md) · [包说明](packages/voice-input/README.md) · [设计与审查记录](docs/superpowers/specs/2026-10-23-voice-input-design.md)
 
 **状态：实现已完成并通过验证，且已在本机 `desktop` profile 中运行。** 每个版本都由 `pnpm verify`
 （基线校验 → Typert 生成 → 双面类型检查 → 构建 → 测试）产出，并通过插件管理器从该版本自己的 GitHub
@@ -16,7 +16,7 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 |---|---|
 | Host | 严格 Typert Remote 面上的 SpeechRail 服务：仅回环上传、凭据**按引用**解析、单在途 gate、非敏感未结案 journal、稳定错误码。 |
 | Client | 输入框麦克风按钮：独占模型选择器**右侧**一格，点击后**原位**变为实时波形（不重排工具栏）；一次录音的其余信息交给模型选择器**左侧**的控件组——计时、正在做的事、取消、消息，以及被草稿拒绝的转写。从不发送：文本插入草稿。含设置页；一个可改键的快捷键，用于开始／结束一次转写；中英文本地化；门禁被阻塞时两处都能确认清除。 |
-| Agent | 一个只读工具 `speechrail_input_status`，模型无需打开设置页即可解释语音输入为何不可用：端点、凭据三态结论、服务是否声明能转写、**实际会发送**的语言提示、生效限额与门禁；门禁关闭时还会说出**那次未被确认的失败**。 |
+| Agent | 一个只读工具 `voice_input_status`，模型无需打开设置页即可解释语音输入为何不可用：端点、凭据三态结论、服务是否声明能转写、**实际会发送**的语言提示、生效限额与门禁；门禁关闭时还会说出**那次未被确认的失败**。 |
 
 ## 两种引擎档位，一套契约
 
@@ -58,23 +58,23 @@ Release 资产安装，安装后再与仓库构建逐字节比对。
 不要手工替代）：
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-voice-input.tgz
 ```
 
-用本地 checkout 也可以（`target: <packages/speechrail-input 的路径>`）；本机 profile 已在运行本 bundle 的最新 Release。
+用本地 checkout 也可以（`target: <packages/voice-input 的路径>`）；本机 profile 已在运行本 bundle 的最新 Release。
 
 升级时请安装带标签的资产，而不是 `latest`：插件管理器按 target 字符串去重，对已安装的 bundle 重跑上面的
 命令只会报 `already-installed`，不会拉取新的字节。
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v1.0.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
 ```
 
 随后把条目指向你的引擎。服务地址与凭据引用属于条目配置，通过给 profile 的 `cordis.patch.yml` 打补丁来改；模型名则在插件的设置页里改，和语言、请求预算一起：
 
 ```yaml
-- id: speechrail-input
-  name: '@hrygo/dsh-speechrail-bundle'
+- id: voice-input
+  name: 'dsh-voice-input'
   config:
     baseUrl: http://127.0.0.1:8201/v1   # 仅回环；路径必须为 /v1
     credentialRef: ''                   # 留空：该引擎不做鉴权
@@ -126,7 +126,7 @@ pnpm test       # host 与 client 单元测试（全部 mock 或合成音频）
 
 ## 仓库结构
 
-- [packages/speechrail-input](packages/speechrail-input/)：发布包 `@hrygo/dsh-speechrail-bundle`（Host、Client、协议源码、patch、语言资源与图标）。
+- [packages/voice-input](packages/voice-input/)：发布包 `dsh-voice-input`（Host、Client、协议源码、patch、语言资源与图标）。
 - [packages/typert-protocol](packages/typert-protocol/)：私有类型垫片，让 Typert 生成器看到本包的 Remote 声明；永不发布、运行时从不 import。
 - [upstream](upstream/)：冻结的官方只读基线（5 个语音包，MIT）与逐文件来源清单；是来源证据，不是运行入口。
 - [tools](tools/)：基线完整性与工具 schema 校验脚本。

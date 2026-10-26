@@ -1,5 +1,5 @@
 {
-  "name": "dsh-speechrail-bundle-workspace",
+  "name": "dsh-voice-input-workspace",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.12.4",
@@ -8,8 +8,8 @@
   },
   "scripts": {
     "gen:typert": "node scripts/generate-typert.mjs --skip-diagnostics",
-    "build:host": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:host",
-    "build:client": "pnpm --filter @hrygo/dsh-speechrail-bundle run build:client",
+    "build:host": "pnpm --filter dsh-voice-input run build:host",
+    "build:client": "pnpm --filter dsh-voice-input run build:client",
     "build": "pnpm gen:typert && pnpm typecheck && pnpm build:host && pnpm build:client",
     "test": "pnpm gen:typert && vitest run",
     "test:host": "pnpm gen:typert && vitest run --project host",

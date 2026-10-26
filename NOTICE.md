@@ -15,7 +15,7 @@ No model weights, recorded audio, third-party installed runtime, production cred
 
 ## Adapted implementation
 
-`packages/speechrail-input/src/client/recording.ts` adapts the microphone capture lifecycle of
+`packages/voice-input/src/client/recording.ts` adapts the microphone capture lifecycle of
 `upstream/deepseek-harness/packages/experimental/client-ui-voice-input/src/client/audio.ts`
 (MIT, same ref and commit as above): a permission grant that settles after cancellation releases
 its tracks, device interruption tears the capture down before the caller is notified,

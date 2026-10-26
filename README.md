@@ -6,7 +6,7 @@ OpenAI-compatible file-transcription API: the SpeechRail reference implementatio
 loopback engine with the same shape. It does not require the official voice bundle to be enabled,
 and it never talks to a remote endpoint: loopback only.
 
-[中文说明](README.zh-CN.md) · [Package README](packages/speechrail-input/README.md) · [Design and review record](docs/superpowers/specs/2026-10-23-speechrail-input-design.md)
+[中文说明](README.zh-CN.md) · [Package README](packages/voice-input/README.md) · [Design and review record](docs/superpowers/specs/2026-10-23-voice-input-design.md)
 
 **Status: implemented, verified, and running in this machine's `desktop` profile.** Every release
 is built by `pnpm verify` (baseline check → Typert generation → both type checks → bundles → tests)
@@ -19,7 +19,7 @@ files are byte-compared against the repository build.
 |---|---|
 | Host | A SpeechRail service over a Strict Typert Remote surface: loopback-only uploads, credential **by reference**, a single in-flight gate, a non-sensitive pending journal, and stable failure codes. |
 | Client | A composer microphone button in its own seat to the right of the model selector, which turns into the live waveform where it stands (no toolbar rearrangement) and hands the rest of the take to the toolbar group on the model selector's left: running-time counter, the work in progress, cancel, the message and the transcript the draft refused. Never submits: the text is inserted into the draft. A settings page; one rebindable keyboard command for starting and finishing a dictation; zh/en localisation; a blocked gate can be cleared from either. |
-| Agent | One read-only tool, `speechrail_input_status`, so a model can explain *why* voice input is unusable without opening settings: the endpoint, the credential's three-state verdict, whether the endpoint states it can transcribe, the language hint that will actually travel, the limits in force, the gate, and — when the gate is closed — the failure that left the attempt unconfirmed. |
+| Agent | One read-only tool, `voice_input_status`, so a model can explain *why* voice input is unusable without opening settings: the endpoint, the credential's three-state verdict, whether the endpoint states it can transcribe, the language hint that will actually travel, the limits in force, the gate, and — when the gate is closed — the failure that left the attempt unconfirmed. |
 
 ## Two engine profiles, one contract
 
@@ -77,10 +77,10 @@ the Harness plugin manager, which performs package installation and bundle selec
 reproduce those steps by hand):
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-voice-input.tgz
 ```
 
-A checkout worktree works the same way (`target: <path to packages/speechrail-input>`), and the
+A checkout worktree works the same way (`target: <path to packages/voice-input>`), and the
 local profile here runs this bundle at the latest release.
 
 To upgrade, install the tag-pinned asset rather than the `latest` one: the plugin manager keys a
@@ -88,7 +88,7 @@ dependency by its target string, so re-running the command above on an installed
 `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v1.0.0/dsh-speechrail-bundle.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
 ```
 
 Then point the entry at your engine. The endpoint and the credential reference are entry config, so they
@@ -96,8 +96,8 @@ are changed by patching the entry in the profile's `cordis.patch.yml`; the model
 bundle's settings page, together with the language and the request budget:
 
 ```yaml
-- id: speechrail-input
-  name: '@hrygo/dsh-speechrail-bundle'
+- id: voice-input
+  name: 'dsh-voice-input'
   config:
     baseUrl: http://127.0.0.1:8201/v1   # loopback only; the path must be /v1
     credentialRef: ''                   # empty: this engine authenticates nobody
@@ -174,8 +174,8 @@ needs.
 
 ## Repository layout
 
-- [packages/speechrail-input](packages/speechrail-input/) — the published bundle
-  (`@hrygo/dsh-speechrail-bundle`): Host, client and protocol sources, its patch, locales and icon.
+- [packages/voice-input](packages/voice-input/) — the published bundle
+  (`dsh-voice-input`): Host, client and protocol sources, its patch, locales and icon.
 - [packages/typert-protocol](packages/typert-protocol/) — a private type shim that lets the Typert
   generator see this bundle's Remote declarations. Never published, never a runtime import.
 - [upstream](upstream/) — the frozen, read-only official baseline (5 voice packages, MIT) plus a

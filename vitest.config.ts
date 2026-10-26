@@ -7,14 +7,14 @@ export default defineConfig({
         test: {
           name: 'host',
           environment: 'node',
-          include: ['packages/speechrail-input/tests/**/*.host.spec.ts'],
+          include: ['packages/voice-input/tests/**/*.host.spec.ts'],
         },
       },
       {
         test: {
           name: 'client',
           environment: 'jsdom',
-          include: ['packages/speechrail-input/tests/**/*.client.spec.ts', 'packages/speechrail-input/tests/**/*.client.spec.tsx'],
+          include: ['packages/voice-input/tests/**/*.client.spec.ts', 'packages/voice-input/tests/**/*.client.spec.tsx'],
         },
       },
     ],

@@ -22,8 +22,8 @@ const packagesDir = join(root, 'packages')
 
 // Without a build every entry point looks missing, which would report the whole manifest as broken
 // instead of saying what is actually wrong.
-if (!existsSync(join(root, 'packages/speechrail-input/lib/index.js'))) {
-  console.error('check-package-contents: packages/speechrail-input/lib is missing; run the build first')
+if (!existsSync(join(root, 'packages/voice-input/lib/index.js'))) {
+  console.error('check-package-contents: packages/voice-input/lib is missing; run the build first')
   process.exit(2)
 }
 

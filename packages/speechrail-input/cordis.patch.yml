@@ -1,4 +1,0 @@
-# SpeechRail voice input: one entry owning the Host service, its Remote surface and the browser face.
-- insert:
-    - id: speechrail-input
-      name: '@hrygo/dsh-speechrail-bundle'

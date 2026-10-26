@@ -2,14 +2,14 @@
 
 - 日期：2026-10-25
 - 状态：Accepted（用户当日明确决策："决策，放弃"）
-- 关联：[ADR-0001](0001-independent-speechrail-input.md)、[设计文档](../superpowers/specs/2026-10-23-speechrail-input-design.md) §2 反目标、[插件演进路线分析](../roadmap/2026-10-25-plugin-evolution.md)（放弃之后还剩什么、按什么顺序做）。
+- 关联：[ADR-0001](0001-independent-voice-input.md)、[设计文档](../superpowers/specs/2026-10-23-voice-input-design.md) §2 反目标、[插件演进路线分析](../roadmap/2026-10-25-plugin-evolution.md)（放弃之后还剩什么、按什么顺序做）。
 - 证据来源：本次会话的行业调研（VAD 与端点检测、常驻听写产品交互、浏览器常开采集平台约束、常开麦克风安全与无障碍惯例），核实日期 2026-10-25。调研结论未单独落盘；本 ADR 引用其中决定性的来源。
 
 ## 背景
 
 用户提出一个新模式：开启后麦克风常驻，按 VAD 的停顿切段，每段的转写结果**追加**进输入框草稿（不逐段发送），用户单独说一句口令 `over` 时才把整条消息发给 agent；使用场景是"人在电脑前，手不在鼠标键盘上"。
 
-该提议与[设计文档](../superpowers/specs/2026-10-23-speechrail-input-design.md) §2 的反目标（"不支持…常开麦克风或自动发送"、"结果进入原会话草稿，不自动提交给 Agent"）直接冲突，因此需要一次显式决策，而不是让它悄悄发生。
+该提议与[设计文档](../superpowers/specs/2026-10-23-voice-input-design.md) §2 的反目标（"不支持…常开麦克风或自动发送"、"结果进入原会话草稿，不自动提交给 Agent"）直接冲突，因此需要一次显式决策，而不是让它悄悄发生。
 
 调研后用户决定放弃。
 

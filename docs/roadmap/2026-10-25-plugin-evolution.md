@@ -9,7 +9,7 @@
 
 | 事实 | 证据 |
 |---|---|
-| 插件已安装并启用（0.11.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `@hrygo/dsh-speechrail-bundle`；依赖 URL 指向 v0.11.0 tag 资产，安装目录内 `package.json` 版本为 0.11.0（2026-10-25 由 plugin_manager 三次升级：0.8.1 → 0.9.0 → 0.10.0 → 0.11.0） |
+| 插件已安装并启用（0.11.0） | [实测] `~/.dsh/profiles/desktop/package.json` 依赖与 `dsh.profile.bundles` 均含 `dsh-voice-input`；依赖 URL 指向 v0.11.0 tag 资产，安装目录内 `package.json` 版本为 0.11.0（2026-10-25 由 plugin_manager 三次升级：0.8.1 → 0.9.0 → 0.10.0 → 0.11.0） |
 | 本机 SpeechRail 活着且要求鉴权 | [实测] `127.0.0.1:8201` LISTEN（python）；零推理探测（不带凭据 GET capabilities）返回 `401` + 完整错误信封 `invalid_api_key` |
 | 凭据引用存在 | [实测] `~/.dsh/.credentials.yaml` 的 `refs` 含 `SPEECHRAIL_API_KEY`（只读名字，未读值） |
 | 门禁干净 | [实测] `~/.dsh/storages/speechrail_input_pending.json` 为空 |
@@ -75,7 +75,7 @@
 
 ### E. 基座化（对外契约 + agent 工具）
 
-**问题。** Host 服务 `ctx.speechrailInput` 已存在但无对外契约文档；agent 只有一个只读的 `speechrail_input_status`。
+**问题。** Host 服务 `ctx.speechrailInput` 已存在但无对外契约文档；agent 只有一个只读的 `voice_input_status`。
 
 **价值。** 高杠杆，但**需求未证**：目前没有任何第二个插件或第二个场景要用它。
 
@@ -107,7 +107,7 @@
 
 用户采纳方案后按计划实施完毕，`pnpm verify` 退出码 0（18 个测试文件 / 256 个用例，含基线校验、构建与打包清单检查）。
 
-**已验证 [实测]**：命令的 id、默认键、两个 resolve 分支与"注册被拒时降级为无快捷键"都有单测；组件在 `locked` 时不订阅、因此命令报告 `blocked`；构建后的 `lib/client.js` 里能查到 `speechrail-input.dictate`，且客户端运行时的 `require` 仍然只有 `react`、`react/jsx-runtime`、`zod`——**没有新增运行时依赖**。
+**已验证 [实测]**：命令的 id、默认键、两个 resolve 分支与"注册被拒时降级为无快捷键"都有单测；组件在 `locked` 时不订阅、因此命令报告 `blocked`；构建后的 `lib/client.js` 里能查到 `voice-input.dictate`，且客户端运行时的 `require` 仍然只有 `react`、`react/jsx-runtime`、`zod`——**没有新增运行时依赖**。
 
 **未验证（不足以声称可用）**：
 
@@ -132,7 +132,7 @@
 
 **该写法的证据（文档级，非实测）**：profile 的 `cordis.patch.yml` 里，`- id: ui-settings-general` + `config:` 这类只有 id 与 config 的行，覆盖的是 `@deepseek-ai/dsh-web-app` bundle 插入的行——即"用 profile patch 给已安装 bundle 的条目写配置"在本机配置里已有既成先例，不依赖额外机制。
 
-**2026-10-25 发布**：0.9.0 已发布（GitHub Release，资产 `dsh-speechrail-bundle.tgz`，39 个文件；下载回的字节与本地打包逐字节一致，sha256 `f1f1dde6…`），并经 `plugin_manager install_bundle` 用 tag 固定 URL 从 0.8.1 升到 0.9.0（pnpm 报告 `0.8.1 → 0.9.0`）。安装目录内可查到本轮的新产物：host bundle 含 `credentialRequired` 与 `length > 200`，client bundle 含新的 404/422/模型提示文案。**尚未发生的是"人在机器前真用一次"**：进程需要重启才会加载新 host 代码，页面需要刷新才换新 client bundle，因此热键是否真的出现在快捷键设置里、默认键是否冲突，仍要等这次真实使用（阶段 0）才能下结论。
+**2026-10-25 发布**：0.9.0 已发布（GitHub Release，资产 `dsh-voice-input.tgz`，39 个文件；下载回的字节与本地打包逐字节一致，sha256 `f1f1dde6…`），并经 `plugin_manager install_bundle` 用 tag 固定 URL 从 0.8.1 升到 0.9.0（pnpm 报告 `0.8.1 → 0.9.0`）。安装目录内可查到本轮的新产物：host bundle 含 `credentialRequired` 与 `length > 200`，client bundle 含新的 404/422/模型提示文案。**尚未发生的是"人在机器前真用一次"**：进程需要重启才会加载新 host 代码，页面需要刷新才换新 client bundle，因此热键是否真的出现在快捷键设置里、默认键是否冲突，仍要等这次真实使用（阶段 0）才能下结论。
 
 **2026-10-25 续（用户"你先做深做实"后完成的两件）**：
 
@@ -162,7 +162,7 @@
 
 **2026-10-25 发布之二**：0.10.0 已发布并同样经 tag 固定 URL 安装（`0.9.0 → 0.10.0`，资产 39 个文件 / 86,710 字节，下载字节 sha256 `be1272a3…` 与本地一致）。它改的是**控件行为**：点击麦克风后原位变色波（不再要求 composer 展开，因而不再隐藏配件控件、不再把工具栏整体左移），取消键移到控件之后，停止方块并入波形按钮；转写结果自动插入草稿且从不提交（新增 5 个测试钉住，其中一并覆盖「草稿拒绝插入时结果仍可插入」）。用户对 0.9.0 的观察正是「点击后声波跑到左侧」，这与该槽位的文档行为一致（`InputActivityOwnerProps.onActiveChange`：活动展开时 composer 隐藏普通配件控件）。是否已修好只能由用户重启并刷新页面后确认。
 
-**2026-10-25 发布之三**：0.11.0 把麦克风席位从 `conversation.input.activity` 移到 `conversation.input.right`（`id: speechrail-input`，`order: 20`），渲染在模型选择器所在控件组内、模型选择器左侧。live Slots 目录实测：`input.right` 是 list 席位、`replaceRisk: none`，已装条目只有官方 `image-provider`（`order: 10`），故 20 落在它与模型之间；而 activity 是 single 席位且展开时 composer 会隐藏普通配件控件（`standardControls` 的 `hidden={activity}`），正是「点击后声波跑到左侧」的机制。副作用两条，均已写进设计文档 §4 的 2026-10-25 修订：① 与占用 activity 的官方 bundle 不再争同一格，但两个麦克风可以同屏；官方 bundle 录制时 `standardControls` 整组隐藏，本包控件随之消失（本包自己从不报告展开）。② 该席位不提供 `locked`，故按钮不再因「composer 拒绝交互」而变灰、快捷键也不再因此报 blocked；权威判定仍是插入时刻的 `insertText` 返回 false（草稿 revision 变了或编辑器被锁），结果保留为可插入，已有测试覆盖。`mount.client.spec.ts`（3 个用例）钉住席位、cell id、order 与「不碰其他席位」。
+**2026-10-25 发布之三**：0.11.0 把麦克风席位从 `conversation.input.activity` 移到 `conversation.input.right`（`id: voice-input`，`order: 20`），渲染在模型选择器所在控件组内、模型选择器左侧。live Slots 目录实测：`input.right` 是 list 席位、`replaceRisk: none`，已装条目只有官方 `image-provider`（`order: 10`），故 20 落在它与模型之间；而 activity 是 single 席位且展开时 composer 会隐藏普通配件控件（`standardControls` 的 `hidden={activity}`），正是「点击后声波跑到左侧」的机制。副作用两条，均已写进设计文档 §4 的 2026-10-25 修订：① 与占用 activity 的官方 bundle 不再争同一格，但两个麦克风可以同屏；官方 bundle 录制时 `standardControls` 整组隐藏，本包控件随之消失（本包自己从不报告展开）。② 该席位不提供 `locked`，故按钮不再因「composer 拒绝交互」而变灰、快捷键也不再因此报 blocked；权威判定仍是插入时刻的 `insertText` 返回 false（草稿 revision 变了或编辑器被锁），结果保留为可插入，已有测试覆盖。`mount.client.spec.ts`（3 个用例）钉住席位、cell id、order 与「不碰其他席位」。
 
 **2026-10-26 发布之四**：0.12.0 是一次纯表现层改动（"提升 ux ui"），行为逻辑未动，测试从 292 增至 301（新增 9 个用例）。composer 控件：录音时显示 `m:ss` 计时（`role="timer"`，服务端有单次时长上限而此前屏幕上看不到已录多久）；等待阶段（检查/取麦/转写）用旋转指示器取代原来的半透明静态麦克风，且控件的可访问名随阶段变为正在做的事（此前等待期仍叫"开始录音"但已禁用）；消息按语义着色（进度=二级文字，警示=`state-warn`，拒绝=`state-error`，确认=`state-success`），此前进度与失败共用同一个灰。设置页：三组具名区域（连接 / 转写 / 服务状态）取代十一行平铺；`model` 与预算输入框补上 `<label htmlFor>`（此前只有 placeholder，读屏软件看到的是无名文本框），语言行成为 `role="radiogroup"`；输入框显式声明背景与文字色（此前依赖浏览器默认，深色主题下是白底黑字）；提示行按成功/警示/失败着色（"已保存"与"保存被拒"此前同为灰色小字）。两类控件统一到新的 `RowButton`（悬停面 + 焦点环 + 禁用变暗），此前只有原生 `title`。
 
@@ -172,9 +172,9 @@
 
 **2026-10-26 发布之五（1.0.0）**：用户同一步要求「精修微调，提升 UI/UX，整理项目文档，发布 v1.0.0」，随后追加「发布前，精修 icon，主要考虑亮色与暗亮主体，按钮的对比度」。因此 1.0.0 不是一个纯语义版本号：它同时交付了布局拆分、对比度与图标修正，以及把 1.x 的冻结面写成文字。
 
-- **布局拆分**（用户 2026-10-26 明确要求：「语音输入按钮本体还是改为模型的右侧，但按动之后出现的 ui，保持在模型左侧」，并在二选一中选定「波形留在右侧按钮上（点它停止）」）：按钮回到 activity 席位（模型右侧），计时/阶段/取消/消息/插入/确认留在 `conversation.input.right`（cell id `speechrail-input-panel`，模型左侧）。两个席位的状态无法放在组件里，控制器提升到插件生命周期（`src/client/control.ts`，`ctx.effect` 负责 dispose）；两个席位各自绑定本席位的 `inputActions`，最后绑定的那份生效，插入权威判定仍是 `insertText` 返回 false。`mount.client.spec.ts` 改为断言「activity 席位无 cell id」+「面板 id/order 20」，并仍断言不碰其他席位。新增 `voice-split.client.spec.tsx`（4 例）：两棵树共享一次录音、从报告席停止、阶段名只在报告席而不在按钮上、从报告席插入且从不提交——这是合并视图（`<VoiceInput>`）看不到的交接面。
+- **布局拆分**（用户 2026-10-26 明确要求：「语音输入按钮本体还是改为模型的右侧，但按动之后出现的 ui，保持在模型左侧」，并在二选一中选定「波形留在右侧按钮上（点它停止）」）：按钮回到 activity 席位（模型右侧），计时/阶段/取消/消息/插入/确认留在 `conversation.input.right`（cell id `voice-input-panel`，模型左侧）。两个席位的状态无法放在组件里，控制器提升到插件生命周期（`src/client/control.ts`，`ctx.effect` 负责 dispose）；两个席位各自绑定本席位的 `inputActions`，最后绑定的那份生效，插入权威判定仍是 `insertText` 返回 false。`mount.client.spec.ts` 改为断言「activity 席位无 cell id」+「面板 id/order 20」，并仍断言不碰其他席位。新增 `voice-split.client.spec.tsx`（4 例）：两棵树共享一次录音、从报告席停止、阶段名只在报告席而不在按钮上、从报告席插入且从不提交——这是合并视图（`<VoiceInput>`）看不到的交接面。
 - **对比度与图标**：这三个 token 名的问题（见发布之四）之外，用户点出的两点都有实测依据。图标原先用 `currentColor` 描边——被当作图片加载时（市场条目的形态）`currentColor` 没有可继承值，会被画成近黑，深色卡片上不可见；现改为自带底板（`#1b6e9e`）与字形（`#f3f9fd`），`tests/icon.host.spec.ts` 计算 WCAG 对比：字形/底板 5.57:1、底板/白底 5.57:1、底板/近黑底 3.40:1，并禁止出现 `currentColor` 与 `prefers-color-scheme`（应用的主题开关不一定跟随系统，媒体查询会答错问题）。观感用 `rsvg-convert` 在 24/32/96/256px、白底与近黑底上渲染核验过。按钮对比度：圆按钮与操作胶囊从 `border-l1`（分隔线轻重）改为 `border-l2`；等待阶段那个「本身就是进度报告」的字形不再降到 55% 透明度（`RowButton` 新增 `busy`）。两条都有 jsdom 用例钉住，但**是否好看的观感**仍只能由用户刷新页面判断。
 - **文档整理**：`docs/README.md` 按「我想知道什么」索引十一份文档并标注权威归属；`CHANGELOG.md` 从 0.3.0 汇总到 1.0.0（细节仍留在各 release 页）；设计文档 §4 记录本次拆分及其固有限制；§5 授权边界改正为「发布与安装已获授权（2026-10-25），上架提交仍独立」；市场条目说明为何 `icon` 字段仍留空，并附 256px 位图。
 - **1.x 冻结面**写进包 README「Stability in 1.x」：席位与 cell key、设置字段名、快捷键命令 id、agent 工具名、插入不提交语义、每个 take 一次 OpenAI 形状请求且无重试无云回退、只用已声明 token。**不冻结**：视觉表现；DSH 版本（声明 `>= 0.2.1-rc.2`，0.8.0 验证过 0.2.1-rc.3）。
-- **发布**：`pnpm verify` 退出 0（23 个测试文件 / 319 个用例）；tag 固定 URL 安装到 `/Users/hrygo/.dsh/profiles/desktop`，`package.json` 与 `pnpm-lock.yaml` 均指 `v1.0.0`；资产 45 个条目 / 96,934 字节，下载字节 sha256 `d8685913fe554d6177cdd12a9d3762fd252337d384b7e57e78be0347349c0d09` 与本地 `npm pack` 一致；装入后的 `lib/client.js` 含 `speechrail-input-panel`、`data-speechrail-half`×2、`border-l2`×3，且 `--dsw-*` 未声明 token 为 0。
+- **发布**：`pnpm verify` 退出 0（23 个测试文件 / 319 个用例）；tag 固定 URL 安装到 `/Users/hrygo/.dsh/profiles/desktop`，`package.json` 与 `pnpm-lock.yaml` 均指 `v1.0.0`；资产 45 个条目 / 96,934 字节，下载字节 sha256 `d8685913fe554d6177cdd12a9d3762fd252337d384b7e57e78be0347349c0d09` 与本地 `npm pack` 一致；装入后的 `lib/client.js` 含 `voice-input-panel`、`data-voice-input-half`×2、`border-l2`×3，且 `--dsw-*` 未声明 token 为 0。
 - **未核实**：真机观感（间距、悬停面颜色、16px 旋转是否顺滑、深色主题下的实际对比）、两个席位在真实 composer 里的排布间距、以及「官方 bundle 展开 activity 时报告半隐藏」这一限制的真实表现。都需要用户刷新页面（或重启 App）后判断。

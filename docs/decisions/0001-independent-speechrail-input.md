@@ -2,7 +2,7 @@
 
 - 日期：2026-10-23
 - 状态：Proposed；待用户批准设计，不代表实施授权。
-- 关联：[设计文档](../superpowers/specs/2026-10-23-speechrail-input-design.md)。
+- 关联：[设计文档](../superpowers/specs/2026-10-23-voice-input-design.md)。
 
 ## 背景
 
@@ -25,7 +25,7 @@
 
 ## 拟决定
 
-采用 C：单一发布包 `@hrygo/dsh-speechrail-bundle`，包含专用 Host 服务 `speechrailInput`、同名 Remote namespace、有限 fork 的 Client 与一个薄管理工具入口。保留官方录音和草稿安全机制，不保留通用识别器注册表、SenseVoice、下载/准备状态机或任意 OpenAI 云提供商选择。
+采用 C：单一发布包 `dsh-voice-input`，包含专用 Host 服务 `speechrailInput`、同名 Remote namespace、有限 fork 的 Client 与一个薄管理工具入口。保留官方录音和草稿安全机制，不保留通用识别器注册表、SenseVoice、下载/准备状态机或任意 OpenAI 云提供商选择。
 
 “基于官方”指可追溯的行为与代码派生，不要求把所有官方语音运行包设为依赖。派生文件必须保留官方版权与上游路径记录。
 

@@ -15,8 +15,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findWorkspaceRoot, WorkspaceTypertGenerator, writeWorkspaceArtifacts } from '@deepseek-ai/dsh-typert-generator'
 
-const PACKAGE_DIR = 'packages/speechrail-input'
-const PACKAGE_NAME = '@hrygo/dsh-speechrail-bundle'
+const PACKAGE_DIR = 'packages/voice-input'
+const PACKAGE_NAME = 'dsh-voice-input'
 const skipDiagnostics = process.argv.includes('--skip-diagnostics')
 
 const root = findWorkspaceRoot(process.cwd())

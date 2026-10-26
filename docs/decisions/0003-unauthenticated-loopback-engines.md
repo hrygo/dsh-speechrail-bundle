@@ -2,7 +2,7 @@
 
 - 状态：已接受（2026-10-25）
 - 决策者：用户（"修复"）；实施：本次会话
-- 关联：[ADR-0001](0001-independent-speechrail-input.md)、[ADR-0002](0002-drop-always-on-dictation.md)、[插件演进路线分析](../roadmap/2026-10-25-plugin-evolution.md) 阶段 2、[设计文档](../superpowers/specs/2026-10-23-speechrail-input-design.md)
+- 关联：[ADR-0001](0001-independent-voice-input.md)、[ADR-0002](0002-drop-always-on-dictation.md)、[插件演进路线分析](../roadmap/2026-10-25-plugin-evolution.md) 阶段 2、[设计文档](../superpowers/specs/2026-10-23-voice-input-design.md)
 
 ## 背景
 

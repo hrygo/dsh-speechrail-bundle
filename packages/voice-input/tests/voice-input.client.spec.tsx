@@ -1,0 +1,911 @@
+/**
+ * Composer control behaviour under jsdom.
+ *
+ * The acknowledge path is the one place where the client must not silently do
+ * nothing: an unproven outcome blocks every further recording, and the stored record
+ * may be unreadable, in which case the client sends an explicit `null` id that the
+ * Host accepts only as the user's assertion that nothing is outstanding.
+ */
+
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { VoiceInput, type VoiceInputProps } from '../src/client/VoiceInput.tsx'
+import { failure, unknownFailure } from '../src/host/failure.ts'
+import type { Recording } from '../src/client/recording.ts'
+import { createDictationTrigger, type DictationTrigger } from '../src/client/trigger.ts'
+import type { SpeechRailAcknowledgeRequest, SpeechRailAcknowledgeResult, SpeechRailInputStatus } from '../src/types.ts'
+
+afterEach(() => { cleanup() })
+
+const STATUS: SpeechRailInputStatus = {
+  baseUrl: 'http://127.0.0.1:8201/v1',
+  endpointProblem: null,
+  model: '',
+  credentialRef: 'SPEECHRAIL_API_KEY',
+  credentialConfigured: true,
+  language: 'auto',
+  languageHint: '' as const,
+  transcriptionSupport: 'unknown' as const,
+  languageOptions: ['auto'],
+  requestTimeoutMs: 150_000,
+  limits: { maxUploadBytes: 4_194_304, maxAudioSeconds: 120 },
+  gate: 'ready',
+  pendingOperationId: null,
+  unprovenFailure: null,
+  capabilities: null,
+  checkedAt: null,
+  revision: 1,
+}
+
+/** Props with the injected face replaced by recording stubs. */
+function props(overrides: Partial<SpeechRailInputStatus>, acknowledge: (request: SpeechRailAcknowledgeRequest) => Promise<SpeechRailAcknowledgeResult>): VoiceInputProps {
+  return {
+    inputActions: {
+      captureInsertion: () => ({ start: 0, end: 0 }),
+      insertText: () => true,
+    },
+    // Interpolating keeps the assertions honest: with `(key) => key` every language renders the
+    // same text, so a positive test could not tell `zh` from `en` or from a wrong variable.
+    t: (key: string, values?: Record<string, string>) =>
+      (values === undefined ? key : `${key}:${JSON.stringify(values)}`),
+    status: async () => ({ ...STATUS, ...overrides }),
+    check: async () => ({ reachable: true, authenticated: 'accepted', capabilities: null, failure: null, checkedAt: '2026-10-23T12:00:00.000Z' }),
+    configure: async () => ({ ok: true, revision: 1, failure: null }),
+    acknowledge,
+    transcribe: async () => ({ ok: false, transcript: null, failure: null }),
+    createRecording: () => ({ preview: async () => { throw new Error('not used') } }),
+    // A channel with no subscriber, so every existing case keeps the command reportable as
+    // blocked while asserting only the behaviour it is about.
+    dictation: createDictationTrigger(),
+  } as unknown as VoiceInputProps
+}
+
+describe('VoiceInput acknowledge', () => {
+  it('sends the recorded operation id and reports the outcome', async () => {
+    const acknowledge = vi.fn(async () => { throw new Error('refused') })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: 'op_aaaaaaaa' }, acknowledge)} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: 'op_aaaaaaaa' }) })
+    expect(await screen.findByText('failure.internal')).toBeTruthy()
+  })
+
+  it('names the cause of a closed gate the host still remembers', async () => {
+    // A page reload forgets this component's own record of the attempt, but the host keeps the failure
+    // that left it unproven, so the row can say what happened instead of only that something is
+    // unconfirmed. Nothing is invented when the host knows nothing.
+    const acknowledge = async () => ({ ok: true, pendingOperationId: null, failure: null })
+    render(
+      <VoiceInput
+        {...props({
+          gate: 'unknown',
+          pendingOperationId: 'op_aaaaaaaa',
+          unprovenFailure: { code: 'server-error', httpStatus: 502, retryable: true, requestId: 'req_1', outcome: 'unknown' },
+        }, acknowledge)}
+      />,
+    )
+    expect(await screen.findByText('gateUnknown failure.server-error (req_1)')).toBeTruthy()
+  })
+
+  it('says only that the gate is closed when the host has no cause to give', async () => {
+    const acknowledge = async () => ({ ok: true, pendingOperationId: null, failure: null })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: 'op_aaaaaaaa' }, acknowledge)} />)
+    expect(await screen.findByText('gateUnknown')).toBeTruthy()
+  })
+
+  it('sends an explicit null when the stored record was unreadable', async () => {
+    // Previously the control returned silently here, leaving the gate closed forever.
+    const acknowledge = vi.fn(async () => { throw new Error('refused') })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: null }, acknowledge)} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenCalledWith({ operationId: null }) })
+  })
+
+  /** Drive the control to the transcribing phase and return the release for the held request. */
+  async function driveToTranscribing(languageHint: string): Promise<() => void> {
+    let releaseTranscribe: (() => void) | undefined
+    const capture = {
+      start: async () => undefined,
+      stop: vi.fn(async () => new Uint8Array([1])),
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={async () => ({ ...STATUS, language: 'zh' as const, languageHint, languageOptions: ['auto', 'zh', 'en'] })}
+        createRecording={() => capture}
+        transcribe={async () => {
+          await new Promise<void>((resolve) => { releaseTranscribe = resolve })
+          return { ok: false, transcript: null, failure: null }
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(releaseTranscribe).toBeDefined() })
+    return () => { releaseTranscribe?.() }
+  }
+
+  it('says what the service answered, not only that it never confirmed', async () => {
+    // A 500 that arrives in full is an unproven outcome: the service answered, and it never said it
+    // finished. Reporting only the second half would hide the first, so the message carries both.
+    const cases = [
+      { failure: unknownFailure('server-error', { httpStatus: 500 }), detail: 'failure.server-error' },
+      { failure: unknownFailure('malformed-response', { httpStatus: 202 }), detail: 'failure.malformed-response' },
+      { failure: unknownFailure('timeout'), detail: 'failure.timeout' },
+    ]
+    for (const shape of cases) {
+      const capture = {
+        start: async () => undefined,
+        stop: async () => new Uint8Array([1]),
+        dispose: async () => undefined,
+      } as unknown as Recording
+      const { unmount } = render(
+        <VoiceInput
+          {...props({ gate: 'ready' }, async () => ({ ok: false, pendingOperationId: null, failure: null }))}
+          createRecording={() => capture}
+          transcribe={async () => ({ ok: false, transcript: null, failure: shape.failure })}
+        />,
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+      await waitFor(() => {
+        expect(screen.getByText(`unknownOutcomeLocal:{"detail":"${shape.detail}"}`)).toBeTruthy()
+      })
+      unmount()
+    }
+  })
+
+  it('reconciles the gate after a cancelled upload instead of returning to idle silently', async () => {
+    // Cancelling while the upload is on the wire cannot un-send it: the host keeps the attempt as
+    // unproven and closes the gate. Returning to idle without saying so would let the user record a
+    // whole new take and only then be refused, so the cancellation waits for the call and reads the
+    // gate it may have left behind. The gate flips only once the upload is in flight, exactly as the
+    // host would report it.
+    let release: (() => void) | undefined
+    let gate: 'ready' | 'unknown' = 'ready'
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const status = vi.fn(async () => ({
+      ...STATUS,
+      gate,
+      pendingOperationId: gate === 'unknown' ? 'op_cccccccc' : null,
+      capabilities: null,
+    }))
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => {
+          gate = 'unknown'
+          await new Promise<void>((resolve) => { release = resolve })
+          return { ok: false, transcript: null, failure: failure('cancelled') }
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(release).toBeDefined() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'cancel' }))
+    release?.()
+    await waitFor(() => {
+      expect(screen.getByText('unknownOutcomeLocal:{"detail":"failure.cancelled"}')).toBeTruthy()
+    })
+  })
+
+  it('says nothing when the cancellation happened before anything was uploaded', async () => {
+    // The true "never reached the wire" case: the take is still being encoded, so no upload exists to
+    // reconcile. Reported as silence, and the upload is never even attempted.
+    let releaseStop: (() => void) | undefined
+    const capture = {
+      start: async () => undefined,
+      stop: async () => {
+        await new Promise<void>((resolve) => { releaseStop = resolve })
+        return new Uint8Array([1])
+      },
+      dispose: async () => undefined,
+    } as unknown as Recording
+    const status = vi.fn(async () => ({ ...STATUS, gate: 'ready' as const, capabilities: null }))
+    const transcribe = vi.fn(async () => ({ ok: false, transcript: null, failure: failure('cancelled') }))
+    const base = props({}, async () => ({ ok: false, pendingOperationId: null, failure: null }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={transcribe}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(releaseStop).toBeDefined() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'cancel' }))
+    releaseStop?.()
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(transcribe).not.toHaveBeenCalled()
+    expect(screen.queryByText(/^unknownOutcome/)).toBeNull()
+  })
+
+  it('names the language hint that is travelling with the request', async () => {
+    // The composer is where the user dictates and it has no settings page beside it, so the one
+    // moment the hint matters is while the request carrying it is in flight.
+    const release = await driveToTranscribing('zh')
+    // The exact interpolation is the assertion: a component that passed a constant, the wrong
+    // variable or an empty string would render different text.
+    expect(await screen.findByText('languageHintInline:{"language":"zh"}')).toBeTruthy()
+    expect(screen.queryByText(/languageHintInline:\{"language":"en"\}/)).toBeNull()
+    release()
+  })
+
+  it('stays quiet while no language hint travels', async () => {
+    const release = await driveToTranscribing('')
+    expect(screen.getByText('transcribingShort')).toBeTruthy()
+    expect(screen.queryByText(/^languageHintInline/)).toBeNull()
+    release()
+  })
+
+  it('refuses before opening the microphone when the snapshot cannot transcribe', async () => {
+    // The snapshot already called the operation unsupported; letting the user dictate the whole
+    // thing would spend a recording on an upload the host refuses before it is sent.
+    const createRecording = vi.fn()
+    const base = props({}, async () => { throw new Error('not used') })
+    const unsupported = {
+      schemaVersion: 'effective_capabilities_v1',
+      transcriptionSupported: false,
+      reason: 'no asr model loaded',
+      languages: { status: 'unknown' as const, values: [] },
+      limits: { maxUploadBytes: 1_048_576, maxAudioSeconds: 30 },
+    }
+    render(<VoiceInput
+      {...base}
+      createRecording={createRecording as never}
+      status={async () => ({ ...STATUS, capabilities: unsupported })}
+    />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    expect(await screen.findByText('failure.unsupported')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+
+  it('stops a recording at the limits admitted when it started', async () => {
+    // The duration timer closes over the render that scheduled it. Reading the limits
+    // from that stale `view` (undefined, for a click before the first status resolves)
+    // made stop() see 0 bytes and discard up to the full recording as "too large".
+    const stop = vi.fn(async () => new Uint8Array([1, 2, 3]))
+    const capture = { start: async () => undefined, stop, dispose: async () => undefined } as unknown as Recording
+    const status = vi.fn(async () => ({ ...STATUS, limits: { maxUploadBytes: 1_000, maxAudioSeconds: 0.001 } }))
+    const base = props({}, vi.fn(async () => { throw new Error('unused') }))
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => ({ ok: false, transcript: null, failure: failure('audio-invalid') })}
+      />,
+    )
+
+    // Click before the mount effect's status resolves: that is the render whose `finish`
+    // closure the timer captures, and its `view` is still undefined.
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    // The limit timer fires 1 ms after the recording starts.
+    await waitFor(() => { expect(stop).toHaveBeenCalled() }, { timeout: 2_000 })
+    expect(stop).toHaveBeenCalledWith(0.001, 1_000)
+  })
+
+  it('submits one acknowledgement when the control is clicked twice', async () => {
+    let release: (() => void) | undefined
+    const acknowledge = vi.fn(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return { ok: true, pendingOperationId: null, failure: null }
+    })
+    render(<VoiceInput {...props({ gate: 'unknown', pendingOperationId: 'op_eeeeeeee' }, acknowledge)} />)
+
+    const button = await screen.findByRole('button', { name: 'acknowledge' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    release?.()
+    await waitFor(() => { expect(acknowledge).toHaveBeenCalledTimes(1) })
+  })
+
+  it('keeps a live recording reachable when an acknowledgement refreshes late', async () => {
+    // The assertion's own status read can land after the user has started recording again.
+    // Collapsing the control then would hide the stop button of a running microphone.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_ffffffff' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_ffffffff' }, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    const stop = vi.fn(async () => new Uint8Array([1]))
+    const capture = { start: async () => undefined, stop, dispose: async () => undefined } as unknown as Recording
+    render(<VoiceInput {...base} status={status} createRecording={() => capture} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    // Flush the late continuation, then assert: an immediate assertion would pass before
+    // React applies the state the guard is meant to withhold.
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+    // The confirmation is reported without collapsing the live control.
+    expect(screen.getByText('acknowledged')).toBeTruthy()
+  })
+
+  it('keeps a live recording reachable when the acknowledgement is refused', async () => {
+    // The refusal is reported as a message, not as a phase change: collapsing the row would
+    // drop the stop button while the microphone is still running.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_gggggggg' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_gggggggg' }, async () => ({ ok: false, pendingOperationId: null, failure: failure('conflict') }))
+    const capture = { start: async () => undefined, stop: vi.fn(async () => new Uint8Array([1])), dispose: async () => undefined } as unknown as Recording
+    render(<VoiceInput {...base} status={status} createRecording={() => capture} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+    expect(screen.getByText('failure.conflict')).toBeTruthy()
+  })
+
+  it('still reports a success when an aborted start attempt bumped the generation', async () => {
+    // Clicking the trigger while the gate is still unproven aborts without recording, so it
+    // is not a reason to swallow the acknowledgement's own confirmation.
+    let release: ((status: SpeechRailInputStatus) => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_hhhhhhhh' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { release = resolve }))
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_hhhhhhhh' })
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_hhhhhhhh' }, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    const createRecording = vi.fn(() => ({ start: async () => undefined, dispose: async () => undefined }) as unknown as Recording)
+    render(<VoiceInput {...base} status={status} createRecording={createRecording} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    expect(await screen.findByText('gateUnknown')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+
+    release?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    expect(await screen.findByText('acknowledged')).toBeTruthy()
+  })
+
+  it('shows a result that arrives while the recording is being transcribed', async () => {
+    // A live capture keeps its phase, and the reply is rendered beside the phase label; the
+    // retry that reporting through feedback used to offer would be inert, because the capture
+    // still owns the operation.
+    let releaseAck: ((status: SpeechRailInputStatus) => void) | undefined
+    let releaseTranscribe: (() => void) | undefined
+    const status = vi.fn()
+      .mockResolvedValueOnce({ ...STATUS, gate: 'unknown' as const, pendingOperationId: 'op_jjjjjjjj' })
+      .mockImplementationOnce(async () => await new Promise<SpeechRailInputStatus>((resolve) => { releaseAck = resolve }))
+      .mockResolvedValue({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    const base = props({ gate: 'unknown', pendingOperationId: 'op_jjjjjjjj' }, async () => ({ ok: false, pendingOperationId: null, failure: failure('conflict') }))
+    const capture = { start: async () => undefined, stop: vi.fn(async () => new Uint8Array([1])), dispose: async () => undefined } as unknown as Recording
+    render(
+      <VoiceInput
+        {...base}
+        status={status}
+        createRecording={() => capture}
+        transcribe={async () => {
+          await new Promise<void>((resolve) => { releaseTranscribe = resolve })
+          return { ok: false, transcript: null, failure: null }
+        }}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(status).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await waitFor(() => { expect(releaseTranscribe).toBeDefined() })
+
+    releaseAck?.({ ...STATUS, gate: 'ready' as const, pendingOperationId: null })
+    expect(await screen.findByText('failure.conflict')).toBeTruthy()
+    // The transcribing state stays visible, and the retry it used to offer was inert because
+    // the capture still owned the operation.
+    expect(screen.getByText('transcribingShort')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'retryRecording' })).toBeNull()
+    releaseTranscribe?.()
+  })
+
+  it('refuses before opening the microphone when no credential is configured', async () => {
+    // Without a credential every upload is refused, so the refusal must arrive before a
+    // whole dictation is recorded and thrown away.
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }) as unknown as Recording)
+    const base = props({ credentialConfigured: false }, vi.fn(async () => ({ ok: true, pendingOperationId: null, failure: null })))
+    render(<VoiceInput {...base} createRecording={createRecording} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+    expect(await screen.findByText('failure.not-configured')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+
+  it('refreshes after a refusal so the next attempt carries the discovered id', async () => {
+    // A transient read failure leaves the gate unproven with no id. If the Host then
+    // finds a readable record it refuses the null and reports the id; the control must
+    // re-read status, otherwise every later click would send the same stale null.
+    let pendingId: string | null = null
+    const status = vi.fn(async () => ({ ...STATUS, gate: 'unknown' as const, pendingOperationId: pendingId }))
+    const acknowledge = vi.fn(async () => {
+      pendingId = 'op_cccccccc'
+      return { ok: false, pendingOperationId: 'op_cccccccc', failure: failure('conflict') }
+    })
+    const base = props({ gate: 'unknown', pendingOperationId: null }, acknowledge)
+    render(<VoiceInput {...base} status={status} acknowledge={acknowledge} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenNthCalledWith(1, { operationId: null }) })
+    // The refusal triggered a re-read, which is what makes the id discoverable.
+    await waitFor(() => { expect(status.mock.calls.length).toBeGreaterThanOrEqual(2) })
+
+    fireEvent.click(screen.getByRole('button', { name: 'acknowledge' }))
+    await waitFor(() => { expect(acknowledge).toHaveBeenLastCalledWith({ operationId: 'op_cccccccc' }) })
+  })
+
+  it('offers no acknowledge control while the gate is open', async () => {
+    const acknowledge = vi.fn(async () => { throw new Error('unused') })
+    render(<VoiceInput {...props({ gate: 'ready' }, acknowledge)} />)
+
+    // Wait for the first status read, then assert the control is absent.
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(screen.queryByRole('button', { name: 'acknowledge' })).toBeNull()
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
+})
+
+describe('VoiceInput dictation trigger', () => {
+  /** One render's props: the shared stubs plus the channel, a capturable recording and a spy. */
+  function view(dictation: DictationTrigger, transcribe: (request: unknown, signal: AbortSignal) => Promise<unknown>) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([0]),
+      dispose: async () => undefined,
+    }
+    return (
+      <VoiceInput
+        {...props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))}
+        dictation={dictation}
+        transcribe={transcribe as VoiceInputProps['transcribe']}
+        createRecording={() => capture as unknown as Recording}
+      />
+    )
+  }
+
+  it('starts from idle and keeps the command available across a whole take', async () => {
+    // The seat in the model selector's control group reports no composer lock, so the command stays
+    // subscribed for as long as the control is mounted rather than going unavailable on a state this
+    // component cannot see.
+    const dictation = createDictationTrigger()
+    const transcribe = vi.fn(async (_request: unknown, _signal: AbortSignal) => ({ ok: false, transcript: null, failure: null }))
+    render(view(dictation, transcribe))
+
+    // Nothing is mounted to accept a press until the control subscribes.
+    await waitFor(() => { expect(dictation.available()).toBe(true) })
+
+    act(() => { dictation.toggle() })
+    // `start` opened the capture, so the row now offers the control that ends it.
+    await screen.findByRole('button', { name: 'stop' })
+
+    act(() => { dictation.toggle() })
+    await waitFor(() => { expect(transcribe).toHaveBeenCalledTimes(1) })
+    expect(transcribe.mock.calls[0]?.[0]).toMatchObject({ operationId: expect.any(String) })
+
+    // The take is over and the command is still subscribed: a press is accepted for as long as the
+    // control is mounted, rather than on a composer state this seat cannot observe.
+    await waitFor(() => { expect(screen.queryByRole('button', { name: 'stop' })).toBeNull() })
+    expect(dictation.available()).toBe(true)
+  })
+})
+
+describe('VoiceInput credential gate', () => {
+  /** A render whose microphone acquisition is observable. */
+  function view(overrides: Partial<SpeechRailInputStatus>, createRecording: ReturnType<typeof vi.fn>) {
+    return (
+      <VoiceInput
+        {...props(overrides, async () => ({ ok: true, pendingOperationId: null, failure: null }))}
+        createRecording={createRecording as unknown as VoiceInputProps['createRecording']}
+      />
+    )
+  }
+
+  it('opens the microphone when the endpoint is configured without a credential', async () => {
+    // An empty reference means this endpoint needs none, so nothing is missing and the gate must let
+    // the take through; refusing here would report a working setup as broken.
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }))
+    render(view({ credentialRef: '', credentialConfigured: false }, createRecording))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    await waitFor(() => { expect(createRecording).toHaveBeenCalledTimes(1) })
+    expect(screen.queryByText('failure.not-configured')).toBeNull()
+  })
+
+  it('refuses before opening the microphone when a configured reference resolves to nothing', async () => {
+    const createRecording = vi.fn(() => ({ preview: async () => { throw new Error('not used') } }))
+    render(view({ credentialRef: 'SPEECHRAIL_API_KEY', credentialConfigured: false }, createRecording))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    expect(await screen.findByText('failure.not-configured')).toBeTruthy()
+    expect(createRecording).not.toHaveBeenCalled()
+  })
+})
+
+describe('VoiceInput in-place control', () => {
+  /**
+   * One render that can be driven through a whole take, with the composer contract observable.
+   *
+   * The control is the only thing the user clicked, so the tests below pin three things at once:
+   * it stays the row's first element, it keeps one size, and the transcript goes into the draft
+   * without being sent.
+   */
+  function view(options: {
+    readonly transcribe?: VoiceInputProps['transcribe']
+    readonly insertText?: (text: string, span: { start: number, end: number }) => boolean
+    readonly submit?: () => void
+  } = {}) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+    }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        inputActions={{
+          captureInsertion: () => ({ start: 0, end: 0 }),
+          insertText: options.insertText ?? (() => true),
+          ...(options.submit === undefined ? {} : { submit: options.submit }),
+        } as unknown as VoiceInputProps['inputActions']}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  /** The activity row, which exists in every phase so its first element can be asserted. */
+  function rowOf(container: HTMLElement): HTMLElement {
+    const row = container.querySelector('[data-voice-input-activity]')
+    if (row === null) throw new Error('the activity row is not rendered')
+    return row as HTMLElement
+  }
+
+  it('morphs the control that was clicked instead of moving it', async () => {
+    const { container } = render(view())
+    const idle = await screen.findByRole('button', { name: 'start' })
+    const idleSize = [idle.style.width, idle.style.height]
+    expect(rowOf(container).firstElementChild).toBe(idle)
+
+    fireEvent.click(idle)
+
+    const recording = await screen.findByRole('button', { name: 'stop' })
+    // The same node, still first: nothing was inserted to its left, so it cannot have moved.
+    expect(recording).toBe(idle)
+    expect(rowOf(container).firstElementChild).toBe(recording)
+    expect([recording.style.width, recording.style.height]).toEqual(idleSize)
+  })
+
+  it('shows the live waveform inside that control', async () => {
+    const { container } = render(view())
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    const recording = await screen.findByRole('button', { name: 'stop' })
+    expect(within(recording).getByRole('img', { name: 'recording' })).toBeTruthy()
+    // Every extra control is a later sibling: the discard control may not land where the microphone
+    // was, which is what "the row jumped to the left" described.
+    const discard = screen.getByRole('button', { name: 'cancel' })
+    expect(Array.from(rowOf(container).children).indexOf(discard)).toBeGreaterThan(0)
+  })
+
+  it('inserts the transcript into the draft without sending it', async () => {
+    const insertText = vi.fn(() => true)
+    const submit = vi.fn()
+    render(view({
+      insertText,
+      submit,
+      transcribe: async () => ({ ok: true, transcript: { operationId: 'op_tttttttt', text: '你好世界', audioSeconds: 1, requestSeconds: 0.2, inferenceSeconds: null }, failure: null }),
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    await waitFor(() => { expect(insertText).toHaveBeenCalledWith('你好世界', { start: 0, end: 0 }) })
+    // Submission belongs to the user pressing send, never to a transcript arriving.
+    expect(submit).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+  })
+
+  it('offers a refused transcript for insertion instead of dropping it', async () => {
+    // A draft whose revision moved refuses the insertion; the transcript must stay reachable, and
+    // even that path may not send it.
+    const insertText = vi.fn(() => false)
+    const submit = vi.fn()
+    render(view({
+      insertText,
+      submit,
+      transcribe: async () => ({ ok: true, transcript: { operationId: 'op_tttttttt', text: '你好世界', audioSeconds: 1, requestSeconds: 0.2, inferenceSeconds: null }, failure: null }),
+    }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    const insert = await screen.findByRole('button', { name: 'insert' })
+    expect(submit).not.toHaveBeenCalled()
+    insertText.mockReturnValue(true)
+    fireEvent.click(insert)
+
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'start' })).toBeTruthy() })
+    expect(submit).not.toHaveBeenCalled()
+  })
+})
+
+describe('VoiceInput progress and feedback', () => {
+  /** A render whose stubs can be held open and whose snapshot can be overridden. */
+  function view(options: {
+    readonly status?: Partial<SpeechRailInputStatus>
+    readonly transcribe?: VoiceInputProps['transcribe']
+  } = {}) {
+    const capture = {
+      start: async () => undefined,
+      stop: async () => new Uint8Array([1]),
+      dispose: async () => undefined,
+      // The live waveform samples this every 80 ms, and this suite advances fake timers.
+      amplitude: () => 0.1,
+    }
+    const base = props(options.status ?? {}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  /** Start a take and stop it, leaving whatever the transcription does next. */
+  async function record(): Promise<void> {
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+  }
+
+  it('counts the seconds of a live take', async () => {
+    // The service caps a take at a duration the row never used to show, so the one number a person
+    // dictating wants is how long they have been talking.
+    vi.useFakeTimers()
+    try {
+      render(view())
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'start' })) })
+      expect(screen.getByRole('button', { name: 'stop' })).toBeTruthy()
+      expect(screen.getByRole('timer').textContent).toBe('0:00')
+
+      await act(async () => { vi.advanceTimersByTime(3000) })
+      expect(screen.getByRole('timer').textContent).toBe('0:03')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows progress in place of the microphone while a take is being transcribed', async () => {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+
+    await record()
+
+    // The control names the work instead of showing a microphone nobody can press.
+    expect(await screen.findByRole('img', { name: 'transcribingShort' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'transcribingShort' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'start' })).toBeNull()
+    release?.()
+  })
+
+  it('paints a refusal with the error token, not with the caption grey', async () => {
+    render(view({ status: { credentialRef: 'SPEECHRAIL_API_KEY', credentialConfigured: false } }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+
+    const message = (await screen.findByText('failure.not-configured')).closest('[data-voice-input-message]') as HTMLElement | null
+    expect(message?.dataset.voiceInputMessage).toBe('error')
+    expect(message?.style.color).toContain('state-error-primary')
+  })
+
+  it('keeps a progress line in the secondary text colour', async () => {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+
+    await record()
+
+    const progress = (await screen.findByText('transcribingShort')).closest('[data-voice-input-message]') as HTMLElement | null
+    expect(progress?.dataset.voiceInputMessage).toBe('info')
+    expect(progress?.style.color).toContain('label-secondary')
+    release?.()
+  })
+
+  it('gives the microphone a hover surface so it reads as pressable', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+
+    expect(mic.style.background).toBe('transparent')
+    fireEvent.mouseEnter(mic)
+    expect(mic.style.background).toContain('bg-layer-2')
+    fireEvent.mouseLeave(mic)
+    expect(mic.style.background).toBe('transparent')
+  })
+})
+
+describe('VoiceInput motion and glyphs', () => {
+  /** Restores whatever matchMedia the environment had (jsdom has none). */
+  const originalMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia')
+
+  function withReducedMotion(reduced: boolean): void {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({ matches: reduced && query.includes('prefers-reduced-motion'), media: query, addEventListener: () => {}, removeEventListener: () => {} }),
+    })
+  }
+
+  afterEach(() => {
+    if (originalMatchMedia === undefined) delete (window as { matchMedia?: unknown }).matchMedia
+    else Object.defineProperty(window, 'matchMedia', originalMatchMedia)
+  })
+
+  function view(options: { readonly transcribe?: VoiceInputProps['transcribe'] } = {}) {
+    const capture = { start: async () => undefined, stop: async () => new Uint8Array([1]), dispose: async () => undefined, amplitude: () => 0.1 }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return (
+      <VoiceInput
+        {...base}
+        createRecording={() => capture as unknown as Recording}
+        transcribe={options.transcribe ?? base.transcribe}
+      />
+    )
+  }
+
+  it('eases the hover surface instead of snapping it', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.style.transition).toContain('background 120ms')
+  })
+
+  it('holds still when the system asks for less motion', async () => {
+    withReducedMotion(true)
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    // A surface that fades is decoration; with the preference set it must not fade.
+    expect(mic.style.transition).toBe('')
+  })
+
+  /**
+   * Hold the transcription open, so the waiting glyph is still on screen when it is read.
+   *
+   * React reuses the anchor's single `<svg>` as the phase changes, so a transient waiting glyph cannot
+   * be inspected afterwards: the same node has become the microphone again.
+   * @returns the function that lets the transcription finish.
+   */
+  async function waiting(): Promise<() => void> {
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+    await screen.findByRole('img', { name: 'transcribingShort' })
+    return () => { release?.() }
+  }
+
+  it('spins while a take is transcribed', async () => {
+    const release = await waiting()
+    const spinner = screen.getByRole('img', { name: 'transcribingShort' })
+    expect(spinner.querySelector('animateTransform')).not.toBeNull()
+    expect(spinner.getAttribute('width')).toBe('16')
+    release()
+  })
+
+  it('shows a still ring when motion is not welcome', async () => {
+    withReducedMotion(true)
+    const release = await waiting()
+
+    // The phase is still named; only the rotation is gone.
+    const spinner = screen.getByRole('img', { name: 'transcribingShort' })
+    expect(spinner.querySelector('animateTransform')).toBeNull()
+    expect(spinner.querySelector('circle')).not.toBeNull()
+    release()
+  })
+
+  it('draws the microphone and the spinner at the same size', async () => {
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.querySelector('svg')?.getAttribute('width')).toBe('16')
+  })
+
+  it('centres the small cancel glyph in its round button', async () => {
+    render(view())
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    const cancel = await screen.findByRole('button', { name: 'cancel' })
+    expect(cancel.textContent).toBe('×')
+    expect(cancel.style.fontSize).toBe('13px')
+    expect(cancel.style.lineHeight).toBe('1')
+  })
+})
+
+describe('VoiceInput contrast', () => {
+  function view(options: { readonly transcribe?: VoiceInputProps['transcribe'] } = {}) {
+    const capture = { start: async () => undefined, stop: async () => new Uint8Array([1]), dispose: async () => undefined, amplitude: () => 0.1 }
+    const base = props({}, async () => ({ ok: true, pendingOperationId: null, failure: null }))
+    return <VoiceInput {...base} createRecording={() => capture as unknown as Recording} transcribe={options.transcribe ?? base.transcribe} />
+  }
+
+  it('outlines the round controls with the stronger border', async () => {
+    // `border-l1` is the divider weight; a control the user is meant to press needs more than that,
+    // and the glyph uses the primary text token so it is the strongest thing in the row.
+    render(view())
+    const mic = await screen.findByRole('button', { name: 'start' })
+    expect(mic.style.borderColor).toContain('border-l2')
+    expect(mic.style.color).toContain('label-primary')
+
+    fireEvent.click(mic)
+    const cancel = await screen.findByRole('button', { name: 'cancel' })
+    expect(cancel.style.borderColor).toContain('border-l2')
+  })
+
+  it('never dims the glyph that is reporting progress', async () => {
+    // A spinner at 55% opacity on a light toolbar is barely there; the phase glyph is content, not a
+    // disabled control, so only its pressability is off.
+    let release: (() => void) | undefined
+    render(view({
+      transcribe: async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { ok: false, transcript: null, failure: null }
+      },
+    }))
+    fireEvent.click(await screen.findByRole('button', { name: 'start' }))
+    await screen.findByRole('button', { name: 'stop' })
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }))
+
+    const spinner = await screen.findByRole('img', { name: 'transcribingShort' })
+    expect(spinner.closest('button')?.style.opacity).toBe('1')
+    expect(spinner.closest('button')?.disabled).toBe(true)
+    release?.()
+  })
+})
+

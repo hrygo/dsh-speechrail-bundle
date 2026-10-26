@@ -5,8 +5,8 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
-    "packages/speechrail-input/tests/**/*.client.spec.ts",
-    "packages/speechrail-input/tests/**/*.client.spec.tsx"
+    "packages/voice-input/tests/**/*.client.spec.ts",
+    "packages/voice-input/tests/**/*.client.spec.tsx"
   ],
-  "references": [{ "path": "./packages/typert-protocol" }, { "path": "./packages/speechrail-input" }]
+  "references": [{ "path": "./packages/typert-protocol" }, { "path": "./packages/voice-input" }]
 }

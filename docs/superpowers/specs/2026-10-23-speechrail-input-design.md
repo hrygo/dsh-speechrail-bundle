@@ -3,9 +3,9 @@
 - 版本：Draft 2，2026-10-23；尚未获得用户实施批准。
 - 状态：Draft 2 已通过独立架构/安全审查与 Builder Checker 复核；等待用户批准，禁止自动实施。
 - 审查记录：[审查与修订证据](../../reviews/2026-10-23-design-review.md)。
-- 项目：`@hrygo/dsh-speechrail-bundle`（建议包名，不表示已经发布）。
+- 项目：`dsh-voice-input`（建议包名，不表示已经发布）。
 - 官方基线：[来源清单](../../../upstream/baseline.json)，tag `dsh-v0.2.1-rc.2`，commit `687f282e8625c6b8d11ff58211a90524be2e4317`。
-- 架构选项：[ADR-0001](../../decisions/0001-independent-speechrail-input.md)。
+- 架构选项：[ADR-0001](../../decisions/0001-independent-voice-input.md)。
 
 ## 1. 用户目标与本轮交付
 
@@ -49,7 +49,7 @@ flowchart LR
   C -->|有界结果或稳定错误| A
 ```
 
-建议单一发布包，根仓库作最小 workspace，运行包位于 `packages/speechrail-input/`。这是为了容纳 Host/Client 编译面和官方公开 Typert generator 的 workspace 发现规则，不代表拆成多个发布产品。
+建议单一发布包，根仓库作最小 workspace，运行包位于 `packages/voice-input/`。这是为了容纳 Host/Client 编译面和官方公开 Typert generator 的 workspace 发现规则，不代表拆成多个发布产品。
 
 运行链不依赖官方 `dsh-experimental-voice-input-bundle`、SenseVoice、sherpa 或原 STT/API 包。直接依赖 DSH 的核心 Cordis、Settings、Credentials、Storage、Tools、Typert/Remote 扩展点；Storage 仅保存非敏感未结案标记，不保存音频或密钥。
 
@@ -76,11 +76,11 @@ B 可独立组合原 STT Service/API 并 fork Client，但[官方 Transcript](..
 
 ## 4. 身份、共存和配置所有权
 
-- 包名：`@hrygo/dsh-speechrail-bundle`；建议初始版本 `0.1.0`。
-- Host entry：`speechrail-input`；服务与 wire namespace：`speechrailInput`。
-- Tool entry：`speechrail-input-tools`，指向本包 `./tools`；只包装同一 Host 方法。
-- 设置页 keyed slot：本包全名；locale：`speechrail-input`；浏览器偏好键：`dsh.speechrail-input.microphone`。
-- composer 使用现有 `conversation.input.activity` 单席位，不改 shell 或 DOM。（**2026-10-26 修订，1.0.0**：一个控件，两个席位。**按钮**回到 activity 单席位——即模型选择器**右侧**，用户 2026-10-26 明确要求的位置；**按动后产生的一切**（计时、阶段文字、取消键、消息、待插入的转写）留在 `conversation.input.right` 的 list 席位（cell id `speechrail-input-panel`，`order: 20`，模型选择器**左侧**）。两个席位分属两棵 React 子树，状态不能放在组件里：控制器提升到插件生命周期（`src/client/control.ts` 的 `SpeechRailControl`，`ctx.effect` 负责 dispose），两个席位各用 `useControl` 绑定本席位的 `inputActions` 并订阅同一份快照。两条实现约束：① 本包在 activity 席位**从不报告展开**（否则 composer 会隐藏 `standardControls`，左侧那一半连同工具行一起消失）；② activity 是 single 席位，注册项没有 cell id，靠 `priority` 选中，故 `mount.client.spec.ts` 断言的是「没有 id」而不是 id 值。代价：若官方 bundle 或别的插件把 activity 展开，本包**左侧的报告**会随之隐藏，而右侧按钮仍在录音——一次录音的可见性取决于同屏其他插件，这是席位组合的固有限制，无法在本包内部消除。）（**2026-10-25 修订，0.11.0**：席位改为 `conversation.input.right`——模型选择器所在控件组内的 list 席位，渲染在该组内已装条目之后、模型选择器之前，因此控件紧贴模型选择器左侧。改席位有两个实测理由：① activity 是 single 席位且 `replaceRisk: shadows-shipped-ui`，而 `input.right` 是 list 席位、`replaceRisk: none`；② composer 在 activity 报告展开时会隐藏普通配件控件（`standardControls` 的 `hidden={activity}`，见已装 `dsh-client-ui-conversation/lib/client.js`），整条工具行随之左移——用户 2026-10-25 报告的「点击后声波跑到左侧」即此。同组已装条目 `image-provider` 的 `order` 为 10，故本包取 20 落在它与模型选择器之间。）
+- 包名：`dsh-voice-input`；建议初始版本 `0.1.0`。
+- Host entry：`voice-input`；服务与 wire namespace：`speechrailInput`。
+- Tool entry：`voice-input-tools`，指向本包 `./tools`；只包装同一 Host 方法。
+- 设置页 keyed slot：本包全名；locale：`voice-input`；浏览器偏好键：`dsh.voice-input.microphone`。
+- composer 使用现有 `conversation.input.activity` 单席位，不改 shell 或 DOM。（**2026-10-26 修订，1.0.0**：一个控件，两个席位。**按钮**回到 activity 单席位——即模型选择器**右侧**，用户 2026-10-26 明确要求的位置；**按动后产生的一切**（计时、阶段文字、取消键、消息、待插入的转写）留在 `conversation.input.right` 的 list 席位（cell id `voice-input-panel`，`order: 20`，模型选择器**左侧**）。两个席位分属两棵 React 子树，状态不能放在组件里：控制器提升到插件生命周期（`src/client/control.ts` 的 `SpeechRailControl`，`ctx.effect` 负责 dispose），两个席位各用 `useControl` 绑定本席位的 `inputActions` 并订阅同一份快照。两条实现约束：① 本包在 activity 席位**从不报告展开**（否则 composer 会隐藏 `standardControls`，左侧那一半连同工具行一起消失）；② activity 是 single 席位，注册项没有 cell id，靠 `priority` 选中，故 `mount.client.spec.ts` 断言的是「没有 id」而不是 id 值。代价：若官方 bundle 或别的插件把 activity 展开，本包**左侧的报告**会随之隐藏，而右侧按钮仍在录音——一次录音的可见性取决于同屏其他插件，这是席位组合的固有限制，无法在本包内部消除。）（**2026-10-25 修订，0.11.0**：席位改为 `conversation.input.right`——模型选择器所在控件组内的 list 席位，渲染在该组内已装条目之后、模型选择器之前，因此控件紧贴模型选择器左侧。改席位有两个实测理由：① activity 是 single 席位且 `replaceRisk: shadows-shipped-ui`，而 `input.right` 是 list 席位、`replaceRisk: none`；② composer 在 activity 报告展开时会隐藏普通配件控件（`standardControls` 的 `hidden={activity}`，见已装 `dsh-client-ui-conversation/lib/client.js`），整条工具行随之左移——用户 2026-10-25 报告的「点击后声波跑到左侧」即此。同组已装条目 `image-provider` 的 `order` 为 10，故本包取 20 落在它与模型选择器之间。）
 - 安装前显式检查官方 UI/其他 activity 互斥。本 Client 在 `slots.inject` 的声明生命周期回调中，经公开 `ctx.slots.spec/entries` 检查 single 声明与全部 raw occupants；有占用、API不可用或注册失败时仅拒绝/回滚自己的麦克风，设置页显示冲突，不改变其他 entry。无占用时同步按默认priority=0注册，不用priority shadow。（**2026-10-25 修订，0.11.0**：以上互斥机制未实现，且随 0.11.0 换席位而不再必要——`input.right` 是 list 席位，多插件按构造并存，与占用 activity 的官方 bundle 不再争同一格。仍然存在的是**同屏两个麦克风**这一观感问题，以及官方 bundle 录制时其 `onActiveChange(true)` 会让 `standardControls` 整组隐藏、本包控件随之消失（源码证据同上）；本包自己从不报告展开。）
 - 用 `ctx.slots.subscribe` 观察后续成功注册的foreign occupant，出现时撤回自己并取消采集；不自动重抢，需用户显式重新尝试。订阅是microtask-batched，不是原子租约；后到同priority插件可能先被框架拒绝，故不承诺任意安装顺序下自动仲裁或零冲突。`slots.inject` 本身只跟踪声明，不监视占用。公开委托方法见 [SlotRegistry](</Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/client.js#L1537-L1601>)。
 - 界面颜色一律取自 Harness 已声明的主题 token（**2026-10-26 修订，0.12.0**）：本 bundle 不带样式表，全部外观为内联样式，因此每个颜色名都要自己写。0.12.0 之前有三处名字不在 live Client `Theme.listTokens` 声明集内（`--dsw-alias-content-secondary` / `--dsw-alias-content-error` / `--dsw-alias-border-secondary`），名字不存在时浏览器静默采用硬编码回退值，深色主题下这些位置仍是浅色配色（设置页输入框在深色下回退成浏览器默认白底）。现改为只使用声明过的 token，并由 `tests/theme-tokens.host.spec.ts` 扫描 `src/client/**` 守卫。理由与复活条件见 [ADR-0005](../../decisions/0005-declared-theme-tokens-only.md)。
@@ -223,7 +223,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 | 文件组（均待创建） | 唯一职责 | 最小证据 |
 |---|---|---|
-| `packages/speechrail-input/package.json`、patch、locale/icon | 独立发布身份与元数据 | pack 清单、版本门槛与资源检查 |
+| `packages/voice-input/package.json`、patch、locale/icon | 独立发布身份与元数据 | pack 清单、版本门槛与资源检查 |
 | `src/contracts.ts`、`src/host/controller.ts` | 结果/状态/错误与严格 Remote | 非法字段拒绝、artifact/mount/withdraw |
 | `src/host/config.ts`、`credentials.ts` | 参数约束、每操作解析引用 | loopback/redirect/proxy边界、缺key、旋转、不set |
 | `src/host/service.ts`、`client.ts`、`journal.ts` | 单在途、发现、HTTP、取消与非敏感未结案标记 | race、bounded-body、soft-drain、unknown、不重放；在途POST→卸载→重载→检查不解门禁，损坏journal fail-closed |
@@ -260,7 +260,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 经用户批准的实施方案为“独立薄切片”。以下为实现期确定的具体决定；除第一项外均为收窄或等价替换，未改变安全边界。
 
 1. **新增私有类型垫片 `packages/typert-protocol`（经用户单独确认，A 方案）。** 实测约束：Typert 生成器只在 `<root>/packages` 下按 tsconfig references 识别包，且 `isTypeMetaSymbol()` 要求 `@Remote` / `TypertRemoteService` 的声明符号位于一个已注册且名为 `@deepseek-ai/dsh-typert-protocol` 的工作区包内。仓库外依赖 npm 版协议时生成器判定“有 Remote 导出但没有 Remote 方法”，无法产出 `lib/typert.host.js` 与 `lib/typert.remote-client.js`。垫片为 declaration-only、private、不发布；`tsconfig.base.json` 的 `paths` 只影响类型解析，`lib/index.js` 仍 `import '@deepseek-ai/dsh-typert-protocol'`（已核验），pnpm 不链接垫片。`tests/typert-protocol-parity.host.*` 用已发布声明验证同一装饰器与构造函数写法，并断言运行时导出存在。
-2. **单一入口，暂不注册模型工具。** 设计 §8 允许“至多补一个薄操作入口”；`speechrail-input-tools` 未实现，Host 服务与 Remote 面即为全部入口，工具可在不改动线协议的前提下后续追加。
+2. **单一入口，暂不注册模型工具。** 设计 §8 允许“至多补一个薄操作入口”；`voice-input-tools` 未实现，Host 服务与 Remote 面即为全部入口，工具可在不改动线协议的前提下后续追加。
 3. **暂不做麦克风设备选择器。** v1 使用系统默认输入设备；设备标签枚举需要先获得权限授予，属于可在不改变 Host 契约的情况下独立追加的客户端能力。
 4. **客户端样式改为内联样式 + `--dsw-alias-*` 变量**，不引入 CSS Modules 管线；因此客户端 bundle 配置无需 `@tsdown/css`。
 5. **`model` 默认留空**而非固定模型 id：SpeechRail 按 profile 校验模型 id（实测 `asr-1.7b-q8`），空值即省略字段交由服务端选择。
@@ -292,7 +292,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 本节取代上文「实施决策与偏差」第 2 项（当时记录为“未实现，留待后续”）。
 
-**已实现 `speechrail_input_status`**：唯一的模型可见入口，只读。它报告：生效的 loopback 端点、端点是否被接受、凭据引用是否解析出值、服务是否应答且接受该凭据（仅在 `probe: true` 时发起一次本地请求）、当前语言与上传限额、门禁状态与待确认的 operation id。它不上传音频、不写 journal、不改变门禁，且规范化值中只有布尔与短字符串——凭据本身与转写文本都无法出现。
+**已实现 `voice_input_status`**：唯一的模型可见入口，只读。它报告：生效的 loopback 端点、端点是否被接受、凭据引用是否解析出值、服务是否应答且接受该凭据（仅在 `probe: true` 时发起一次本地请求）、当前语言与上传限额、门禁状态与待确认的 operation id。它不上传音频、不写 journal、不改变门禁，且规范化值中只有布尔与短字符串——凭据本身与转写文本都无法出现。
 
 **注册方式**：`apply()` 内 `ctx.inject(['tools'], …)`，仅在 Harness 提供 tools 服务时注册，并通过 `ctx.effect` 绑定释放；缺少该服务时插件其余功能照常工作，因此不引入新的硬依赖（`dsh-tools` 既不在 `dependencies` 也不在 `peerDependencies`）。
 
@@ -314,7 +314,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 第二次独立核验（对抗性）在修复后的提交上又发现 6 项问题，其中一项使 agent 工具**完全无法注册**。逐项处置：
 
-- **H1（高，工具形同不存在）** `OUTPUT_SCHEMA` 在每个属性上写了 `required: true`。注册表的 `assertSupportedJsonSchema`（dsh-tools `lib/index.js` 的 `register()` 调用）只在对象节点上接受 `required`，因此注册抛错、工具从未生效；而 `defineTool` 的编译产物把必需性放在顶层 `required` 数组、属性上不留该键。已改为该形状，并用**真实断言**验证：修复后的 schema 被接受，改回旧形状则被拒（`schema.properties.endpoint.required is not supported on type "string"`）。新增 `tools/check-tool-schema.mjs` 把这个检查固化：它需要临时安装 `@deepseek-ai/dsh-tools`（该依赖会破坏 Typert 生成，因此不能常驻），脚本头部写明了安装/运行/卸载三步，也支持直接指向任意一份包副本（含 pnpm store 里残留的）。实测输出 `check-tool-schema: speechrail_input_status is accepted by the registry assertion (12 output fields)`，退出码 0；包不存在时给出明确提示并退出 2。单元测试同时断言该不变式（属性上无 `required`、顶层 `required` 覆盖全部属性、`additionalProperties: false`）。
+- **H1（高，工具形同不存在）** `OUTPUT_SCHEMA` 在每个属性上写了 `required: true`。注册表的 `assertSupportedJsonSchema`（dsh-tools `lib/index.js` 的 `register()` 调用）只在对象节点上接受 `required`，因此注册抛错、工具从未生效；而 `defineTool` 的编译产物把必需性放在顶层 `required` 数组、属性上不留该键。已改为该形状，并用**真实断言**验证：修复后的 schema 被接受，改回旧形状则被拒（`schema.properties.endpoint.required is not supported on type "string"`）。新增 `tools/check-tool-schema.mjs` 把这个检查固化：它需要临时安装 `@deepseek-ai/dsh-tools`（该依赖会破坏 Typert 生成，因此不能常驻），脚本头部写明了安装/运行/卸载三步，也支持直接指向任意一份包副本（含 pnpm store 里残留的）。实测输出 `check-tool-schema: voice_input_status is accepted by the registry assertion (12 output fields)`，退出码 0；包不存在时给出明确提示并退出 2。单元测试同时断言该不变式（属性上无 `required`、顶层 `required` 覆盖全部属性、`additionalProperties: false`）。
 - **同时修正一处错误陈述**：注册表**不会**在执行期重新校验参数——原样注册绕过参数校验。工具因此把「非 `true` 即不探测」作为唯一入口条件，并在 `execute` 里对 `args` 做空值防护。
 - **H2（中，会抹掉真实的未决记录）** `{operationId: null}` 原先只看门禁状态，不看 `pendingOperationId`，于是在记录**可读**时也能把一次真实未决上传清掉，违反 `journal.ts` 与 `types.ts` 的契约。已改为：只要本机持有具体 id，就要求匹配该 id，否则返回 `conflict`；`null` 仅用于「记录不可读」的恢复。新增测试断言 `null` 在持有 id 时被拒、且随后用具体 id 可以正常清除。
 - **H3（中，成功的探测仍会放宽限额）** 探测返回 200 但响应体不可识别时，原先把快照置空，限额回落到绝对上限（实测 1 MiB/30 s → 4 MiB/120 s）。已改为：只有识别出快照才替换，200 但不可识别时保留上次快照，并把该快照用于本次 check 结果。新增测试覆盖「可识别→不可识别 200→不可达」三种情况下限额不变。
@@ -333,7 +333,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 - **H2 残余（中，瞬时读失败后仍可盲清）** 若 `restore()` 时读失败，门禁为 unknown 且本机没有 id，客户端此时发送的正是 `null`；而 `reset()` 只写不读，于是「下次就能读到」的真实记录会被清除。已改为：`null` 分支在 `reset()` 之前**重新读一次**日志，若读到了记录就以 `conflict` 拒绝并采纳该 id。客户端配合修正：确认被拒后先刷新状态再提示，因此第二次点击会带上刚发现的具体 id，而不是继续发陈旧的 `null`（`VoiceInput` 与设置页都改）。新增 Host 测试（读失败 → 门禁 unknown/无 id → 读恢复 → `null` 被拒且采纳 id → 具体 id 清除成功）与客户端测试（拒绝后重新读取状态、第二次点击携带新 id）。
 - **一致性** `check()` 在端点被拒分支原先返回 `capabilities: null`，而 `status()`/`run()` 仍在用缓存，前后不一致；现改为返回缓存，与实际强制值一致。
 - **文档与注释准确性** `tools.ts` 模块头曾称「注册表在执行期校验参数与结果」——结果确实校验，参数不校验（原样注册绕过 `defineTool` 的参数校验），已改正；README 的「垃圾能力响应绝不会放宽限额」按新规则重写；`DEFAULT_LIMITS` 的注释改为「包自身上限，而非保守值」。
-- **核验脚本增强** `tools/check-tool-schema.mjs` 现在同时做两件事：把 `createStatusTool(...)` 的 `parameters` 与 `output.schema` 与 `defineTool` 用等价 spec 编译出的 JSON 做结构比较，并调用注册表真实的 `assertSupportedJsonSchema`。实测输出 `speechrail_input_status is accepted by the registry assertion (12 output fields)`，退出 0。这使 H1 的真实要求（形状必须与注册表一致）自动化可复现，而不是一次性人工核对；脚本头部的路径提示也修正为「指向包目录本身」。
+- **核验脚本增强** `tools/check-tool-schema.mjs` 现在同时做两件事：把 `createStatusTool(...)` 的 `parameters` 与 `output.schema` 与 `defineTool` 用等价 spec 编译出的 JSON 做结构比较，并调用注册表真实的 `assertSupportedJsonSchema`。实测输出 `voice_input_status is accepted by the registry assertion (12 output fields)`，退出 0。这使 H1 的真实要求（形状必须与注册表一致）自动化可复现，而不是一次性人工核对；脚本头部的路径提示也修正为「指向包目录本身」。
 
 ## 第七轮：对第四轮核验新发现项的处置（2026-10-24）
 
@@ -412,7 +412,7 @@ Client 采用本地小型 tsdown 配置输出 `window.__ModuleLoader__.load({id,
 
 ## 2026-10-24 决定记录（0.5.0：关着的门要说得出为什么）
 
-- **agent 侧缺口（客户端已经会说、工具却说不出）。** 门因"未证明"关闭时，客户端会连同失败细节一起告知（0.3.0 修的那处），而 `speechrail_input_status` 只能报 `gate unknown; awaiting acknowledgement of op_x`——**动作有了、原因没有**。journal 按设计只存不敏感的 operation id，所以原因无处可读：宿主在内存里保留 **`SpeechRailInputStatus.unprovenFailure`**（留下未证明结局的那次失败），工具以两个平铺字段（`unprovenFailureCode` / `unprovenFailureHttpStatus`）过界，仅在门关着时渲染成 "that attempt failed with server-error (HTTP 502)"，没有响应到达时则说 "before a response arrived"，不编造状态码。
+- **agent 侧缺口（客户端已经会说、工具却说不出）。** 门因"未证明"关闭时，客户端会连同失败细节一起告知（0.3.0 修的那处），而 `voice_input_status` 只能报 `gate unknown; awaiting acknowledgement of op_x`——**动作有了、原因没有**。journal 按设计只存不敏感的 operation id，所以原因无处可读：宿主在内存里保留 **`SpeechRailInputStatus.unprovenFailure`**（留下未证明结局的那次失败），工具以两个平铺字段（`unprovenFailureCode` / `unprovenFailureHttpStatus`）过界，仅在门关着时渲染成 "that attempt failed with server-error (HTTP 502)"，没有响应到达时则说 "before a response arrived"，不编造状态码。
 - **开发中自查纠正的语义陷阱（值得留痕）**：初版记的是"最近一次失败"，于是门因 502 关闭后，**下一次被门挡住的尝试会把原因覆盖成它的后果**（`unknown-outcome`），本机拒绝也会覆盖它；而且成功清空后上报值仍可能残留。最终语义：记录点放在**认领之后**、只认未证明结局；上报值**由门状态派生**（开门即不报），所以状态永不自相矛盾；变异的检验点是"把记录挪到认领之前必须失败"。内存态：宿主重启会忘记原因，而它描述的 journal 记录仍在——取舍写在类型注释里。
 - 新增 `unprovenFailure` 是**加性契约变化**（状态 +1 字段、工具 +2 字段），故记 0.5.0；边界 schema 由 Typert 构建期生成，`pnpm verify` 会重新生成（只跑单测会看到旧的 16 字段，这是我这轮踩到的坑）。
 - **核查为正确、无需改动**：客户端副作用清理（`VoiceInput` 三个监听器全部 `removeEventListener`、定时器全部 `clearTimeout`；`Waveform` 的 `setInterval` 有 `clearInterval`；`Settings` 仅挂载时读一次）；插件生命周期（工具经 `ctx.effect(() => registry.register(...))` 注册，随作用域回收；`inject` 把 settings/storage/Remote 保持可选，缺基础设施时仍能加载并说明不能录音）；`protocol/wave.ts` 的格式检查是**精确等值**（采样率/位深/声道/byteRate 全等），因此不存在"0 采样率 → NaN 秒数绕过时长上限"的通道，长度一致性（RIFF 大小、data 大小、偶数样本）也都严格。

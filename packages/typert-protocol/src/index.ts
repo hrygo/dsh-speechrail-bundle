@@ -15,7 +15,7 @@
  *   registered declaration site for both symbols in both faces.
  * - Being a declaration file, it is never emitted, never linked by pnpm and never
  *   loaded; the bundle keeps importing the published package at runtime.
- * - `packages/speechrail-input/tests/typert-protocol-parity.host.spec.ts` proves
+ * - `packages/voice-input/tests/typert-protocol-parity.host.spec.ts` proves
  *   the published package still exports these symbols and that the decorator and
  *   constructor pattern this bundle uses compiles against the published
  *   declarations too.

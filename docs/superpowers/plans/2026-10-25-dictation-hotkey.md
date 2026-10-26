@@ -36,8 +36,8 @@
 ### Task 1: 触发器通道
 
 **Files:**
-- Create: `packages/speechrail-input/src/client/trigger.ts`
-- Test: `packages/speechrail-input/tests/trigger.client.spec.ts`
+- Create: `packages/voice-input/src/client/trigger.ts`
+- Test: `packages/voice-input/tests/trigger.client.spec.ts`
 
 **Interfaces:**
 - Produces:
@@ -78,7 +78,7 @@ describe('dictation trigger', () => {
 Run: `pnpm exec vitest run tests/trigger.client.spec.ts`
 Expected: FAIL — `Failed to resolve import "../src/client/trigger.ts"`
 
-- [ ] **Step 3: Implement `createDictationTrigger` in `packages/speechrail-input/src/client/trigger.ts`**
+- [ ] **Step 3: Implement `createDictationTrigger` in `packages/voice-input/src/client/trigger.ts`**
 
 A `Set` of handlers plus `available()` = `handlers.size > 0`; `toggle()` iterates a **copy** of the set and swallows per-handler throws (`console.error`), so one broken subscriber cannot block the others.
 
@@ -90,7 +90,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/speechrail-input/src/client/trigger.ts packages/speechrail-input/tests/trigger.client.spec.ts
+git add packages/voice-input/src/client/trigger.ts packages/voice-input/tests/trigger.client.spec.ts
 git commit -m "feat(client): add a dictation trigger channel"
 ```
 
@@ -99,9 +99,9 @@ git commit -m "feat(client): add a dictation trigger channel"
 ### Task 2: 命令定义与文案
 
 **Files:**
-- Create: `packages/speechrail-input/src/client/command.ts`
-- Modify: `packages/speechrail-input/src/client/locales.ts` (add 4 keys: `zh` and `en` each get `shortcut.dictate`, `shortcut.unavailable`)
-- Test: `packages/speechrail-input/tests/command.client.spec.ts`
+- Create: `packages/voice-input/src/client/command.ts`
+- Modify: `packages/voice-input/src/client/locales.ts` (add 4 keys: `zh` and `en` each get `shortcut.dictate`, `shortcut.unavailable`)
+- Test: `packages/voice-input/tests/command.client.spec.ts`
 
 **Interfaces:**
 - Consumes: `DictationTrigger` from Task 1.
@@ -192,7 +192,7 @@ Expected: PASS (the locale guard reports every static key present in both dictio
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/speechrail-input/src/client/command.ts packages/speechrail-input/src/client/locales.ts packages/speechrail-input/tests/command.client.spec.ts
+git add packages/voice-input/src/client/command.ts packages/voice-input/src/client/locales.ts packages/voice-input/tests/command.client.spec.ts
 git commit -m "feat(client): define the dictation shortcut command"
 ```
 
@@ -201,8 +201,8 @@ git commit -m "feat(client): define the dictation shortcut command"
 ### Task 3: 让组件响应触发器
 
 **Files:**
-- Modify: `packages/speechrail-input/src/client/VoiceInput.tsx` (extend `SpeechRailInjected` with `dictation: DictationTrigger`; subscribe in the existing mount effect)
-- Test: `packages/speechrail-input/tests/voice-input.client.spec.tsx` (add cases; reuse the existing harness in that file)
+- Modify: `packages/voice-input/src/client/VoiceInput.tsx` (extend `SpeechRailInjected` with `dictation: DictationTrigger`; subscribe in the existing mount effect)
+- Test: `packages/voice-input/tests/voice-input.client.spec.tsx` (add cases; reuse the existing harness in that file)
 
 **Interfaces:**
 - Consumes: `DictationTrigger` (Task 1).
@@ -270,7 +270,7 @@ Expected: PASS, including every pre-existing case in the file
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/speechrail-input/src/client/VoiceInput.tsx packages/speechrail-input/tests/voice-input.client.spec.tsx
+git add packages/voice-input/src/client/VoiceInput.tsx packages/voice-input/tests/voice-input.client.spec.tsx
 git commit -m "feat(client): let the dictation trigger drive the composer control"
 ```
 
@@ -279,15 +279,15 @@ git commit -m "feat(client): let the dictation trigger drive the composer contro
 ### Task 4: 接上 `ctx.shortcuts`、清单与降级
 
 **Files:**
-- Modify: `packages/speechrail-input/src/client/mount.ts`
-- Modify: `packages/speechrail-input/package.json` (`devDependencies` + `dsh.client.inject`)
+- Modify: `packages/voice-input/src/client/mount.ts`
+- Modify: `packages/voice-input/package.json` (`devDependencies` + `dsh.client.inject`)
 
 **Interfaces:**
 - Consumes: `createDictationTrigger` (Task 1)、`registerDictateCommand` (Task 2)、the `dictation` field of `SpeechRailInjected` (Task 3).
 
 - [ ] **Step 1: Extend the manifest**
 
-In `packages/speechrail-input/package.json`: add `"@deepseek-ai/dsh-client-shortcuts": "0.2.1-rc.3"` to `devDependencies` (types only, matching the `dsh-client-ui-renderer` pattern) and append `"@deepseek-ai/dsh-client-shortcuts"` to `dsh.client.inject`. Do **not** add it to `peerDependencies` or `dependencies`.
+In `packages/voice-input/package.json`: add `"@deepseek-ai/dsh-client-shortcuts": "0.2.1-rc.3"` to `devDependencies` (types only, matching the `dsh-client-ui-renderer` pattern) and append `"@deepseek-ai/dsh-client-shortcuts"` to `dsh.client.inject`. Do **not** add it to `peerDependencies` or `dependencies`.
 
 - [ ] **Step 2: Wire it in `mount.ts`**
 
@@ -307,7 +307,7 @@ Keep `registerUi`'s existing injection list unchanged, so a composition without 
 Run: `pnpm verify`
 Expected: exit code 0 (baseline check → Typert generation → both type checks → bundles → tests)
 
-Then, in the running Harness: open the keyboard-shortcuts settings, confirm a `speechrail-input.dictate` row exists, that it shows `⌘⇧Space` (macOS), that changing it persists, and that **no conflict row** is reported. If the row reports a conflict, change the default in `command.ts` to `{ code: 'KeyM', modifiers: ['primary', 'shift'] }`, re-run `pnpm verify`, and record the change in the commit message.
+Then, in the running Harness: open the keyboard-shortcuts settings, confirm a `voice-input.dictate` row exists, that it shows `⌘⇧Space` (macOS), that changing it persists, and that **no conflict row** is reported. If the row reports a conflict, change the default in `command.ts` to `{ code: 'KeyM', modifiers: ['primary', 'shift'] }`, re-run `pnpm verify`, and record the change in the commit message.
 
 - [ ] **Step 4: Verify the two dangerous paths by hand**
 
@@ -316,7 +316,7 @@ With the composer focused, press the chord: capture starts; press again: it stop
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/speechrail-input/src/client/mount.ts packages/speechrail-input/package.json
+git add packages/voice-input/src/client/mount.ts packages/voice-input/package.json
 git commit -m "feat(client): register the dictation shortcut through ctx.shortcuts"
 ```
 
@@ -325,7 +325,7 @@ git commit -m "feat(client): register the dictation shortcut through ctx.shortcu
 ### Task 5: 记录与交接
 
 **Files:**
-- Modify: `packages/speechrail-input/README.md` (the composer row of the feature table)
+- Modify: `packages/voice-input/README.md` (the composer row of the feature table)
 - Modify: `README.md` and `README.zh-CN.md` (the Client row of "What it provides")
 - Modify: `docs/roadmap/2026-10-25-plugin-evolution.md` (§3 status)
 
@@ -341,6 +341,6 @@ Expected: exit code 0 — the guards check README install URLs, package contents
 - [ ] **Step 3: Commit**
 
 ```bash
-git add README.md README.zh-CN.md packages/speechrail-input/README.md docs/roadmap/2026-10-25-plugin-evolution.md
+git add README.md README.zh-CN.md packages/voice-input/README.md docs/roadmap/2026-10-25-plugin-evolution.md
 git commit -m "docs: record the dictation shortcut"
 ```

@@ -1,7 +1,7 @@
 # 独立 SpeechRail bundle 设计审查记录
 
 - 日期：2026-10-23，Asia/Shanghai。
-- 对象：[设计 Draft 2](../superpowers/specs/2026-10-23-speechrail-input-design.md)、[ADR-0001](../decisions/0001-independent-speechrail-input.md)、本地基线校验工具。
+- 对象：[设计 Draft 2](../superpowers/specs/2026-10-23-voice-input-design.md)、[ADR-0001](../decisions/0001-independent-voice-input.md)、本地基线校验工具。
 - 状态：Draft 2 独立复核通过；无未关闭架构阻断项，等待用户批准。
 - 用户实施批准：**未获得**。审查通过也不得自动实施。
 

@@ -2,7 +2,7 @@
 
 - 状态：已接受（2026-10-25）
 - 决策者：用户（"你先做深做实"）；实施：本次会话
-- 关联：[ADR-0001](0001-independent-speechrail-input.md)、[ADR-0002](0002-drop-always-on-dictation.md)、[ADR-0003](0003-unauthenticated-loopback-engines.md)、[回环 STT 引擎兼容性调研](../research/2026-10-25-local-stt-engine-contracts.md)、[设计文档](../superpowers/specs/2026-10-23-speechrail-input-design.md)
+- 关联：[ADR-0001](0001-independent-voice-input.md)、[ADR-0002](0002-drop-always-on-dictation.md)、[ADR-0003](0003-unauthenticated-loopback-engines.md)、[回环 STT 引擎兼容性调研](../research/2026-10-25-local-stt-engine-contracts.md)、[设计文档](../superpowers/specs/2026-10-23-voice-input-design.md)
 
 ## 背景
 

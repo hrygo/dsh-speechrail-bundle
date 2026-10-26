@@ -62,5 +62,5 @@
 ## 复核方式（当允许真机验证时）
 
 1. 对每个候选引擎：`curl -sS -o /dev/null -w '%{http_code}'` 打一次真实上传，记录路由/字段/格式是否被接受。
-2. 用本插件的设置页写入该引擎的模型名，观察 `speechrail_input_status` 的 `authenticated` 与 `failureCode`。
+2. 用本插件的设置页写入该引擎的模型名，观察 `voice_input_status` 的 `authenticated` 与 `failureCode`。
 3. 把实测结果与本表逐行对照；凡有出入的，以实测为准并更新本文件（保留日期与来源）。

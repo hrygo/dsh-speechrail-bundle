@@ -3,15 +3,23 @@
 按版本倒序。「行为」列是用户能感知的变化，细节见对应 release 页（每一条的完整说明、证据与未核实项都在那里）。
 
 安装方式与版本号无关：`plugin_manager install_bundle` 指向 tag 固定的 URL（见各 README）。本文件与
-[`packages/speechrail-input/package.json`](packages/speechrail-input/package.json) 的版本号由
+[`packages/voice-input/package.json`](packages/voice-input/package.json) 的版本号由
 `tools/check-release-consistency.mjs` 与 README 里的安装 URL 一处绑定。
+
+## 2.0.0 — 改名为 `dsh-voice-input`
+
+- **名字**：`@hrygo/dsh-speechrail-bundle` → **`dsh-voice-input`**，包目录 `packages/speechrail-input` → `packages/voice-input`。理由见 [ADR-0006](docs/decisions/0006-name-the-plugin-dsh-voice-input.md)：本机生态里三方插件都是无 scope 的 `dsh-<短横线>`（`dsh-image-gen`、`dsh-lsp-actions`、`dsh-better-sidebar`），而旧名既带个人 scope 又带 `-bundle` 后缀，还把某个具体引擎写进了插件名——插件本身与引擎无关。
+- **跟着改的用户可见标识**：快捷键 id `voice-input.dictate`、agent 工具名 `voice_input_status`、composer 席位 cell id `voice-input-panel`、locale 命名空间 `voice-input`、设置页 key = 包名（即 `dsh-voice-input`）、DOM 钩子 `data-voice-input-*`、Host entry id `voice-input` / `voice-input-tools`、发布资产名 `dsh-voice-input.tgz`。
+- **故意没改**：Remote namespace `speechrailInput` 与内部 `SpeechRail*` 类型名（它们描述的是 SpeechRail 的 wire 契约，不是插件品牌）；持久化存储单元 `speechrail_input_pending`（见下）；GitHub 仓库名。
+- **迁移代价（要说清）**：配置键随包名变化，装在旧名下时的端点、凭据引用、语言与模型**不会自动带过来**，需要在设置页重填一次。未确认上传的门禁记录存在 `speechrail_input_pending` 单元里，单元名故意保留，所以旧的未确认状态仍然读得到——改名不会让一次「结局未知」的上传悄悄失效。
+- 引擎相关内容（`/v1/speechrail/capabilities`、`SPEECHRAIL_API_KEY`、SpeechRail 服务本身）不变。
 
 ## 1.0.0 — 稳定契约，按钮与报告分居模型选择器两侧
 
-- **界面布局**：麦克风按钮移到模型选择器**右侧**（composer 的 activity 席位），按动后产生的计时、阶段文字、取消、消息与「插入草稿」留在模型选择器**左侧**（`conversation.input.right` list 席位）。一次录音由两个席位共同绘制，状态因此移出组件、放进插件生命周期的 `SpeechRailControl`（[control.ts](packages/speechrail-input/src/client/control.ts)）。
+- **界面布局**：麦克风按钮移到模型选择器**右侧**（composer 的 activity 席位），按动后产生的计时、阶段文字、取消、消息与「插入草稿」留在模型选择器**左侧**（`conversation.input.right` list 席位）。一次录音由两个席位共同绘制，状态因此移出组件、放进插件生命周期的 `SpeechRailControl`（[control.ts](packages/voice-input/src/client/control.ts)）。
 - **精修**：悬停面与聚焦环带 120ms 过渡；系统开启「减少动态效果」时过渡与旋转一并关闭（等待阶段改为静止环）；旋转指示器与麦克风同为 16px；取消字形居中排版；设置页输入框聚焦时边框变色且不夺走原生焦点环；语言注意事项移到选项组之外；转写能力那一行不再把状态说两遍。
 - **图标与对比度**：插件图标改为自带底板的成品图标——原先用 `currentColor` 描边，被当作图片加载时（市场条目的形态）会被画成近黑，深色底上不可见；底板与字形对比 5.6:1，底板对白底 5.6:1、对近黑底 3.4:1，由 `tests/icon.host.spec.ts` 计算守卫，并在白底/深底上渲染核验。composer 圆按钮与操作胶囊改用较重的 `border-l2`（`border-l1` 是分隔线轻重），等待阶段的光标不再降到 55% 透明度——那时它是唯一的进度信息，保持全对比。
-- **稳定承诺**：见 [README 的 Stability 一节](packages/speechrail-input/README.md#stability-in-1x)。测试 319 个用例，23 个文件。
+- **稳定承诺**：见 [README 的 Stability 一节](packages/voice-input/README.md#stability-in-1x)。测试 319 个用例，23 个文件。
 
 ## 0.12.0 — 控件与设置页一眼可读
 

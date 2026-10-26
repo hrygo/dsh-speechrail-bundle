@@ -1,10 +1,10 @@
 # 独立 SpeechRail DSH bundle 实施计划
 
-> 依据：[设计 Draft 2](../specs/2026-10-23-speechrail-input-design.md)（已通过独立审查与用户批准）。本计划只做代码实现与 mock 验证；不激活当前 profile、不写入凭据、不使用真实麦克风或真实推理。
+> 依据：[设计 Draft 2](../specs/2026-10-23-voice-input-design.md)（已通过独立审查与用户批准）。本计划只做代码实现与 mock 验证；不激活当前 profile、不写入凭据、不使用真实麦克风或真实推理。
 
 ## 目标
 
-交付 `@hrygo/dsh-speechrail-bundle`：一个可独立安装的 DSH bundle，用本机 SpeechRail 的 OpenAI-compatible 文件转写端点，把浏览器录音变成可编辑草稿。
+交付 `dsh-voice-input`：一个可独立安装的 DSH bundle，用本机 SpeechRail 的 OpenAI-compatible 文件转写端点，把浏览器录音变成可编辑草稿。
 
 ## 架构
 
@@ -27,8 +27,8 @@ flowchart LR
 
 ## 规格来源
 
-- 设计：[2026-10-23-speechrail-input-design.md](../specs/2026-10-23-speechrail-input-design.md)
-- 选型：[ADR-0001](../../decisions/0001-independent-speechrail-input.md)
+- 设计：[2026-10-23-voice-input-design.md](../specs/2026-10-23-voice-input-design.md)
+- 选型：[ADR-0001](../../decisions/0001-independent-voice-input.md)
 - 官方基线：[upstream/deepseek-harness](../../../upstream/deepseek-harness/)（只读参照）
 - 审查记录：[2026-10-23-design-review.md](../../reviews/2026-10-23-design-review.md)
 
@@ -114,11 +114,11 @@ flowchart LR
 
 按上文偏差 2、3 未实现：模型工具入口、麦克风设备选择器。按偏差 1 新增：`packages/typert-protocol` 垫片与等价性测试。
 
-验证命令：`pnpm verify`（基线校验 → 生成 → 类型检查 → 双 bundle → 测试）、`pnpm --filter @hrygo/dsh-speechrail-bundle exec npm pack --dry-run`。
+验证命令：`pnpm verify`（基线校验 → 生成 → 类型检查 → 双 bundle → 测试）、`pnpm --filter dsh-voice-input exec npm pack --dry-run`。
 
 ### 第三轮追加（2026-10-24）
 
-已完成：薄 agent 工具 `speechrail_input_status`（只读、可选基础设施、结构化定义，避免 `dsh-tools` 声明牵入 `dsh-llm` 使 Typert 生成失败），`tests/tools.host.spec.ts` 6 项，测试总数 104（host 99 + client 5）。
+已完成：薄 agent 工具 `voice_input_status`（只读、可选基础设施、结构化定义，避免 `dsh-tools` 声明牵入 `dsh-llm` 使 Typert 生成失败），`tests/tools.host.spec.ts` 6 项，测试总数 104（host 99 + client 5）。
 
 仍未完成：客户端组件的 jsdom 测试、麦克风设备选择器、真实服务/真实麦克风验证、profile 激活。
 

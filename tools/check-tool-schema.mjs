@@ -3,7 +3,7 @@
  * Verify the agent tool definition against the Harness registry's real schema check.
  *
  * The tool definition is written structurally (see
- * `packages/speechrail-input/src/host/tools.ts`) because importing
+ * `packages/voice-input/src/host/tools.ts`) because importing
  * `@deepseek-ai/dsh-tools` declarations pulls `@deepseek-ai/dsh-llm` into the
  * Typert-analyzed program and breaks generation. That means the compiler cannot
  * check the schema against the registry, and an unsupported keyword would only
@@ -15,10 +15,10 @@
  * nothing is enforced silently. Without `--optional` an unresolvable package is a
  * failure, which is what a manual check wants.
  *
- *   pnpm --filter @hrygo/dsh-speechrail-bundle add -D @deepseek-ai/dsh-tools@0.2.1-rc.2
- *   pnpm --filter @hrygo/dsh-speechrail-bundle run build:host
+ *   pnpm --filter dsh-voice-input add -D @deepseek-ai/dsh-tools@0.2.1-rc.2
+ *   pnpm --filter dsh-voice-input run build:host
  *   node tools/check-tool-schema.mjs
- *   pnpm --filter @hrygo/dsh-speechrail-bundle remove @deepseek-ai/dsh-tools
+ *   pnpm --filter dsh-voice-input remove @deepseek-ai/dsh-tools
  *
  * When the package is not resolvable from the workspace at all, point the script at
  * any copy of it, including one still in the pnpm store:
@@ -45,7 +45,7 @@ function same(left, right) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const built = join(root, 'packages/speechrail-input/lib/types/host/tools.js')
+const built = join(root, 'packages/voice-input/lib/types/host/tools.js')
 
 if (!existsSync(built)) {
   console.error(`check-tool-schema: ${built} is missing; run the host build first`)

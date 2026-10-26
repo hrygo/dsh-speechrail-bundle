@@ -12,7 +12,7 @@
 
 [官方快照](upstream/deepseek-harness/) 是上游固定 commit 的只读参照，不在此处重构。每次复制/升级基线必须保留许可证、来源 commit、逐文件校验和与差异说明。来源快照不纳入产品发布包。
 
-实施已获批准，因此仓库内存在可安装 patch 与发布包；边界改为：patch 只插入本仓库自己的发布包（`packages/speechrail-input`），绝不引用 `upstream/` 下的官方包，快照也不进入发布包文件清单（`files`）。
+实施已获批准，因此仓库内存在可安装 patch 与发布包；边界改为：patch 只插入本仓库自己的发布包（`packages/voice-input`），绝不引用 `upstream/` 下的官方包，快照也不进入发布包文件清单（`files`）。
 
 ## 设计原则
 
