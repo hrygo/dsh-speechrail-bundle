@@ -178,3 +178,14 @@
 - **1.x 冻结面**写进包 README「Stability in 1.x」：席位与 cell key、设置字段名、快捷键命令 id、agent 工具名、插入不提交语义、每个 take 一次 OpenAI 形状请求且无重试无云回退、只用已声明 token。**不冻结**：视觉表现；DSH 版本（声明 `>= 0.2.1-rc.2`，0.8.0 验证过 0.2.1-rc.3）。
 - **发布**：`pnpm verify` 退出 0（23 个测试文件 / 319 个用例）；tag 固定 URL 安装到 `/Users/hrygo/.dsh/profiles/desktop`，`package.json` 与 `pnpm-lock.yaml` 均指 `v1.0.0`；资产 45 个条目 / 96,934 字节，下载字节 sha256 `d8685913fe554d6177cdd12a9d3762fd252337d384b7e57e78be0347349c0d09` 与本地 `npm pack` 一致；装入后的 `lib/client.js` 含 `voice-input-panel`、`data-voice-input-half`×2、`border-l2`×3，且 `--dsw-*` 未声明 token 为 0。
 - **未核实**：真机观感（间距、悬停面颜色、16px 旋转是否顺滑、深色主题下的实际对比）、两个席位在真实 composer 里的排布间距、以及「官方 bundle 展开 activity 时报告半隐藏」这一限制的真实表现。都需要用户刷新页面（或重启 App）后判断。
+
+**2026-10-26 发布之六（2.0.0，改名）**：用户提出「感觉不像一个标准的三方插件的名字」，并要求「把 README、README 都指定下任务」（听写把它转成了 redmi/gemini，经确认是两个 README，并且选择在 Paperclip 里建任务而不是我直接改）。
+
+- **命名决定**：`@hrygo/dsh-speechrail-bundle` → `dsh-voice-input`，目录 `packages/voice-input`。实测依据：本机 `~/.dsh/profiles/desktop/node_modules` 里已装的三方插件全是无 scope 的 `dsh-<用途>`（`dsh-image-gen` 0.9.2、`dsh-lsp-actions` 0.5.17、`dsh-context` 0.77.0、`dsh-better-sidebar` 0.28.0），`@local/dsh-ptc-tool-search` 的 scope 表示「本机私有」而非作者个人；旧名三项都不合（个人 scope、`-bundle` 后缀、把引擎名写进插件名），而插件本身引擎无关。见 [ADR-0006](../decisions/0006-name-the-plugin-dsh-voice-input.md)。
+- **跟着改的用户可见标识**（用户选的「包名 + 用户可见标识」范围）：快捷键 `voice-input.dictate`、agent 工具 `voice_input_status`、cell id `voice-input-panel`、locale 命名空间 `voice-input`、设置页 key（= 包名）、DOM 钩子 `data-voice-input-*`、host entry `voice-input` / `voice-input-tools`、发布资产 `dsh-voice-input.tgz`。
+- **故意不改**：Remote namespace `speechrailInput` 与 `SpeechRail*` 内部类型（描述引擎 wire 契约）；`SPEECHRAIL_API_KEY`、`/v1/speechrail/capabilities`（引擎契约）；持久化单元 `speechrail_input_pending`（磁盘记录不是标签，改名会让一次「结局未知」上传的门禁记录无人读——正是 fail-closed 机制存在的理由）；GitHub 仓库名（本次未授权改仓库，且重定向保旧链接）。
+- **机械替换的坑**：DOM 钩子有两个拼写（`data-voice-input-note` 与 `dataset.voiceInputNote`），首轮只替换了 kebab 形式，三条测试立刻红——这正是「改名要跑测试」而不是「改名后目测」的理由。
+- **迁移代价**：配置键随包名变，旧安装的端点/凭据引用/语言/模型不会带过来。实测本机 `~/.dsh` 下没有找到任何持久化的旧配置（`requestTimeoutMs`/`baseUrl` 全库无命中），所以对这台机器这笔代价实际为零；journal 单元名保留，`speechrail_input_pending.json` 仍是空记录。
+- **发布与安装**：`pnpm verify` 退出 0（23 文件 / 319 用例）；资产 45 条目 / 97,239 字节，下载字节 sha256 `3be9131664f3c2b715705808b101c2dcd20819f044876c79d9ffdca67f540649` 与本地 `npm pack` 一致；`plugin_manager install_bundle` 装入 v2.0.0 tag 固定 URL，`remove_bundle` 卸掉旧包（`@hrygo` 目录已空，profile 依赖里只剩 `dsh-voice-input`）。
+- **未完成/需用户动作**：安装后运行中的 Host 仍报 `service "speechrailInput" has been registered at <speechrail-input>`——那是**旧包留在内存里的注册**（磁盘状态已正确：依赖与 node_modules 只有新包）。需要重启一次 App 才会消失；仅刷新页面不够。重启后应确认 composer 里只有一个麦克风、按钮在模型选择器右侧、agent 工具显示为 `voice_input_status`。
+- **另一件事（Paperclip）**：按用户要求在 Paperclip（公司 Delegra）建了两个可跟踪任务：DEL-34「README（英文）改名后重写：README.md + packages/voice-input/README.md」派给「主程 · Codex · 本机」，DEL-35「README.zh-CN.md 改名后重写」派给「研析 · OpenCode · 本机」，基线 commit `0447c012`，约束是只改指定文件、不提交、自检 `check-release-consistency`。
