@@ -1,61 +1,82 @@
-# dsh-speechrail-bundle
+# dsh-voice-input
 
-An independent [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) voice-input
-bundle that records in the browser and transcribes through a **local** service over the
+An independent voice-input plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+It records in the browser and transcribes through a **local** service over the
 OpenAI-compatible file-transcription API: the SpeechRail reference implementation, or any other
 loopback engine with the same shape. It does not require the official voice bundle to be enabled,
 and it never talks to a remote endpoint: loopback only.
 
-[中文说明](README.zh-CN.md) · [Package README](packages/voice-input/README.md) · [Design and review record](docs/superpowers/specs/2026-10-23-voice-input-design.md)
+[中文说明](README.zh-CN.md) · [Package README](packages/voice-input/README.md) · [Design record](docs/superpowers/specs/2026-10-23-voice-input-design.md) · [Changelog](CHANGELOG.md)
 
-**Status: implemented, verified, and running in this machine's `desktop` profile.** Every release
-is built by `pnpm verify` (baseline check → Typert generation → both type checks → bundles → tests)
-and installed through the plugin manager from its own GitHub Release asset, after which the shipped
-files are byte-compared against the repository build.
+**Status: package 2.0.0, installed in this machine's `desktop` profile.** Every release is built by
+`pnpm verify` (baseline check → Typert generation → both type checks → bundles → tests), published as
+its own GitHub Release asset, and installed through the plugin manager at a tag-pinned URL; the
+shipped bytes were compared against the repository build (sha256 `3be91316…`, 2026-10-26), and the
+live Harness then reported `voice_input_status` as a tool and `voice-input-panel` as an active occupant
+of `conversation.input.right`.
+
+**Not verified by me:** what it looks like. Spacing, colours, motion and the dark-theme contrast are
+claims about the styles that produce them, not about a screen I have seen. Real-microphone capture and
+real-engine inference are also unverified here — this machine's runs are synthetic.
+
+The plugin name and settings-page key are `dsh-voice-input`; its source directory is
+`packages/voice-input`. SpeechRail names remain only where they identify engine or wire contracts
+and the existing journal. See [the naming decision](docs/decisions/0006-name-the-plugin-dsh-voice-input.md).
 
 ## What it provides
 
 | Face | What it does |
 |---|---|
-| Host | A SpeechRail service over a Strict Typert Remote surface: loopback-only uploads, credential **by reference**, a single in-flight gate, a non-sensitive pending journal, and stable failure codes. |
-| Client | A composer microphone button in its own seat to the right of the model selector, which turns into the live waveform where it stands (no toolbar rearrangement) and hands the rest of the take to the toolbar group on the model selector's left: running-time counter, the work in progress, cancel, the message and the transcript the draft refused. Never submits: the text is inserted into the draft. A settings page; one rebindable keyboard command for starting and finishing a dictation; zh/en localisation; a blocked gate can be cleared from either. |
+| Host | A local transcription service over the Strict Typert Remote namespace `speechrailInput`: loopback-only uploads, credential **by reference**, a single in-flight gate, a non-sensitive pending journal, and stable failure codes. |
+| Client | One control in two seats: the microphone/waveform button in `conversation.input.activity` to the model selector's **right**; the timer, phase text, cancel, messages, insert-draft action and unproven-outcome acknowledgement in `conversation.input.right` to its **left** (cell id `voice-input-panel`). Transcripts enter the draft and are **never sent**. Settings use `plugins.bundle.config` with key `dsh-voice-input`; the rebindable command is `voice-input.dictate` (default `primary+shift+Space`). Includes zh/en localisation and acknowledgement in the composer and settings. |
 | Agent | One read-only tool, `voice_input_status`, so a model can explain *why* voice input is unusable without opening settings: the endpoint, the credential's three-state verdict, whether the endpoint states it can transcribe, the language hint that will actually travel, the limits in force, the gate, and — when the gate is closed — the failure that left the attempt unconfirmed. |
+
+The [2.x stability contract](packages/voice-input/README.md#stability-in-2x) freezes these identifiers,
+seats, settings fields, draft insertion, wire behaviour and declared-token policy until a major version.
 
 ## Two engine profiles, one contract
 
 | | SpeechRail (reference implementation) | Any other loopback OpenAI-shaped engine |
 |---|---|---|
-| Capability snapshot | `GET /v1/speechrail/capabilities` is read, and the limits and languages it states stay in force | no such endpoint: reported as `capabilities-absent`, the package defaults apply and the settings page labels them as defaults |
-| Transcript | `{"text": ...}`; the `usage` duration extension is accepted, validated and never surfaced as inference time | `{"text": ...}`, with or without `usage` |
+| Capability snapshot | `GET /v1/speechrail/capabilities` is read, and the limits and languages it states stay in force | 404/405: reported as `capabilities-absent`; the last snapshot stays in force, or the package defaults apply if there is none |
+| Transcript | `{"text": ...}`; `usage` is ignored, including malformed values, and never surfaced as inference time | `{"text": ...}`, with or without `usage` |
 | Credential | three states, never a guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (judged from the status alone), `unverified` when nothing judged it | same |
-| Language | sent when the snapshot enumerates it; a service that transcribes without listing languages receives the configured mode as an unverified hint | same |
+| Language | `auto` sends no hint; an enumerated domain admits only listed `zh`/`en` values; with no snapshot or an unknown language domain, `zh`/`en` travel as unverified hints. Explicitly unsupported transcription or languages admits only `auto`; unsupported transcription blocks recording. | same |
 | Journal, single in-flight gate, acknowledgement | apply | apply — operation ids are client-generated, so the guards do not depend on the service |
-| Enforced limits | the service's numbers, clamped to this package's own ceilings | the package defaults (4 MiB / 120 s) |
+| Enforced limits | stated limits clamped to the package ceilings; omitted limits keep their previous values | the last snapshot's limits, or package defaults (4 MiB / 120 s) if none is in force |
 
-Both profiles are pinned by `tests/engines-conformance.host.spec.ts`, which drives the real Host core
-over real loopback sockets against both kinds of engine and asserts what each one is reported to be.
+The synthetic servers in [`engines-conformance.host.spec.ts`](packages/voice-input/tests/engines-conformance.host.spec.ts)
+exercise the Host core over loopback sockets for both profiles. They do not establish compatibility
+with a running third-party engine.
 
 ## Safety properties
 
 - **Loopback only.** `http://127.0.0.1:<port>/v1` or `http://[::1]:<port>/v1`; anything else, and
   any URL carrying userinfo, is refused with a stable reason before a request is built.
 - **The credential is never stored, logged, or returned.** The plugin resolves a reference through
-  DSH credentials or settings and sends it as a bearer header; only the reference name and a
-  boolean ever reach a client or the agent tool. A local engine that authenticates nobody is
-  configured by clearing the reference, and the request then carries no `Authorization` header.
+  the DSH credential store for each operation and sends it as a bearer header. The settings page
+  receives the reference name and whether it resolved; the agent tool receives credential-presence
+  booleans and the probe's `accepted` / `refused` / `unverified` verdict, never the reference name or
+  key. A local engine that authenticates nobody is configured by clearing the reference, and the
+  request then carries no `Authorization` header.
 - **No transcript or audio is persisted.** The pending journal holds an operation id, a phase and a
   timestamp — nothing else — so a crash or reload cannot silently lose an upload whose outcome is
   unknown.
-- **Nothing is uploaded twice.** The gate admits one operation at a time, and an unknown outcome
-  blocks further uploads until it is explicitly acknowledged.
-- **Only a refusal opens the gate again.** A status that reached the client settles the pending
-  journal only when it proves the service did not process the upload - a 4xx other than 408 - or when
-  the service answered 200 and the answer itself was unusable. A 5xx (a gateway may have given up
-  while an upstream worker kept transcribing), a 3xx, a 408 and a 202 "accepted" all leave the
-  outcome unproven, so the gate keeps asking instead of inviting a second dictation over work that
-  may still be running.
+- **One attempt, no replay.** The gate admits one operation at a time. A cancel, timeout or network
+  loss after the body was written leaves an unproven outcome (`outcome: unknown`, `gate: unknown`)
+  and blocks another upload until explicit acknowledgement. A successful probe cannot clear it;
+  acknowledgement accepts the risk and does not prove the engine stopped.
+- **Settlement needs evidence.** A usable 200 response settles the operation. For failures, a 4xx
+  other than 408 proves refusal; an unusable 200 body settles only with `Content-Length` framing.
+  An unusable chunked or close-delimited 200 remains unproven. So do 5xx, 3xx, 408 and non-200 2xx
+  replies (including 202), even if their bodies arrive. A journal that cannot be cleared also keeps
+  the gate closed.
 - **Advertised limits only change when the service states them.** A limit an unrecognised,
   unreachable, or limit-less capability response omits keeps the value already in force.
+- **Declared theme tokens only.** Client theme colours use only declared Harness token names, guarded by
+  [`theme-tokens.host.spec.ts`](packages/voice-input/tests/theme-tokens.host.spec.ts), with fallbacks
+  for an absent token system. This is a source-level constraint, not visual verification; see
+  [ADR-0005](docs/decisions/0005-declared-theme-tokens-only.md).
 
 ## Requirements
 
@@ -80,18 +101,37 @@ reproduce those steps by hand):
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-voice-input.tgz
 ```
 
-A checkout worktree works the same way (`target: <path to packages/voice-input>`), and the
-local profile here runs this bundle at the latest release.
+A checkout worktree works the same way (`target: <path to packages/voice-input>`).
 
-To upgrade, install the tag-pinned asset rather than the `latest` one: the plugin manager keys a
-dependency by its target string, so re-running the command above on an installed bundle reports
-`already-installed` instead of fetching the newer bytes.
+For a later release under the same package name, install its tag-pinned asset rather than the
+`latest` one: the plugin manager keys a dependency by its target string, so re-running the command
+above on an installed bundle reports `already-installed` instead of fetching the newer bytes.
 
 ```
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
 ```
 
-Then point the entry at your engine. The endpoint and the credential reference are entry config, so they
+## Migrating from 1.x
+
+The package name changed: **2.0.0 is a new dependency, not an upgrade of the 1.x dependency**.
+Uninstall the old 1.x package through the Harness plugin manager before installing `dsh-voice-input`,
+so both microphone controls are not left in the same profile. Use the 2.0.0 install command above.
+
+Configuration is keyed by the package name. Re-enter the endpoint (`baseUrl`), credential reference
+(`credentialRef`), language and model for the new entry; they do not carry over automatically.
+The endpoint and credential reference belong in the entry config; language and model are writable
+on the settings page, whose key is now `dsh-voice-input`. Restate a custom request budget too.
+
+Unconfirmed-upload gate records remain readable: the journal unit deliberately keeps the name
+`speechrail_input_pending`. Renaming the plugin does not erase an unproven upload or release its gate.
+The Remote namespace `speechrailInput`, default reference `SPEECHRAIL_API_KEY`, engine path
+`/v1/speechrail/capabilities` and GitHub repository name also stay unchanged. The
+[naming decision](docs/decisions/0006-name-the-plugin-dsh-voice-input.md) explains the rationale
+and migration cost.
+
+## Configure your engine
+
+Point the entry at your engine. The endpoint and the credential reference are entry config, so they
 are changed by patching the entry in the profile's `cordis.patch.yml`; the model id is edited on the
 bundle's settings page, together with the language and the request budget:
 
@@ -106,6 +146,8 @@ bundle's settings page, together with the language and the request budget:
 A patch replaces the row's `config` wholesale instead of merging it, so restate every field the entry
 relies on; anything omitted falls back to the schema defaults in the package README's configuration
 table. If the change does not appear, restart the app.
+
+## Other engines
 
 Three things vary between engines, and all three are configuration here rather than code (engine by
 engine, with sources: [回环 STT 引擎兼容性调研](docs/research/2026-10-25-local-stt-engine-contracts.md) —
@@ -125,35 +167,40 @@ documentation level, not measured on this machine):
   ignores one that lands after a newer read has already been applied, but it cannot order two
   responses by their content: `revision` tracks settings writes, not the gate, so a response the
   service produced from an older snapshot can still be shown until the next read corrects it.
-- A capability the service does not state is treated as unsupported rather than assumed, and a
-  service that does not implement the capability endpoint keeps the last snapshot it ever
-  advertised: the enforced limits are then the package defaults, shown as such on the settings page.
-  The snapshot never expires; the only re-probe is an explicit check, and re-probing before every
-  upload was rejected because it would add a round trip after the user has already spoken.
-- Language is the one deliberate exception to that rule, and it follows what the service can *do*:
+- The capability snapshot never expires. A failed or absent capability endpoint keeps the last
+  snapshot and its limits in force; defaults (4 MiB / 120 s) apply only when there is no snapshot.
+  No snapshot means transcription support is unknown and does not itself block recording; a
+  recognized snapshot that does not state transcription as supported blocks it. Probing is explicit,
+  not repeated before every upload.
+- Language follows the snapshot in force:
   an enumerated list decides what is offered, a language the service states no support for is
-  reported as not in effect rather than switched silently, and a service that transcribes without
-  listing its languages (SpeechRail answers this way) sends the mode you chose as an unverified hint —
+  reported as not in effect rather than switched silently, and a service with no snapshot or an unknown
+  language domain sends the mode you chose as an unverified hint —
   labelled on the settings page, named in the composer while the request is in flight, and reported
   as `languageHint` by the agent tool.
 - The ceilings this package enforces are its own, and deliberately stricter than SpeechRail's: a
-  live service advertises 512 MiB and 3600 s, this bundle enforces 4 MiB and 120 s, because a whole
-  take travels as one base64 JSON carrier through the Remote surface. A take over either ceiling is
+  historical SpeechRail service advertised 512 MiB and 3600 s. This bundle enforces 4 MiB and 120 s
+  because a whole take travels as one base64 JSON carrier through the Remote surface. A take over either ceiling is
   refused by its real reason (`audio-too-long` / `audio-too-large`) rather than as a malformed
   recording.
 - The request budget is bounded to 1000–180000 ms, by the settings schema and again on the Remote
   path, because the settings store validates shape rather than `min`/`max`.
-- Changing a non-volatile setting (endpoint, model, credential reference) restarts the bundle's
+- Changing a non-volatile setting (endpoint or credential reference) restarts the bundle's
   entry, which releases the journal storage unit and immediately opens it again. The release is
   fire-and-forget, and the backend rejects a second handle for a unit that is still open, so the new
   instance can transiently read the journal as unavailable (an unproven gate with a spurious
-  acknowledgement prompt). A retry heals it; awaiting the release would remove the window.
+  acknowledgement prompt). Retrying the journal read can heal it; this is not an upload retry.
+  Model, language and request budget are volatile and do not restart the entry.
 - The erase used by an unreadable-record acknowledgement reads the slot and then writes it, and the
   storage service offers no compare-and-set. An operation recorded between those two steps is
   therefore erased (the gate itself stays correct: the host re-checks who holds it afterwards). The
   window is two awaits wide and only exists while an unreadable slot is being acknowledged.
-- The bundle never reads or stores the credential itself: it resolves the configured reference name
-  through the Harness credential store on each request.
+- The Host resolves the configured reference through the Harness credential store on each request;
+  the secret is held only for that request, never persisted or returned by this plugin.
+- The activity seat is single-occupant. This plugin never reports expansion; if another activity
+  occupant expands, the composer hides the standard controls, including this plugin's left report.
+  Slot registration does not promise conflict-free coexistence with other microphone plugins.
+  Visual placement and coexistence in a live Harness have not been verified in this update.
 
 ## Verify
 
@@ -161,11 +208,15 @@ documentation level, not measured on this machine):
 pnpm install
 pnpm verify     # baseline check -> Typert generation -> both type checks -> bundles -> tests
 pnpm test       # host and client unit tests (all mock or synthetic audio)
+node tools/check-release-consistency.mjs  # version and documented tag URLs
 ```
 
-`pnpm verify` also re-checks the frozen upstream snapshot against
+`pnpm verify` runs the baseline check, Typert generation, both type checks, Host and client bundles,
+journal-unit, release-URL, package-content and optional tool-schema checks, then the tests.
+It also re-checks the frozen upstream snapshot against
 [upstream/baseline.json](upstream/baseline.json) and the pinned upstream commit. Nothing in this
-repository contacts a real service, records audio, or runs inference.
+verification sequence requires a real engine, microphone recording, or inference; transport tests
+use synthetic loopback servers. Running the installed plugin is a separate runtime action.
 
 The agent tool's definition is written structurally, so the compiler cannot check it against the
 registry; `tools/check-tool-schema.mjs` compares it with `defineTool`'s compiled output and runs the

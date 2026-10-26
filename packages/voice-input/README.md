@@ -19,15 +19,35 @@ plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-spe
 
 A checkout worktree works the same way (`target: <path to packages/voice-input>`).
 
-To upgrade an installed bundle, install the tag-pinned asset: the plugin manager keys a dependency by
-its target string, so the `latest` command above answers `already-installed` instead of fetching newer
-bytes.
+For a later release under the same package name, install its tag-pinned asset: the plugin manager
+keys a dependency by its target string, so the `latest` command above answers `already-installed`
+instead of fetching newer bytes.
 
 ```
 plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
 ```
 
-Then point the entry at your engine. The endpoint and the credential reference are entry config, so
+## Migrating from 1.x
+
+The package name changed: **2.0.0 is a new dependency, not an upgrade of the 1.x dependency**.
+Uninstall the old 1.x package through the Harness plugin manager before installing `dsh-voice-input`,
+so both microphone controls are not left in the same profile. Use the 2.0.0 install command above.
+
+Configuration is keyed by the package name. Re-enter the endpoint (`baseUrl`), credential reference
+(`credentialRef`), language and model for the new entry; they do not carry over automatically.
+The endpoint and credential reference belong in the entry config; language and model are writable
+on the settings page, whose key is now `dsh-voice-input`. Restate a custom request budget too.
+
+Unconfirmed-upload gate records remain readable: the journal unit deliberately keeps the name
+`speechrail_input_pending`. Renaming the plugin does not erase an unproven upload or release its gate.
+The Remote namespace `speechrailInput`, default reference `SPEECHRAIL_API_KEY`, engine path
+`/v1/speechrail/capabilities` and GitHub repository name also stay unchanged. The
+[naming decision](../../docs/decisions/0006-name-the-plugin-dsh-voice-input.md) explains the rationale
+and migration cost.
+
+## Configure your engine
+
+Point the entry at your engine. The endpoint and the credential reference are entry config, so
 they are set by patching the `voice-input` entry in the profile's `cordis.patch.yml`; the model id
 is editable on the bundle's settings page together with the language and the request budget. A patch
 replaces that row's `config` wholesale rather than merging it, so restate every field the entry relies
@@ -49,22 +69,26 @@ not appear).
 
 ## What it does
 
-- Draws one control in two seats. The round button registers in the composer's activity seat, after
-  the model selector; everything a press produces - the running-time counter, the phase, the cancel
-  control, the message and a transcript the draft refused - registers in the model selector's own
-  group, before it, so a live take never moves the button out from under the click. One state machine
+- Draws one control in two seats. The round microphone/waveform button registers in
+  `conversation.input.activity`, to the model selector's **right**; everything a press produces -
+  the running-time counter, phase text, cancel, messages, insert-draft action and unproven-outcome
+  acknowledgement - registers in `conversation.input.right` (cell id `voice-input-panel`, order 20),
+  to the model selector's **left**. A live take never moves the button out from under the click.
+  One state machine
   ([`src/client/control.ts`](src/client/control.ts)) backs both halves, and it is disposed with the
   plugin rather than with a component, so a composer remount cannot drop a take.
 - Records through the browser microphone, resamples to canonical 16 kHz mono WAV and uploads
-  it exactly once.
+  it in one attempt, with no silent retry or cloud fallback.
 - Inserts the transcript into the current composer draft without touching the draft's later
   edits: a captured `TokenSpan` guards the insertion, and a refused insertion is kept for the
-  user to apply.
+  user to apply with “Insert into draft”. It **never sends** the draft.
 - Probes connectivity and, when the service offers it, the advertised capability snapshot
-  (`/v1/speechrail/capabilities`) to bound upload size and duration and to offer only the
-  languages the service enumerates. A service that does not implement that endpoint is used as a
-  plain transcription endpoint instead (see [Other engines](#other-engines)).
-- Persists language, model and request budget through the Harness settings page.
+  (`/v1/speechrail/capabilities`) to bound upload size and duration and to determine language options.
+  Enumerated languages constrain the selector; no snapshot or an unknown language domain permits
+  `zh`/`en` as unverified hints. `auto` always omits the field. A service that does not implement
+  that endpoint is used as a plain transcription endpoint instead (see [Other engines](#other-engines)).
+- Persists language, model and request budget through `plugins.bundle.config`, keyed by
+  `dsh-voice-input`; these volatile fields apply without restarting the entry.
 - Registers one rebindable keyboard command, `voice-input.dictate` (default
   <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd>
   elsewhere), so a dictation can be started and finished without the mouse: one press starts from
@@ -111,8 +135,8 @@ speaks the same shape on loopback:
 
 | Expectation | Detail |
 | --- | --- |
-| Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` and `language` only when they are configured. `Authorization: Bearer <credential>`, or no `Authorization` header at all when the credential reference is cleared for an engine that authenticates nobody. Engines that require a `model` field are the common reason to configure one. |
-| Transcript | A 200 whose JSON body carries a string `text`. The SpeechRail `usage: {type: "duration", seconds}` extension is optional; a `usage` that is present but malformed is still refused as `malformed-response`. |
+| Upload | `POST <base>/audio/transcriptions`, `multipart/form-data` with `file` (16 kHz mono WAV), `response_format=json`, plus `model` only when non-empty and `language` only when the configured `zh`/`en` hint is admitted by the snapshot rules below (`auto` omits it). `Authorization: Bearer <credential>`, or no `Authorization` header at all when the credential reference is cleared for an engine that authenticates nobody. Engines that require a `model` field are the common reason to configure one. |
+| Transcript | A 200 whose JSON body carries a string `text`. The optional SpeechRail `usage` extension is ignored, even when malformed; it cannot discard usable text and is never reported as inference time. |
 | Capabilities | Optional. When `GET <base>/speechrail/capabilities` answers 404 or 405 the probe reports `capabilities-absent`: the service stays reachable and usable, and the limits already in force keep applying (the package's absolute ceilings are never exceeded). 401/403 stay `unauthorized`, every 5xx (including 501) stays `server-error` with its retryable hint, and an unreachable service stays `unreachable`. |
 | Credential state | Reported in three states, never as a boolean guess: `accepted` only after a 200 answered the authenticated request, `refused` after a 401/403 (from the status alone, even when the body that followed was unusable), and `unverified` whenever nothing judged it (no response, a missing endpoint, a server error, a refused endpoint, or a request that carried no credential at all). The `voice_input_status` tool returns the same three strings, plus whether this endpoint was configured to present a credential in the first place. |
 | Agent report | The tool reports the language hint that will **actually travel** (not the configured mode), the endpoint's own statement about transcription (`supported` / `unsupported` / `unknown`), and the language modes the snapshot admits. A service that says it cannot transcribe is named as such instead of reading as usable. |
@@ -168,8 +192,9 @@ What changes on a non-SpeechRail engine, and what does not:
   a reason of its own, that reason is used rather than the status code alone (a declared
   `audio_decode_failed` is an audio problem, and a declared 429 is throttling worth retrying).
 - `model` is sent only when configured. Configure the engine's own model id (or leave it empty for
-  engines that ignore the field); a SpeechRail model id sent to another engine surfaces as
-  `bad-request`.
+  engines that ignore the field). A wrong id is reported according to the response: HTTP 404 is
+  `not-found`; HTTP 400 with `error.code: model_not_found` is `model-not-found`; other ordinary
+  400/422 refusals are `bad-request`. The plugin does not infer a missing route from 404 alone.
 - A snapshot that already said `transcriptionSupported: false` stays in force through a
   `capabilities-absent` probe (a snapshot never expires), so an endpoint that used to advertise an
   unsupported operation keeps refusing uploads until a later probe replaces it.
@@ -188,21 +213,23 @@ What changes on a non-SpeechRail engine, and what does not:
 | Credential | Resolved per operation from the Harness credential store; never persisted, logged, or sent anywhere but the configured loopback origin. An empty reference omits the header entirely, and the probe then reports the credential as `unverified` — a 200 with no credential on the wire judged no credential. |
 | Payloads | Bounded JSON carrier text; unknown fields are refused, not dropped. |
 | Audio | Validated WAV only, duration derived on the Host from the bytes, absolute ceilings independent of what the service advertises. |
-| Unproven outcome | A cancel, timeout or network loss after the body was written marks the outcome `unknown`, holds the gate and forbids replay until the user acknowledges it. If the stored record cannot be read at all, acknowledging asserts that nothing is outstanding and clears the slot; a medium that cannot be written refuses instead. |
-| Journal | A durable pending record is written before the upload; if local storage is unavailable the feature refuses to upload at all. |
+| Unproven outcome | A cancel, timeout or network loss after the body was written marks `outcome: unknown` and `gate: unknown`. 3xx, 408, 5xx and non-200 2xx replies also stay unproven. A usable 200 settles; an unusable 200 settles only with `Content-Length` framing (unusable chunked or close-delimited replies stay unproven). A 4xx other than 408 proves refusal. Journal-clear failure keeps the gate closed too. A probe cannot clear an unproven gate: explicit acknowledgement in the left composer panel or settings accepts the risk, without proving backend completion or replaying audio. |
+| Journal | A durable pending record is written in `speechrail_input_pending` before the upload; it contains only an operation id, phase and timestamp, never audio, text or credentials. An unavailable journal blocks uploads. Acknowledging an unreadable record asserts that nothing is outstanding; corrupt bytes can be cleared, but a medium that cannot be read or written refuses instead. |
 | Failures | Clients receive a closed code, HTTP status, retryable flag, request id and outcome. No body, message, path, credential or transcript text crosses the boundary. |
 | Agent tool | `voice_input_status` reads the same status projection as the settings page: booleans and short strings only, no audio and no upload. It contacts the service only when the caller asks for a probe. |
 
 ## Configuration
 
-The entry `voice-input` (inserted by `cordis.patch.yml`) exposes:
+The entry `voice-input` (inserted by `cordis.patch.yml`) exposes the following fields. Endpoint
+and credential-reference changes restart the entry; model, language and request budget are volatile.
+The settings-page key is the package name, `dsh-voice-input`.
 
 | Field | Default | Notes |
 | --- | --- | --- |
 | `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
 | `model` | empty | Empty omits the field and lets the service choose; most OpenAI-shaped engines **require** it and validate the value against the weights they have loaded (so a placeholder 404s). Editable on the settings page ([ADR-0004](../../docs/decisions/0004-model-id-writable-from-settings.md)), bounded at 200 characters. |
 | `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
-| `language` | `auto` | `auto` omits the field entirely; `zh`/`en` are only accepted when the snapshot enumerates them. |
+| `language` | `auto` | `auto` omits the field. An enumerated language domain admits only listed `zh`/`en`; with no snapshot or an unknown language domain they are unverified hints. Unsupported languages admit only `auto`; unsupported transcription also blocks recording. |
 | `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |
 
 ## Build and verification
@@ -215,7 +242,10 @@ pnpm test              # host and client unit tests
 ```
 
 `pnpm verify` runs, in order: the frozen upstream baseline check, Typert generation,
-`tsc -b` over both faces, the host and client bundles, and the unit tests.
+`tsc -b` over both faces, the Host and client bundles, journal-unit, release-URL, package-content
+and optional tool-schema checks, then the unit tests. For this README-only update, run
+`node tools/check-release-consistency.mjs` to check the version against all three documented tag URLs;
+that check does not verify release-asset availability, installation or runtime behaviour.
 
 The agent tool registers only where the Harness offers its tools service; the definition is
 declared structurally rather than through `@deepseek-ai/dsh-tools`, because importing that
@@ -243,6 +273,13 @@ against the published declarations.
 
 ## Known limitations
 
+- The activity seat is single-occupant, so coexistence with other microphone plugins is not
+  guaranteed. This plugin never reports expansion; another activity occupant expanding hides the
+  composer's standard controls, including this plugin's left report. Its shared controller survives
+  component remounts, but cannot prevent the composer from hiding that seat.
+- Visual placement, colours, motion, live microphone capture and real-engine inference have not been
+  verified in this documentation update. The theme-token guard checks declared names, not rendered
+  appearance or contrast.
 - The microphone device picker is not implemented; the system default input device is used.
 - The only model-facing entry point is the read-only `voice_input_status`; there is no tool
   that starts a recording or an upload.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript、React 18（jsdom + Testing Library）、tsdown、vitest、Cordis 插件（Host + Client）、`@deepseek-ai/dsh-client-shortcuts` 提供的 `ctx.shortcuts`。
 
-**Spec:** [docs/roadmap/2026-10-25-plugin-evolution.md](../roadmap/2026-10-25-plugin-evolution.md) §3「阶段一的规格」。该文件同时给出本计划的上位排序与授权边界。
+**Spec:** [docs/roadmap/2026-10-25-plugin-evolution.md](../../roadmap/2026-10-25-plugin-evolution.md) §3「阶段一的规格」。该文件同时给出本计划的上位排序与授权边界。
 
 **Precondition（先决条件，不是任务）:** 只有当 Stage 0 的真实使用结论是"障碍在触发方式，而不是识别质量或延迟"时才执行本计划。若结论相反，回到路线文档改走阶段 2。
 
