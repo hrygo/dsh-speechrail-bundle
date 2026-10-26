@@ -18,6 +18,10 @@
 #   - `tarball` uses `latest/download/` with a version-free asset name, which is the form the guide
 #     recommends because it never rots as releases are cut.
 #   - `description.en` is quoted because it contains a colon followed by a space.
+#   - `install` is the copy-paste command for a first install. It carries the tag-pinned URL, not
+#     `latest`: the plugin manager keys a dependency by its target string, so a re-run of a `latest`
+#     command after a release reports `already-installed` instead of fetching the new bytes. The
+#     listing's own `tarball` stays version-free, which is the form contributing.md recommends.
 #   - `icon` stays omitted in this file: the field wants a GitHub-hosted raster, and the shipped
 #     `icon.svg` is the source. `docs/market-submission/icon-256.png` is that source rendered at 256px
 #     (rsvg-convert -w 256 -h 256), so a follow-up PR can add the field once the accepted URL form is
@@ -25,6 +29,14 @@
 #
 # Submitted 2026-10-25 as (one file, 7 lines, CI check passed in 8m21s):
 #   https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9238
+# Still OPEN on 2026-10-26, and stale after the 2.0.0 rename: its file is named ...--packages-
+# speechrail-input.yml, points at that old subdirectory, and names the asset dsh-speechrail-bundle.tgz.
+# Updating it means renaming the file and replacing the body (see pull-request.md).
+#
+# The index already lists two other entries named `dsh-voice-input` (owners 0nt-one and NewDaNew,
+# both browser Web Speech API). Keeping the name is a recorded decision - see ADR-0006 - and the
+# installed plugin's card does not depend on this index: dsh-app-boot reads `locale/*.json` and
+# `package.json` inside the package for the title, sentence and icon.
 # The fork branch is hrygo/awesome-dsh-plugin:add-voice-input. The index regenerates its READMEs
 # and site after merge, so nothing else is edited by hand.
 #
@@ -32,6 +44,7 @@ url: https://github.com/hrygo/dsh-speechrail-bundle/tree/main/packages/voice-inp
 name: hrygo/dsh-speechrail-bundle#voice-input
 category: voice
 tarball: https://github.com/hrygo/dsh-speechrail-bundle/releases/latest/download/dsh-voice-input.tgz
+install: dsh plugin --profile web add "https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.1/dsh-voice-input.tgz"
 description:
-  en: "Local voice input for the DeepSeek Harness composer: record in the browser, transcribe through your own loopback SpeechRail service or any other OpenAI-compatible engine, and insert the text into the draft. It reads the service capability snapshot for upload and duration limits, languages and the credential verdict, keeps a fail-closed gate for an upload whose outcome is unknown, and gives agents a read-only status tool."
-  zh: "在 DSH 输入框里直接说话：浏览器录音，交由本机 SpeechRail 服务（或回环上的任意 OpenAI 兼容引擎）转写并插入草稿。读取服务能力快照（上传与时长限额、语言、鉴权判定），对结局未知的上传保持未确认门禁，并给 Agent 一个只读状态工具。只连回环地址，不激活配置、不写凭据、不做真实录音。"
+  en: "Brings your own transcription engine to the DeepSeek Harness composer: record in the browser, send the audio to a loopback SpeechRail service or any other OpenAI-compatible engine you point it at, and insert the text into the draft. Nothing is ever sent as a message. It reads the service capability snapshot for upload and duration limits, languages and the credential verdict, keeps a fail-closed gate for an upload whose outcome is unknown, and gives agents a read-only status tool."
+  zh: "给 DSH 输入框接上你自己的转写引擎：浏览器录音，交给本机 SpeechRail 服务（或回环上任意 OpenAI 兼容引擎）转写并插入草稿，从不替你发送。读取服务能力快照（上传与时长限额、语言、鉴权判定），对结局未知的上传保持未确认门禁，并给 Agent 一个只读状态工具。只连回环地址，不激活配置、不写凭据、不做真实录音。"
