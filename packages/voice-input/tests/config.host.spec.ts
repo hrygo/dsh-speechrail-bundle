@@ -13,6 +13,7 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_CREDENTIAL_REF,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  MAX_CREDENTIAL_REF_LENGTH,
   MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
@@ -29,11 +30,13 @@ describe('entry configuration', () => {
     // Documents the hazard the reader exists for: these are objects at runtime.
     expect(typeof (config.language as unknown as { get?: unknown }).get).toBe('function')
     expect(typeof (config.requestTimeoutMs as unknown as { get?: unknown }).get).toBe('function')
-    // The model id is volatile too, so a settings write applies to the next upload without a reload;
-    // the endpoint and the credential reference stay static on purpose (ADR-0004).
+    // The model id is volatile too, so a settings write applies to the next upload without a reload.
     expect(typeof (config.model as unknown as { get?: unknown }).get).toBe('function')
+    // The credential reference became writable from the settings page (ADR-0007): a wrong reference
+    // used to be a dead end there, with the row reporting "not configured" and no field to fix it.
+    expect(typeof (config.credentialRef as unknown as { get?: unknown }).get).toBe('function')
+    // The endpoint stays static: moving it re-points where a resolved secret is sent (ADR-0004).
     expect(typeof config.baseUrl).toBe('string')
-    expect(typeof config.credentialRef).toBe('string')
   })
 
   it('reads every default as a plain value', () => {
@@ -65,6 +68,14 @@ describe('entry configuration', () => {
     expect(() => parsed({ language: 'fr' })).toThrow()
     expect(() => parsed({ requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS - 1 })).toThrow()
     expect(() => parsed({ requestTimeoutMs: MAX_REQUEST_TIMEOUT_MS + 1 })).toThrow()
+  })
+
+  it('bounds the credential reference at load time as well as at write time', () => {
+    const longest = 'A'.repeat(MAX_CREDENTIAL_REF_LENGTH)
+    expect(readConfig(parsed({ credentialRef: longest })).credentialRef).toHaveLength(MAX_CREDENTIAL_REF_LENGTH)
+    expect(() => parsed({ credentialRef: `${longest}A` })).toThrow()
+    // Empty stays a supported state - the endpoint simply takes no credential (ADR-0003).
+    expect(readConfig(parsed({ credentialRef: '' })).credentialRef).toBe('')
   })
 
   it('bounds the model id at load time as well as at write time', () => {

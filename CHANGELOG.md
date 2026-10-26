@@ -6,6 +6,13 @@
 [`packages/voice-input/package.json`](packages/voice-input/package.json) 的版本号由
 `tools/check-release-consistency.mjs` 与 README 里的安装 URL 一处绑定。
 
+## 2.1.0 — 凭据引用可以在设置页改
+
+- **修的是死路**：设置页把「凭据引用」渲染成只读文本，引用解析不到时只写一句「未配置 SPEECHRAIL_API_KEY」，页面上没有任何可改的入口——唯一的修法是手工编辑 profile 的 `cordis.patch.yml`。2.0.0 改名让所有人重填配置之后，这条路更常被撞到。现在它是可编辑输入框，随「保存」写入，下一次请求即生效（volatile）。
+- **只改名字，不改密钥**：写入的是引用名，必须匹配凭据服务的 `CredentialRef` 语法 `/^[A-Za-z_][A-Za-z0-9_]*$/`、最长 128；空串仍是受支持的状态（该端点不需要鉴权，请求不带 `Authorization` 头）。Host 拒绝非法名字而不是存下它，设置页用同一规则先说明原因，避免「保存后报一个看不懂的错」。协议里没有任何字段承载密钥值。
+- **端点仍然冻结**：`baseUrl` 依旧只能通过条目配置改——移动端点才会真正改变「解析出来的密钥送去哪儿」，那是条目级决定。理由与被否决的方案见 [ADR-0007](docs/decisions/0007-credential-reference-writable-from-settings.md)，它取代了 [ADR-0004](docs/decisions/0004-model-id-writable-from-settings.md) 中「端点与引用一起冻结」的后半条。
+- **约束与用例**：Host 侧 `parseConfigureRequest` 校验语法与长度，写路径新增引用；页面侧同规则前置校验、空值清除、脏值保护。测试 24 文件 / 331 用例。
+
 ## 2.0.1 — 卡片上显示的是插件自己的说明，而不是安装地址
 
 - **症状**：插件页那张卡片只显示 `dsh-voice-input`、`2.0.0` 和一串 release URL，没有标题、没有简介、没有图标；而同一页里的 `dsh-better-sidebar`、`dsh-image-gen` 都有。

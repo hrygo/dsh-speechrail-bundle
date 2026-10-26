@@ -10,6 +10,8 @@
  */
 
 import {
+  CREDENTIAL_REF_PATTERN,
+  MAX_CREDENTIAL_REF_LENGTH,
   MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
@@ -94,7 +96,12 @@ export interface CoreDependencies {
   readonly settingsRevision: () => number | null
   /** Persist the editable subset of this entry. */
   readonly writeSettings: (
-    patch: { readonly language: SpeechRailLanguageMode; readonly requestTimeoutMs: number; readonly model: string },
+    patch: {
+      readonly language: SpeechRailLanguageMode
+      readonly requestTimeoutMs: number
+      readonly model: string
+      readonly credentialRef: string
+    },
     expectedRevision: number,
   ) => Promise<'ok' | 'conflict' | 'failed'>
 }
@@ -207,11 +214,12 @@ export function parseTranscribeRequest(text: string): ParseResult<SpeechRailTran
  * @returns the validated request, or a refusal.
  */
 export function parseConfigureRequest(text: string): ParseResult<SpeechRailConfigureRequest> {
-  const record = strictRecord(decodeCarrier(text, CONFIG_PAYLOAD_MAX_BYTES), ['language', 'requestTimeoutMs', 'model', 'expectedRevision'])
+  const record = strictRecord(decodeCarrier(text, CONFIG_PAYLOAD_MAX_BYTES), ['language', 'requestTimeoutMs', 'model', 'credentialRef', 'expectedRevision'])
   if (record === null) return refuse('bad-request')
   const language = record.language
   const timeout = record.requestTimeoutMs
   const model = record.model
+  const reference = record.credentialRef
   const revision = record.expectedRevision
   if (language !== 'auto' && language !== 'zh' && language !== 'en') return refuse('bad-request')
   // The schema bound is the only other place this range exists, and `settings.write`
@@ -224,8 +232,14 @@ export function parseConfigureRequest(text: string): ParseResult<SpeechRailConfi
   // later. Nothing else about the id is constrained: which names an engine recognises is the
   // engine's business, and this Host does not keep a list of them.
   if (typeof model !== 'string' || model.length > MAX_MODEL_LENGTH) return refuse('bad-request')
+  // A reference is a name, never a value: it is resolved through the Harness credential store on
+  // every request, and the settings page has no field for the secret behind it. The grammar is the
+  // one the credentials service enforces, checked here so a page-accepted name cannot fail later at
+  // resolve time; the empty string stays valid and means "this endpoint needs no credential".
+  if (typeof reference !== 'string' || reference.length > MAX_CREDENTIAL_REF_LENGTH) return refuse('bad-request')
+  if (reference !== '' && !CREDENTIAL_REF_PATTERN.test(reference)) return refuse('bad-request')
   if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return refuse('bad-request')
-  return { ok: true, value: { language, requestTimeoutMs: timeout, model, expectedRevision: revision } }
+  return { ok: true, value: { language, requestTimeoutMs: timeout, model, credentialRef: reference, expectedRevision: revision } }
 }
 
 /**
@@ -486,6 +500,7 @@ export class SpeechRailInputCore {
       language: parsed.value.language,
       requestTimeoutMs: parsed.value.requestTimeoutMs,
       model: parsed.value.model,
+      credentialRef: parsed.value.credentialRef,
     }, revision)
     if (written === 'conflict') return { ok: false, revision: this.deps.settingsRevision() ?? revision, failure: failure('conflict') }
     if (written === 'failed') return { ok: false, revision, failure: failure('internal') }

@@ -7,6 +7,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import {
+  CREDENTIAL_REF_PATTERN,
+  MAX_CREDENTIAL_REF_LENGTH,
   MAX_MODEL_LENGTH,
   MAX_REQUEST_TIMEOUT_MS,
   MIN_REQUEST_TIMEOUT_MS,
@@ -83,6 +85,7 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const [language, setLanguage] = useState<SpeechRailLanguageMode>('auto')
   const [budgetText, setBudgetText] = useState(String(MIN_REQUEST_TIMEOUT_MS))
   const [modelText, setModelText] = useState('')
+  const [credentialText, setCredentialText] = useState('')
   const [note, setNote] = useState('')
   const [noteKind, setNoteKind] = useState<NoteKind>('error')
   const [focusedField, setFocusedField] = useState('')
@@ -95,13 +98,20 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
   const languageDirty = useRef(false)
   const budgetDirty = useRef(false)
   const modelDirty = useRef(false)
+  const credentialDirty = useRef(false)
   // Counters, not booleans: a field edited while a request is in flight was not part of that
   // request, so it has to stay dirty after the request adopts the server's answer.
   const languageEdits = useRef(0)
   const budgetEdits = useRef(0)
   const modelEdits = useRef(0)
+  const credentialEdits = useRef(0)
 
-  const editEpoch = (): { language: number, budget: number, model: number } => ({ language: languageEdits.current, budget: budgetEdits.current, model: modelEdits.current })
+  const editEpoch = (): { language: number, budget: number, model: number, credential: number } => ({
+    language: languageEdits.current,
+    budget: budgetEdits.current,
+    model: modelEdits.current,
+    credential: credentialEdits.current,
+  })
 
   /**
    * Drop a "saved" note once the user edits again.
@@ -156,13 +166,18 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
     if (!languageDirty.current) setLanguage(next.language)
     if (!budgetDirty.current) setBudgetText(String(next.requestTimeoutMs))
     if (!modelDirty.current) setModelText(next.model)
+    if (!credentialDirty.current) setCredentialText(next.credentialRef)
   }
 
-  const adopt = (next: SpeechRailInputStatus, epoch: { language: number, budget: number, model: number }): void => {
+  const adopt = (
+    next: SpeechRailInputStatus,
+    epoch: { language: number, budget: number, model: number, credential: number },
+  ): void => {
     applyStatus(next)
     languageDirty.current = languageEdits.current !== epoch.language
     budgetDirty.current = budgetEdits.current !== epoch.budget
     modelDirty.current = modelEdits.current !== epoch.model
+    credentialDirty.current = credentialEdits.current !== epoch.credential
   }
 
   useEffect(() => {
@@ -207,14 +222,24 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
       // the only edit this page can safely make to a pasted one is dropping surrounding whitespace.
       const model = modelText.trim()
       setModelText(model)
+      // A reference is an environment-variable name, and the Host refuses a name outside that grammar
+      // rather than storing it, so the page checks the same rule first and says so in place — a save
+      // that fails on the wire reads like a broken plugin.
+      const credentialRef = credentialText.trim()
+      setCredentialText(credentialRef)
+      if (credentialRef !== '' && !CREDENTIAL_REF_PATTERN.test(credentialRef)) {
+        showNote(t('settings.credentialInvalid'))
+        setBusy(false)
+        return
+      }
       const epoch = editEpoch()
-      const result = await configure({ language, requestTimeoutMs: timeout, model, expectedRevision: view.revision })
+      const result = await configure({ language, requestTimeoutMs: timeout, model, credentialRef, expectedRevision: view.revision })
       if (result.ok) {
         const next = await readStatus()
         if (next !== undefined) adopt(next, epoch)
         // An edit made while the save was in flight is still unsaved; saying "saved" beside it
         // is the one message the page must never show.
-        if (languageDirty.current || budgetDirty.current || modelDirty.current) setNote('')
+        if (languageDirty.current || budgetDirty.current || modelDirty.current || credentialDirty.current) setNote('')
         else showNote(t('settings.saved'), 'success')
         return
       }
@@ -317,13 +342,32 @@ export function SpeechRailSettings({ t, status, check, configure, acknowledge }:
           <span style={labelStyle}>{t('settings.modelNote')}</span>
         </div>
         <div style={rowStyle}>
-          <span style={labelStyle}>{t('settings.credential')}</span>
+          <label htmlFor="voice-input-credential" style={labelStyle}>{t('settings.credential')}</label>
+          <input
+            id="voice-input-credential"
+            type="text"
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={MAX_CREDENTIAL_REF_LENGTH}
+            value={credentialText}
+            placeholder={t('settings.credentialAuto')}
+            onChange={(event) => {
+              setCredentialText(event.currentTarget.value)
+              credentialDirty.current = true
+              credentialEdits.current += 1
+              clearSavedNote()
+            }}
+            onFocus={() => { setFocusedField('credential') }}
+            onBlur={() => { setFocusedField(''); setCredentialText((current) => current.trim()) }}
+            style={{ ...fieldStyleFor('credential'), width: 260 }}
+          />
+          <span style={labelStyle}>{t('settings.credentialNote')}</span>
           <span style={valueStyle}>
-            {view?.credentialRef === ''
+            {credentialText.trim() === ''
               ? t('settings.credentialNone')
               : view?.credentialConfigured === true
-                ? t('settings.credentialConfigured', { ref: view.credentialRef })
-                : t('settings.credentialMissing', { ref: view?.credentialRef ?? '—' })}
+                ? t('settings.credentialConfigured', { ref: credentialText.trim() })
+                : t('settings.credentialMissing', { ref: credentialText.trim() })}
           </span>
         </div>
       </section>

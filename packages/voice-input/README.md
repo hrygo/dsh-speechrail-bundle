@@ -24,7 +24,7 @@ keys a dependency by its target string, so the `latest` command above answers `a
 instead of fetching newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.1/dsh-voice-input.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.1.0/dsh-voice-input.tgz
 ```
 
 ## Migrating from 1.x
@@ -220,15 +220,16 @@ What changes on a non-SpeechRail engine, and what does not:
 
 ## Configuration
 
-The entry `voice-input` (inserted by `cordis.patch.yml`) exposes the following fields. Endpoint
-and credential-reference changes restart the entry; model, language and request budget are volatile.
-The settings-page key is the package name, `dsh-voice-input`.
+The entry `voice-input` (inserted by `cordis.patch.yml`) exposes the following fields. An endpoint
+change restarts the entry; model, credential reference, language and request budget are volatile, so
+a settings-page write applies to the next request without one. The settings-page key is the package
+name, `dsh-voice-input`.
 
 | Field | Default | Notes |
 | --- | --- | --- |
 | `baseUrl` | `http://127.0.0.1:8201/v1` | Loopback only; normalized on every operation. |
 | `model` | empty | Empty omits the field and lets the service choose; most OpenAI-shaped engines **require** it and validate the value against the weights they have loaded (so a placeholder 404s). Editable on the settings page ([ADR-0004](../../docs/decisions/0004-model-id-writable-from-settings.md)), bounded at 200 characters. |
-| `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
+| `credentialRef` | `SPEECHRAIL_API_KEY` | Credential reference, resolved per operation. Editable on the settings page ([ADR-0007](../../docs/decisions/0007-credential-reference-writable-from-settings.md)); it is a *name*, never a secret — the value must match `/^[A-Za-z_][A-Za-z0-9_]*$/` and at most 128 characters. **Cleared means this endpoint needs no credential**: requests then carry no `Authorization` header at all. A non-empty reference that resolves to nothing is refused with `not-configured` rather than sent unauthenticated, so a typo in a reference name stays visible ([ADR-0003](../../docs/decisions/0003-unauthenticated-loopback-engines.md)). |
 | `language` | `auto` | `auto` omits the field. An enumerated language domain admits only listed `zh`/`en`; with no snapshot or an unknown language domain they are unverified hints. Unsupported languages admit only `auto`; unsupported transcription also blocks recording. |
 | `requestTimeoutMs` | `150000` | One budget covering connect, upload, inference and download (1000–180000). |
 

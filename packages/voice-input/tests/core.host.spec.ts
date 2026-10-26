@@ -499,11 +499,11 @@ describe('unreadable medium recovery', () => {
   it('accepts both inclusive budget bounds and refuses just outside them', async () => {
     const h = harness()
     for (const timeout of [1_000, 180_000]) {
-      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, model: '', expectedRevision: 3 }))
+      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, model: '', credentialRef: '', expectedRevision: 3 }))
       expect(result.ok, String(timeout)).toBe(true)
     }
     for (const timeout of [999, 180_001]) {
-      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, model: '', expectedRevision: 3 }))
+      const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: timeout, model: '', credentialRef: '', expectedRevision: 3 }))
       expect(result.failure?.code, String(timeout)).toBe('bad-request')
     }
   })
@@ -587,14 +587,14 @@ describe('payload strictness', () => {
 
   it('refuses a configuration payload with unknown keys or out-of-range values', async () => {
     const h = harness()
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: '', expectedRevision: 3, extra: 1 }))).failure?.code).toBe('bad-request')
-    expect((await h.core.configure(JSON.stringify({ language: 'ja', requestTimeoutMs: 5_000, model: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 1.5, model: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: '', credentialRef: '', expectedRevision: 3, extra: 1 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'ja', requestTimeoutMs: 5_000, model: '', credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 1.5, model: '', credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     // The schema bound exists only in the Config schema, and settings.write validates
     // shape rather than min/max: an out-of-range value would be persisted and would then
     // stop the entry activating on the next load.
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 10, model: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 999_999_999, model: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 10, model: '', credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 999_999_999, model: '', credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     expect((await h.core.configure('x'.repeat(CONFIG_PAYLOAD_MAX_BYTES + 1))).failure?.code).toBe('bad-request')
     expect(h.writes).toHaveLength(0)
   })
@@ -604,14 +604,14 @@ describe('payload strictness', () => {
     // Absent is refused rather than read as "keep the current model": a client that dropped the
     // field would otherwise leave a stale model on the wire with no way to notice.
     expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 7, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: null, expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 7, credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: null, credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     // One over the Loader's own bound, so a value this Host accepts cannot fail activation later.
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 'm'.repeat(MAX_MODEL_LENGTH + 1), expectedRevision: 3 }))).failure?.code).toBe('bad-request')
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 'm'.repeat(MAX_MODEL_LENGTH + 1), credentialRef: '', expectedRevision: 3 }))).failure?.code).toBe('bad-request')
     expect(h.writes).toHaveLength(0)
     // The bound itself is accepted, and an empty model is the deliberate "let the service choose".
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 'm'.repeat(MAX_MODEL_LENGTH), expectedRevision: 3 }))).ok).toBe(true)
-    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: '', expectedRevision: 3 }))).ok).toBe(true)
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: 'm'.repeat(MAX_MODEL_LENGTH), credentialRef: '', expectedRevision: 3 }))).ok).toBe(true)
+    expect((await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 5_000, model: '', credentialRef: '', expectedRevision: 3 }))).ok).toBe(true)
     expect(h.writes).toHaveLength(2)
   })
 })
@@ -1179,32 +1179,57 @@ describe('unproven outcomes', () => {
 describe('configuration writes', () => {
   it('refuses a stale revision and accepts the current one', async () => {
     const h = harness()
-    const stale = await h.core.configure(JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, model: '', expectedRevision: 2 }))
+    const stale = await h.core.configure(JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, model: '', credentialRef: '', expectedRevision: 2 }))
     expect(stale.ok).toBe(false)
     expect(stale.failure?.code).toBe('conflict')
     expect(stale.revision).toBe(3)
     expect(h.writes).toHaveLength(0)
 
     h.revision = 3
-    const fresh = await h.core.configure(JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, model: '', expectedRevision: 3 }))
+    const fresh = await h.core.configure(JSON.stringify({ language: 'en', requestTimeoutMs: 60_000, model: '', credentialRef: '', expectedRevision: 3 }))
     expect(fresh.ok).toBe(true)
-    expect(h.writes).toEqual([{ language: 'en', requestTimeoutMs: 60_000, model: '', expectedRevision: 3 }])
+    expect(h.writes).toEqual([{ language: 'en', requestTimeoutMs: 60_000, model: '', credentialRef: '', expectedRevision: 3 }])
   })
 
   it('persists a model the user typed, so the next upload sends it', async () => {
     // The model id is what most engines validate against loaded weights, and a placeholder is not
     // good enough for them: the value has to be whatever the operator's engine actually serves.
     const h = harness()
-    const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: 'Systran/faster-whisper-tiny.en', expectedRevision: 3 }))
+    const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: 'Systran/faster-whisper-tiny.en', credentialRef: '', expectedRevision: 3 }))
 
     expect(result.ok).toBe(true)
-    expect(h.writes).toEqual([{ language: 'auto', requestTimeoutMs: 60_000, model: 'Systran/faster-whisper-tiny.en', expectedRevision: 3 }])
+    expect(h.writes).toEqual([{ language: 'auto', requestTimeoutMs: 60_000, model: 'Systran/faster-whisper-tiny.en', credentialRef: '', expectedRevision: 3 }])
+  })
+
+  it('persists a credential reference the user typed, so the next request resolves it', async () => {
+    // Before ADR-0007 this row was a dead end: it reported "not configured" and the only way to fix a
+    // wrong or missing reference was to edit the entry by hand. The write is a *name*, never a secret.
+    const h = harness()
+    const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: '', credentialRef: 'OTHER_KEY', expectedRevision: 3 }))
+    expect(result.ok).toBe(true)
+    expect(h.writes).toEqual([{ language: 'auto', requestTimeoutMs: 60_000, model: '', credentialRef: 'OTHER_KEY', expectedRevision: 3 }])
+  })
+
+  it('accepts an emptied reference and refuses a name outside the credentials grammar', async () => {
+    // Empty is a supported state - the endpoint takes no credential and the request carries no
+    // Authorization header (ADR-0003). Everything else must match the grammar the credentials service
+    // enforces, or the Host would store a name it can never resolve.
+    const h = harness()
+    const cleared = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: '', credentialRef: '', expectedRevision: 3 }))
+    expect(cleared.ok).toBe(true)
+
+    for (const bad of ['1FORBIDDEN', 'has space', 'dash-not-allowed', 'A'.repeat(129)]) {
+      const refused = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: '', credentialRef: bad, expectedRevision: 3 }))
+      expect(refused.ok, bad).toBe(false)
+      expect(refused.failure?.code, bad).toBe('bad-request')
+    }
+    expect(h.writes).toHaveLength(1)
   })
 
   it('reports a storage-level conflict instead of claiming success', async () => {
     const h = harness()
     h.writeResult = 'conflict'
-    const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: '', expectedRevision: 3 }))
+    const result = await h.core.configure(JSON.stringify({ language: 'auto', requestTimeoutMs: 60_000, model: '', credentialRef: '', expectedRevision: 3 }))
     expect(result.ok).toBe(false)
     expect(result.failure?.code).toBe('conflict')
   })

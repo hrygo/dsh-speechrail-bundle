@@ -129,7 +129,7 @@ describe('SpeechRailSettings budget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
 
     await waitFor(() => {
-      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', expectedRevision: 1 })
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', credentialRef: 'SPEECHRAIL_API_KEY', expectedRevision: 1 })
     })
   })
 
@@ -143,7 +143,7 @@ describe('SpeechRailSettings budget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
 
     await waitFor(() => {
-      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', expectedRevision: 1 })
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS, model: '', credentialRef: 'SPEECHRAIL_API_KEY', expectedRevision: 1 })
     })
   })
 })
@@ -240,7 +240,7 @@ describe('SpeechRailSettings check row verdicts', () => {
     await waitFor(() => { expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('60000') })
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
-    await waitFor(() => { expect(configure).toHaveBeenCalledWith({ language: 'en', requestTimeoutMs: 60_000, model: '', expectedRevision: 2 }) })
+    await waitFor(() => { expect(configure).toHaveBeenCalledWith({ language: 'en', requestTimeoutMs: 60_000, model: '', credentialRef: 'SPEECHRAIL_API_KEY', expectedRevision: 2 }) })
   })
 
   it('blames no service for a capability when the check never left the host', async () => {
@@ -515,15 +515,57 @@ describe('SpeechRailSettings capability label', () => {
     expect(document.body.textContent).not.toContain('credentialMissing')
   })
 
+  it('saves a credential reference the user typed, so a wrong one is no longer a dead end', async () => {
+    // ADR-0007: this row used to be read-only text. A reference that resolved to nothing reported
+    // "not configured" with no field to fix it, and the only way out was editing the entry by hand.
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
+    render(<SpeechRailSettings {...props({ credentialRef: 'SPEECHRAIL_API_KEY', credentialConfigured: false }, { configure: configure as never })} />)
+
+    const field = await screen.findByLabelText('settings.credential')
+    fireEvent.change(field, { target: { value: ' OTHER_KEY ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: 150_000, model: '', credentialRef: 'OTHER_KEY', expectedRevision: 1 })
+    })
+  })
+
+  it('refuses a reference outside the credentials grammar without calling the host', async () => {
+    // The Host rejects such a name, so sending it only produces a failure that reads like a broken
+    // plugin. The page applies the same rule first and says which rule it applied.
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
+    render(<SpeechRailSettings {...props({}, { configure: configure as never })} />)
+
+    const field = await screen.findByLabelText('settings.credential')
+    fireEvent.change(field, { target: { value: '1-invalid name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => { expect(screen.getByText('settings.credentialInvalid')).toBeTruthy() })
+    expect(configure).not.toHaveBeenCalled()
+  })
+
+  it('lets the reference be cleared, because an endpoint may need no credential', async () => {
+    const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
+    render(<SpeechRailSettings {...props({ credentialRef: 'SPEECHRAIL_API_KEY' }, { configure: configure as never })} />)
+
+    const field = await screen.findByLabelText('settings.credential')
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
+
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: 150_000, model: '', credentialRef: '', expectedRevision: 1 })
+    })
+  })
+
   it('shows the model in force, and names an unset one as the service choosing', async () => {
     render(<SpeechRailSettings {...props({ model: 'asr-1.7b-q8' })} />)
-    const field = await screen.findByRole('textbox')
+    const field = await screen.findByLabelText('settings.model')
     await waitFor(() => { expect((field as HTMLInputElement).value).toBe('asr-1.7b-q8') })
 
     cleanup()
     render(<SpeechRailSettings {...props({ model: '' })} />)
-    await waitFor(() => { expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('') })
-    expect((screen.getByRole('textbox') as HTMLInputElement).placeholder).toBe('settings.modelAuto')
+    await waitFor(() => { expect((screen.getByLabelText('settings.model') as HTMLInputElement).value).toBe('') })
+    expect((screen.getByLabelText('settings.model') as HTMLInputElement).placeholder).toBe('settings.modelAuto')
   })
 
   it('saves the model the user typed, trimmed', async () => {
@@ -532,12 +574,12 @@ describe('SpeechRailSettings capability label', () => {
     const configure = vi.fn(async (_request: SpeechRailConfigureRequest) => ({ ok: true, revision: 2, failure: null }))
     render(<SpeechRailSettings {...props({ model: '' }, { configure: configure as never })} />)
 
-    const field = await screen.findByRole('textbox')
+    const field = await screen.findByLabelText('settings.model')
     fireEvent.change(field, { target: { value: ' Systran/faster-whisper-tiny.en ' } })
     fireEvent.click(screen.getByRole('button', { name: 'settings.save' }))
 
     await waitFor(() => {
-      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: 150_000, model: 'Systran/faster-whisper-tiny.en', expectedRevision: 1 })
+      expect(configure).toHaveBeenCalledWith({ language: 'auto', requestTimeoutMs: 150_000, model: 'Systran/faster-whisper-tiny.en', credentialRef: 'SPEECHRAIL_API_KEY', expectedRevision: 1 })
     })
   })
 
@@ -553,7 +595,7 @@ describe('SpeechRailSettings capability label', () => {
     }))
     render(<SpeechRailSettings {...props({}, { check: check as never })} status={status} />)
 
-    const field = await screen.findByRole('textbox')
+    const field = await screen.findByLabelText('settings.model')
     await waitFor(() => { expect((field as HTMLInputElement).value).toBe('old-model') })
     fireEvent.change(field, { target: { value: 'typed-but-unsaved' } })
     fireEvent.click(screen.getByRole('button', { name: 'settings.check' }))

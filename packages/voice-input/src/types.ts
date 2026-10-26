@@ -199,6 +199,15 @@ export interface SpeechRailConfigureRequest {
    * instead of being refused.
    */
   readonly model: string
+  /**
+   * Credential reference to persist; an empty string means this endpoint needs no credential.
+   *
+   * Required for the same reason `model` is: an omitted field and a deliberately cleared one would
+   * otherwise be the same message, and a client that dropped it would silently keep the old reference
+   * instead of being refused. The value is a *name* such as `SPEECHRAIL_API_KEY`, never a secret - the
+   * secret stays in the Harness credential store, which this page neither reads nor writes.
+   */
+  readonly credentialRef: string
   /** Revision the writer read; a mismatch fails the write. */
   readonly expectedRevision: number
 }

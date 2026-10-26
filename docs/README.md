@@ -19,6 +19,7 @@
 | 为什么要改成「只使用已声明的主题 token」 | [decisions/0005-declared-theme-tokens-only.md](decisions/0005-declared-theme-tokens-only.md) |
 | 为什么 `model` 允许在设置页写 | [decisions/0004-model-id-writable-from-settings.md](decisions/0004-model-id-writable-from-settings.md) |
 | 为什么插件叫 `dsh-voice-input`、哪些地方故意还叫 speechrail | [decisions/0006-name-the-plugin-dsh-voice-input.md](decisions/0006-name-the-plugin-dsh-voice-input.md) |
+| 为什么凭据引用能在设置页改、边界在哪 | [decisions/0007-credential-reference-writable-from-settings.md](decisions/0007-credential-reference-writable-from-settings.md) |
 | 为什么回环引擎可以不配凭据 | [decisions/0003-unauthenticated-loopback-engines.md](decisions/0003-unauthenticated-loopback-engines.md) |
 | 为什么放弃「常驻听写 + 口令发送」 | [decisions/0002-drop-always-on-dictation.md](decisions/0002-drop-always-on-dictation.md) |
 | 为什么不做成独立 App，而是复用现有 composer | [decisions/0001-independent-voice-input.md](decisions/0001-independent-voice-input.md) |

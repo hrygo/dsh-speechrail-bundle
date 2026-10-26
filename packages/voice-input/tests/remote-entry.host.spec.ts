@@ -141,7 +141,7 @@ describe('generated Remote contribution', () => {
   it('accepts the exact carriers the client builds', () => {
     const accepted = [
       [parseTranscribeRequest, JSON.stringify({ operationId: 'op_mmmmmmmm', audioBase64: 'AA==' })],
-      [parseConfigureRequest, JSON.stringify({ language: 'zh', requestTimeoutMs: 30_000, model: '', expectedRevision: 7 })],
+      [parseConfigureRequest, JSON.stringify({ language: 'zh', requestTimeoutMs: 30_000, model: '', credentialRef: 'SPEECHRAIL_API_KEY', expectedRevision: 7 })],
       [parseAcknowledgeRequest, JSON.stringify({ operationId: 'op_nnnnnnnn' })],
       [parseAcknowledgeRequest, JSON.stringify({ operationId: null })],
     ] as const

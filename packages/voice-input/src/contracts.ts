@@ -19,8 +19,24 @@ export const REMOTE_NAMESPACE = 'speechrailInput'
 /** Default endpoint of the local SpeechRail service. */
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8201/v1'
 
-/** Credential reference read for every operation; never persisted by this package. */
+/**
+ * Credential reference read for every operation by default.
+ *
+ * The default is a name to resolve, not a stored value: a reference is an environment-variable name
+ * that the Harness credential store answers for, and this package never persists the secret behind it.
+ */
 export const DEFAULT_CREDENTIAL_REF = 'SPEECHRAIL_API_KEY'
+
+/**
+ * Grammar a credential reference must match.
+ *
+ * The same POSIX-identifier rule `@deepseek-ai/dsh-credentials` applies to a `CredentialRef`. Checked
+ * here as well so a name the settings page accepts cannot be one the Host refuses to resolve later.
+ */
+export const CREDENTIAL_REF_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** Largest accepted credential reference name. */
+export const MAX_CREDENTIAL_REF_LENGTH = 128
 
 /** One request budget covering connect, upload, inference and download. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 150_000
