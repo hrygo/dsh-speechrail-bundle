@@ -108,7 +108,7 @@ For a later release under the same package name, install its tag-pinned asset ra
 above on an installed bundle reports `already-installed` instead of fetching the newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.1/dsh-voice-input.tgz
 ```
 
 ## Migrating from 1.x

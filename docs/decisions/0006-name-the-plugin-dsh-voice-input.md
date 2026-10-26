@@ -45,3 +45,28 @@
 ## 复活条件
 
 若 DSH 官方给出自己的插件命名规范且与此不同，按官方规范再改一次（同样是 major）。若插件将来真的只支持 SpeechRail，再把引擎名放回名字里是有理由的——但那时它是「限定引擎」，需要重新评估 `Other engines` 段落。
+
+## 补记（2026-10-26，改名之后）
+
+### 名字不是唯一的，用户选择保留
+
+市场索引（`https://awesome-dsh-plugin.com/plugins.json`，本机 `dshmarket` 1.66.42 读取的那份，6,896 条）里，`dsh-voice-input` 这一格已被两项占用：
+
+| 条目 | 实现 |
+|---|---|
+| `0nt-one/dsh-voice-input` | 浏览器 Web Speech API（Chrome/Edge） |
+| `NewDaNew/dsh-voice-input` | 浏览器 Web Speech API |
+
+改名时我只查了 npm 与 `node_modules` 里的包名，没查市场索引，因此这是一次**事实核查遗漏**，不是口味分歧。用户看过选项后明确决定**保留 `dsh-voice-input`**，不进入第三次改名。
+
+代价（保留，不掩盖）：
+
+- 索引与搜索里会有三条同名条目，读者要靠 `owner` 与简介区分；索引侧的重名条目本身也不稀有（6,896 条里有 336 组，`dsh-session-delete` 有 15 个）。
+- 索引侧按名字匹配的兜底匹配对重名条目**会拒绝猜测**（`dshmarket/lib/catalog-local-match.js`：同名的分叉在没有身份线索时不匹配），所以避免把别人的简介贴到我们卡上。
+- 撤销条件不变：若市场上同名条目的困惑度真的影响使用，改名仍是可选项，成本是一次 major 版本与一次卸载重装。
+
+### 卡片文案不来自市场索引，来自包内 locale
+
+`dsh-app-boot` 的 `readPluginMeta(specifier, parentURL)` 读的是包内文件：`locale/en.json`（及同目录其它语言文件）的 `meta.title` / `meta.description`，`package.json` 的 `name` / `description` 作兜底，`package.json` 的 `icon` 内联为 data URI（SVG/PNG/JPEG/WebP，≤256 KiB）。插件管理器对已装 bundle 始终调用它，因此**第三方插件不需要进市场索引也能在卡片上显示标题、简介与图标**。
+
+这条事实把一个「要不要等市场」的问题变成了「包内文件对不对」的问题：2.0.0 的卡片只显示安装 URL，是因为 `locale/*.json` 里写的是旧品牌且该路径当时未生效；改正 locale 后刷新即生效（实测）。2.0.1 起由 `tests/metadata.host.spec.ts` 钉住。

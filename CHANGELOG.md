@@ -6,6 +6,14 @@
 [`packages/voice-input/package.json`](packages/voice-input/package.json) 的版本号由
 `tools/check-release-consistency.mjs` 与 README 里的安装 URL 一处绑定。
 
+## 2.0.1 — 卡片上显示的是插件自己的说明，而不是安装地址
+
+- **症状**：插件页那张卡片只显示 `dsh-voice-input`、`2.0.0` 和一串 release URL，没有标题、没有简介、没有图标；而同一页里的 `dsh-better-sidebar`、`dsh-image-gen` 都有。
+- **原因**：卡片的显示信息不是取自 `package.json` 的 `description`，而是 `@deepseek-ai/dsh-app-boot` 的 `readPluginMeta`：它读包内 `locale/en.json`（及其旁边的语言文件）里的 `meta.title` / `meta.description`，`package.json` 的 `name` / `description` 只是兜底，`package.json` 的 `icon` 会被内联成 data URI。本包的 `locale/*.json` 里写的是旧品牌「SpeechRail 语音输入」，且这一路读取当时没有生效——两者叠加，卡片就退回到显示安装 spec。
+- **改法**：`locale/{en,zh}.json` 的 `meta.title` 改为「语音输入」/「Voice input」，`meta.description` 改为一句说清差异的话（「由你自己的本机引擎转写：连回环上的 OpenAI 兼容服务，文本插入草稿，从不发送」）。`tests/metadata.host.spec.ts` 钉住这两份文件的形状、长度上限、不得含旧品牌，并校验 `package.json` 的 `icon` 确实在 `files` 里且不超过 256 KiB——这类漏项不会报错，只会让卡片悄悄变回一串 URL。
+- **验证方式**：先只把这份 locale 覆盖进已安装的包、刷新插件页确认生效（不发布、不动配置），再走正常发版。实测：刷新后卡片显示新标题与新简介。
+- **未改变**：名字仍是 `dsh-voice-input`（用户决定）。市场索引里另有 `0nt-one/dsh-voice-input` 与 `NewDaNew/dsh-voice-input` 两个同名条目，都是浏览器 Web Speech API 实现；本插件的卡片文案来自包内 locale，不依赖索引，但**市场里的同名条目仍会让搜索与索引匹配有歧义**，见 [ADR-0006](docs/decisions/0006-name-the-plugin-dsh-voice-input.md) 的补记。
+
 ## 2.0.0 — 改名为 `dsh-voice-input`
 
 - **名字**：`@hrygo/dsh-speechrail-bundle` → **`dsh-voice-input`**，包目录 `packages/speechrail-input` → `packages/voice-input`。理由见 [ADR-0006](docs/decisions/0006-name-the-plugin-dsh-voice-input.md)：本机生态里三方插件都是无 scope 的 `dsh-<短横线>`（`dsh-image-gen`、`dsh-lsp-actions`、`dsh-better-sidebar`），而旧名既带个人 scope 又带 `-bundle` 后缀，还把某个具体引擎写进了插件名——插件本身与引擎无关。

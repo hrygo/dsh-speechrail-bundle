@@ -24,7 +24,7 @@ keys a dependency by its target string, so the `latest` command above answers `a
 instead of fetching newer bytes.
 
 ```
-plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.0/dsh-voice-input.tgz
+plugin_manager  action: install_bundle  target: https://github.com/hrygo/dsh-speechrail-bundle/releases/download/v2.0.1/dsh-voice-input.tgz
 ```
 
 ## Migrating from 1.x
@@ -270,6 +270,13 @@ type resolution sees the shim while bundling and runtime keep resolving the publ
 so pnpm never links it. `tests/typert-protocol-parity.host.*` proves the published package still
 exports the same symbols and that this bundle's decorator and constructor pattern also compiles
 against the published declarations.
+
+**Display metadata.** The plugin manager builds the card from files in this package, not from
+the registry: `locale/en.json` (plus the locale files beside it) supplies `meta.title` and
+`meta.description`, `package.json` supplies `name`/`description` as fallbacks, and `package.json`
+`icon` is inlined as a data URI (SVG/PNG/JPEG/WebP, up to 256 KiB). When none of it lands the card
+still renders - as the bare install spec, which for this plugin is a release URL. That is why
+`tests/metadata.host.spec.ts` treats those two files as release-critical rather than cosmetic.
 
 ## Known limitations
 
